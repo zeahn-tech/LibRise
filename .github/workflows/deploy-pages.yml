@@ -1,5 +1,21 @@
 name: Deploy to GitHub Pages
 
+# Note on the deployment race this repo hit once (Sept 26, 2026): this
+# workflow's very first run happened while the repo's Pages source was
+# still "legacy" (Settings -> Pages -> Source -> Deploy from a branch).
+# GitHub's own automatic legacy build fired at the same time as this
+# workflow, uploading a competing, unbuilt github-pages artifact from
+# the raw repo root (the same root index.html that causes the white
+# screen this workflow exists to fix -- see its <script src="/src/main.tsx">,
+# which no browser can execute unbundled). Whichever of the two
+# deployments landed last determined what was actually live, so the
+# fix did not visibly take effect until BOTH (a) Pages source was
+# switched to "GitHub Actions" in Settings, permanently disabling the
+# legacy auto-build, AND (b) this workflow ran again afterward to
+# produce a deployment with no competing legacy race. If Pages source
+# is ever accidentally switched back to "Deploy from a branch", this
+# same race can recur.
+
 on:
   push:
     branches: [main]
