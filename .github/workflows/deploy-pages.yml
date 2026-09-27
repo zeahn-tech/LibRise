@@ -102,22 +102,9 @@ jobs:
         # would show up -- check this step's log in the Actions tab.
         # Never echoes the anon key itself, only whether one was
         # detected and the configured host name.
-        #
-        # TEMPORARY, ONE-RUN DIAGNOSTIC (remove after this confirms one
-        # way or the other): exits with an error if no real secrets were
-        # detected, specifically so run CONCLUSION (success/failure) is
-        # checkable via the GitHub API without needing to read this
-        # step's actual log text, which isn't reachable from the
-        # environment doing this debugging. A failure here means the
-        # secrets genuinely are not visible to this job; a success means
-        # they are, and the remaining "Supabase is not configured"
-        # symptom (if it persists) is coming from somewhere other than
-        # this workflow -- the Supabase project itself, or the browser
-        # caching an old deployment.
         run: |
           if [ "${{ steps.mode.outputs.demo_mode }}" = "true" ]; then
-            echo "::error::No real Supabase secrets detected (or one of the two is missing) -- building in demo mode with an empty Supabase URL/key."
-            exit 1
+            echo "No real Supabase secrets detected (or one of the two is missing) -- building in demo mode with an empty Supabase URL/key."
           else
             echo "Real Supabase secrets detected. Building against host: $(echo "${{ steps.mode.outputs.supabase_url }}" | sed -E 's#https?://##; s#/.*##')"
           fi
