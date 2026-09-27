@@ -35,6 +35,21 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Scoped to the same "github-pages" environment as the deploy job
+    # below. This matters: if SUPABASE_PAGES_URL / SUPABASE_PAGES_ANON_KEY
+    # were added as Environment secrets on "github-pages" (which GitHub
+    # auto-creates/suggests the first time a repo deploys to Pages, and
+    # is an easy thing to pick without realizing the distinction) rather
+    # than as plain repository-level Actions secrets, a job with no
+    # `environment:` declared cannot see them at all -- they'd silently
+    # evaluate to empty strings, which is indistinguishable from "no
+    # secrets configured" and is exactly what caused a build to
+    # correctly-but-unhelpfully fall back to demo mode after secrets had
+    # genuinely been added. Declaring the same environment here means
+    # this job sees the secret regardless of which of the two places
+    # (repository-level or this environment) they were added.
+    environment:
+      name: github-pages
     steps:
       - uses: actions/checkout@v4
 
@@ -77,6 +92,21 @@ jobs:
             echo "supabase_url=" >> "$GITHUB_OUTPUT"
             echo "supabase_anon_key=" >> "$GITHUB_OUTPUT"
             echo "demo_mode=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Report build mode (safe -- no secret values printed)
+        # If this run isn't correctly picking up SUPABASE_PAGES_URL /
+        # SUPABASE_PAGES_ANON_KEY (wrong secret name, extra whitespace,
+        # wrong environment scoping if this workflow is ever restricted
+        # to a specific GitHub Environment, etc.), this is where that
+        # would show up -- check this step's log in the Actions tab.
+        # Never echoes the anon key itself, only whether one was
+        # detected and the configured host name.
+        run: |
+          if [ "${{ steps.mode.outputs.demo_mode }}" = "true" ]; then
+            echo "No real Supabase secrets detected (or one of the two is missing) -- building in demo mode with an empty Supabase URL/key."
+          else
+            echo "Real Supabase secrets detected. Building against host: $(echo "${{ steps.mode.outputs.supabase_url }}" | sed -E 's#https?://##; s#/.*##')"
           fi
 
       - name: Build static site for GitHub Pages
