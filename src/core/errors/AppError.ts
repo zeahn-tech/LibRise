@@ -64,3 +64,10 @@ export class NetworkOfflineError extends AppError {
     this.name = 'NetworkOfflineError';
   }
 }
+
+export class BackendUnreachableError extends AppError {
+  constructor(message = "Could not reach the server. If you're viewing a demo deployment, it may not be connected to a live database yet.") {
+    super(message, 'BACKEND_UNREACHABLE', 503);
+    this.name = 'BackendUnreachableError';
+  }
+}

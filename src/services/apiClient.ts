@@ -1,5 +1,5 @@
 import { logger } from '../core/logging/logger';
-import { AppError, NetworkOfflineError } from '../core/errors/AppError';
+import { AppError, BackendUnreachableError, NetworkOfflineError } from '../core/errors/AppError';
 import { envConfig } from '../config/env';
 
 export interface ApiResponse<T> {
@@ -78,6 +78,33 @@ class ApiClient {
       }
 
       const errorMsg = err instanceof Error ? err.message : String(err);
+
+      // A raw fetch-level failure (the browser's TypeError for a DNS
+      // failure, an unreachable host, CORS rejection, or similar) means
+      // the Supabase backend itself couldn't be reached at all -- not a
+      // real application error. This is exactly what happens when
+      // VITE_SUPABASE_URL points at a placeholder/misconfigured project
+      // (see docs/DEPLOYMENT.md and the GitHub Pages deploy workflow's
+      // demo-mode note): every data call fails this way, and without
+      // this check they'd all surface as the unhelpful generic message
+      // below. Give people an actionable message instead of "unexpected
+      // system error" for this specific, common, and non-mysterious
+      // failure mode.
+      const looksLikeUnreachableBackend =
+        (err instanceof TypeError && /fetch/i.test(errorMsg)) ||
+        /failed to fetch|networkerror|ENOTFOUND|ERR_NAME_NOT_RESOLVED|ERR_CONNECTION/i.test(errorMsg);
+
+      if (looksLikeUnreachableBackend) {
+        const backendErr = new BackendUnreachableError();
+        logger.error('API', `Backend unreachable: ${errorMsg} (${elapsed}ms)`, { raw: String(err) });
+        return {
+          data: null,
+          error: { code: backendErr.code, message: backendErr.message, details: backendErr.details },
+          status: backendErr.statusCode,
+          timestamp: new Date().toISOString()
+        };
+      }
+
       logger.error('API', `Unhandled Exception: ${errorMsg} (${elapsed}ms)`, { raw: String(err) });
 
       return {
