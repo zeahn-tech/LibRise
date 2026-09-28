@@ -115,24 +115,34 @@ jobs:
 
       - name: Run RLS + payment security tests (pgTAP)
         run: |
-          set -euo pipefail
+          set -uo pipefail
           DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
           STATUS=0
           for f in supabase/tests/rls_security_test_matrix.sql supabase/tests/payments_security_tests.sql; do
             echo "=== $f ==="
-            OUT="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -t -A -f "$f")"
+            # Capture stderr too and DON'T let a psql error abort silently:
+            # SQL errors (bad fixture, missing column, ...) must be visible.
+            RC=0
+            OUT="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -t -A -f "$f" 2>&1)" || RC=$?
             echo "$OUT"
+            if [ "$RC" -ne 0 ]; then
+              MSG="$(echo "$OUT" | grep -iE 'ERROR|FATAL|DETAIL|HINT|CONTEXT' | head -6 | tr '\n' ' ' | cut -c1-900)"
+              echo "::error title=psql failed in $f (exit $RC)::$MSG"
+              STATUS=1
+              continue
+            fi
             TOTAL=$(echo "$OUT" | grep -cE '^(ok|not ok) ' || true)
             FAILED=$(echo "$OUT" | grep -cE '^not ok ' || true)
             echo "$f: $TOTAL assertions, $FAILED failed."
             if [ "$TOTAL" -eq 0 ]; then
-              echo "FAIL: no pgTAP assertions captured from $f -- output format may have changed. Treating as failure, not a pass."
+              echo "::error title=No pgTAP assertions in $f::Output format may have changed; treating as failure, not a pass."
               STATUS=1
             fi
-            if [ "$FAILED" -gt 0 ]; then
-              echo "$OUT" | grep -E '^not ok '
-              STATUS=1
-            fi
+            # Surface each failed assertion as an annotation (readable via the checks API).
+            echo "$OUT" | grep -E '^not ok ' | head -20 | while IFS= read -r line; do
+              echo "::error title=Failed assertion ($f)::$(echo "$line" | cut -c1-500)"
+            done
+            [ "$FAILED" -gt 0 ] && STATUS=1
           done
           exit $STATUS
 
