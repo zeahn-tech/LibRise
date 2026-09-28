@@ -101,7 +101,8 @@ export type OrgPermission =
   | 'members.invite'
   | 'members.manage'
   | 'settings.edit'
-  | 'verification.request';
+  | 'verification.request'
+  | 'payments.manage';
 
 export interface Organization {
   id: string;
@@ -159,7 +160,7 @@ export interface Opportunity {
   isFeatured?: boolean;
   viewsCount: number;
   applicationsCount: number;
-  status: 'published' | 'draft' | 'closed' | 'expired' | 'archived';
+  status: 'published' | 'draft' | 'closed' | 'expired' | 'archived' | 'payment_required' | 'payment_pending' | 'payment_failed' | 'payment_expired';
   moderationStatus?: 'published' | 'pending_review' | 'flagged' | 'quarantined' | 'rejected';
   reportCount?: number;
 }
@@ -672,6 +673,73 @@ export interface OrganizationSubscription {
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
   updatedAt: string;
+}
+
+// ---------------------------------------------------------------------
+// Vacancy/opportunity payments (manual mobile money -- see
+// supabase/migrations/*_manual_mobile_money_payments.sql and
+// src/services/paymentService.ts). Deliberately provider-agnostic in
+// shape so a real MTN/Orange API integration or Stripe can plug in later
+// without a schema or type redesign -- only paymentProvider's value set
+// grows and a real webhook replaces the human review step.
+// ---------------------------------------------------------------------
+export type PaymentStatus =
+  | 'created'
+  | 'payment_pending'
+  | 'payment_success'
+  | 'payment_failed'
+  | 'payment_expired'
+  | 'cancelled';
+
+/** 'manual_momo_mtn' / 'manual_momo_orange' today; a real API integration
+ *  or another provider later adds new values here, nothing else changes. */
+export type PaymentProviderId = 'manual_momo_mtn' | 'manual_momo_orange';
+
+export interface PaymentPlan {
+  id: string;
+  name: string;
+  description: string;
+  amountMinor: number; // integer minor units (e.g. cents) -- never float
+  currency: string;
+  durationDays: number;
+  features: string[];
+  active: boolean;
+}
+
+export interface Payment {
+  id: string;
+  publicPaymentId: string;
+  organizationId: string;
+  createdByUserId: string;
+  opportunityId: string | null;
+  planId: string;
+  paymentProvider: PaymentProviderId;
+  paymentMethod?: string | null;
+  providerTransactionId: string | null;
+  providerReference: string;
+  senderPhoneNumber?: string | null;
+  amountMinor: number;
+  currency: string;
+  description?: string | null;
+  status: PaymentStatus;
+  metadata: Record<string, unknown>;
+  failureReason?: string | null;
+  expiresAt: string;
+  paidAt?: string | null;
+  reviewedByUserId?: string | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentEvent {
+  id: string;
+  paymentId: string;
+  eventType: string;
+  provider: string;
+  actorUserId?: string | null;
+  payload: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface Invoice {

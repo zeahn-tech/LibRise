@@ -50,7 +50,7 @@
  */
 
 import { getSupabaseClient } from '../lib/supabaseClient';
-import { ForbiddenError, NotFoundError, ValidationError } from '../core/errors/AppError';
+import { ForbiddenError, NotFoundError, PaymentRequiredError, ValidationError } from '../core/errors/AppError';
 import { apiClient, ApiResponse } from './apiClient';
 import { authService } from './authService';
 import type {
@@ -248,6 +248,12 @@ function client() {
 }
 
 function translateError(error: { code?: string; message: string }): never {
+  // P0402 is raised by the enforce_publish_payment_gate trigger (see
+  // supabase/migrations/*_manual_mobile_money_payments.sql) when a
+  // vacancy is written to 'published' without quota or a paid payment.
+  if (error.code === 'P0402') {
+    throw new PaymentRequiredError('Payment is required to publish this vacancy.');
+  }
   if (error.code === '42501') {
     throw new ForbiddenError('You do not have permission to perform this action on this opportunity.');
   }
@@ -372,6 +378,10 @@ export const opportunityService = {
         throw new ForbiddenError('You do not have permission to create opportunities for this organization.');
       }
 
+      // When the plan's free publish quota is exhausted the vacancy is
+      // saved as 'payment_required' (not published, not hard-rejected) so
+      // the recruiter keeps their work and is routed to checkout.
+      let requiresPayment = false;
       if (!isDraft) {
         const { subscriptionService } = await import('./subscriptionService');
         const entitlementRes = await subscriptionService.getEntitlements(targetOrgId);
@@ -382,9 +392,7 @@ export const opportunityService = {
             .eq('organization_id', targetOrgId)
             .eq('status', 'published');
           if ((count ?? 0) >= entitlementRes.data.maxActiveJobs) {
-            throw new ForbiddenError(
-              `Plan limit reached. Your current plan only allows ${entitlementRes.data.maxActiveJobs} active jobs. Please upgrade your subscription to post more.`
-            );
+            requiresPayment = true;
           }
         }
       }
@@ -415,7 +423,7 @@ export const opportunityService = {
         number_of_openings: data.openingsCount || 1,
         screening_questions: data.screeningQuestions || [],
         is_featured: data.isFeatured ?? false,
-        status: isDraft ? 'draft' : 'published'
+        status: isDraft ? 'draft' : requiresPayment ? 'payment_required' : 'published'
       };
 
       const { data: created, error } = await client()
@@ -424,6 +432,12 @@ export const opportunityService = {
         .select(SELECT_WITH_ORG)
         .maybeSingle();
       if (error) translateError(error);
+      if (requiresPayment) {
+        throw new PaymentRequiredError(
+          'Your plan\'s free publishing limit is reached. This vacancy was saved and needs a one-time payment to go live.',
+          { opportunityId: id }
+        );
+      }
       return rowToOpportunity(created as OpportunityRow);
     });
   },
@@ -461,8 +475,22 @@ export const opportunityService = {
           .eq('organization_id', tenantId)
           .eq('status', 'published');
         if ((count ?? 0) >= entitlementRes.data.maxActiveJobs) {
-          throw new ForbiddenError(
-            `Plan limit reached. Your current plan only allows ${entitlementRes.data.maxActiveJobs} active jobs. Please upgrade your subscription to publish more.`
+          // Subscription quota exhausted (or the org never had one) --
+          // this no longer hard-blocks publishing. Instead, redirect the
+          // recruiter into the manual mobile money payment flow: see
+          // src/services/paymentService.ts and
+          // supabase/migrations/*_manual_mobile_money_payments.sql. A
+          // successful (admin-approved) payment publishes the vacancy
+          // itself via admin_review_payment(), so this method's job here
+          // is only to mark the vacancy as awaiting payment and tell the
+          // caller so, not to publish it.
+          await client()
+            .from('opportunities')
+            .update({ status: 'payment_required' })
+            .eq('id', id);
+          throw new PaymentRequiredError(
+            `Your plan's ${entitlementRes.data.maxActiveJobs}-active-job limit is reached. Publishing this vacancy requires a one-time payment.`,
+            { opportunityId: id }
           );
         }
       }

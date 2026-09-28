@@ -58,6 +58,7 @@ const AiStudioHub = lazy(() => import('./components/AiStudioHub').then((m) => ({
 const EmployerAnalyticsDashboard = lazy(() => import('./components/analytics/EmployerAnalyticsDashboard').then((m) => ({ default: m.EmployerAnalyticsDashboard })));
 
 // Modals: not needed until the user opens them, so they're also split out.
+const PaymentCheckoutFlow = lazy(() => import('./components/payments/PaymentCheckoutFlow').then((m) => ({ default: m.PaymentCheckoutFlow })));
 const PostOpportunityModal = lazy(() => import('./components/PostOpportunityModal').then((m) => ({ default: m.PostOpportunityModal })));
 const AiAssistantModal = lazy(() => import('./components/AiAssistantModal').then((m) => ({ default: m.AiAssistantModal })));
 
@@ -101,6 +102,8 @@ function AppContent() {
   const [savedOpportunityIds, setSavedOpportunityIds] = useState<string[]>([]);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [opportunityToEdit, setOpportunityToEdit] = useState<Opportunity | null>(null);
+  // Set when publishing hits the free-quota limit and needs a manual mobile money payment.
+  const [checkoutOpportunityId, setCheckoutOpportunityId] = useState<string | null>(null);
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
@@ -273,6 +276,11 @@ function AppContent() {
         if (res.data) {
           await refreshOpportunities();
           showToast(`Opportunity "${res.data.title}" is now published across Liberia!`, 'success');
+        } else if (res.error?.code === 'PAYMENT_REQUIRED' && typeof res.error.details?.opportunityId === 'string') {
+          // Saved, but not published: open checkout instead of a dead-end error.
+          await refreshOpportunities();
+          showToast('Vacancy saved. A one-time payment is needed to publish it.', 'info');
+          setCheckoutOpportunityId(res.error.details.opportunityId);
         } else if (res.error) {
           showToast(res.error.message, 'error');
         }
@@ -285,6 +293,10 @@ function AppContent() {
     const res = await opportunityService.publish(id);
     if (res.data) {
       await refreshOpportunities();
+    } else if (res.error?.code === 'PAYMENT_REQUIRED') {
+      // Not a failure: route the recruiter to checkout for this vacancy.
+      await refreshOpportunities();
+      setCheckoutOpportunityId(id);
     } else if (res.error) {
       throw new Error(res.error.message);
     }
@@ -710,6 +722,17 @@ function AppContent() {
             onSave={handleSaveOpportunity}
             opportunityToEdit={opportunityToEdit}
             currency={currency}
+          />
+        </Suspense>
+      )}
+
+      {checkoutOpportunityId && (
+        <Suspense fallback={null}>
+          <PaymentCheckoutFlow
+            opportunityId={checkoutOpportunityId}
+            opportunityTitle={opportunities.find((o) => o.id === checkoutOpportunityId)?.title}
+            onClose={() => setCheckoutOpportunityId(null)}
+            onPublished={() => { void refreshOpportunities(); }}
           />
         </Suspense>
       )}

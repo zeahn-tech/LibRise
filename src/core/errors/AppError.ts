@@ -71,3 +71,10 @@ export class BackendUnreachableError extends AppError {
     this.name = 'BackendUnreachableError';
   }
 }
+
+export class PaymentRequiredError extends AppError {
+  constructor(message = 'Payment is required to publish this vacancy.', details?: Record<string, unknown>) {
+    super(message, 'PAYMENT_REQUIRED', 402, details);
+    this.name = 'PaymentRequiredError';
+  }
+}

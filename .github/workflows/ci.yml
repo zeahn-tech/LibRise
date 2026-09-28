@@ -113,26 +113,28 @@ jobs:
       - name: Start local Supabase (applies all migrations)
         run: supabase start --ignore-health-check
 
-      - name: Run RLS security test matrix (pgTAP)
+      - name: Run RLS + payment security tests (pgTAP)
         run: |
           set -euo pipefail
           DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
-          OUTPUT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -t -A -f supabase/tests/rls_security_test_matrix.sql)
-          echo "$OUTPUT"
-          echo "$OUTPUT" > rls_test_output.txt
-          TOTAL=$(grep -cE '^(ok|not ok) ' rls_test_output.txt || true)
-          FAILED=$(grep -cE '^not ok ' rls_test_output.txt || true)
-          echo "RLS assertions: $TOTAL total, $FAILED failed."
-          if [ "$TOTAL" -eq 0 ]; then
-            echo "FAIL: no pgTAP assertions were captured -- the test file's output format may have changed. Treat as a failure, not a pass."
-            exit 1
-          fi
-          if [ "$FAILED" -gt 0 ]; then
-            echo "FAIL: $FAILED RLS assertion(s) failed. See output above for the '[table][case] description' of each."
-            grep -E '^not ok ' rls_test_output.txt
-            exit 1
-          fi
-          echo "PASS: all $TOTAL RLS assertions passed."
+          STATUS=0
+          for f in supabase/tests/rls_security_test_matrix.sql supabase/tests/payments_security_tests.sql; do
+            echo "=== $f ==="
+            OUT="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -t -A -f "$f")"
+            echo "$OUT"
+            TOTAL=$(echo "$OUT" | grep -cE '^(ok|not ok) ' || true)
+            FAILED=$(echo "$OUT" | grep -cE '^not ok ' || true)
+            echo "$f: $TOTAL assertions, $FAILED failed."
+            if [ "$TOTAL" -eq 0 ]; then
+              echo "FAIL: no pgTAP assertions captured from $f -- output format may have changed. Treating as failure, not a pass."
+              STATUS=1
+            fi
+            if [ "$FAILED" -gt 0 ]; then
+              echo "$OUT" | grep -E '^not ok '
+              STATUS=1
+            fi
+          done
+          exit $STATUS
 
       - name: Stop local Supabase
         if: always()

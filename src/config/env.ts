@@ -10,6 +10,14 @@ export interface AppConfig {
   isProduction: boolean;
   isDevelopment: boolean;
   isTest: boolean;
+  /** Real business mobile money numbers for the manual-review payment
+   *  flow (see src/services/paymentService.ts). Deliberately left empty
+   *  by default rather than a placeholder-looking value -- a fake-looking
+   *  number here would be actively misleading, unlike an empty one that
+   *  the UI can correctly show as "not yet configured". */
+  momoMtnNumber: string;
+  momoOrangeNumber: string;
+  momoAccountName: string;
 }
 
 function parseBoolean(val: string | undefined, defaultValue: boolean): boolean {
@@ -26,6 +34,9 @@ function loadConfig(): AppConfig {
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+  const momoMtnNumber = import.meta.env.VITE_MOMO_MTN_NUMBER || '';
+  const momoOrangeNumber = import.meta.env.VITE_MOMO_ORANGE_NUMBER || '';
+  const momoAccountName = import.meta.env.VITE_MOMO_ACCOUNT_NAME || '';
 
   const isProd = env === 'production';
   const isDev = env === 'development' || env === 'test';
@@ -45,7 +56,10 @@ function loadConfig(): AppConfig {
     enableDemoMode,
     isProduction: isProd,
     isDevelopment: isDev,
-    isTest: env === 'test'
+    isTest: env === 'test',
+    momoMtnNumber,
+    momoOrangeNumber,
+    momoAccountName
   });
 }
 

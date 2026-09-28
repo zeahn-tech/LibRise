@@ -34,6 +34,7 @@ import { getSupabaseClient } from '../lib/supabaseClient';
 import { apiClient, ApiResponse } from './apiClient';
 import { SUBSCRIPTION_PLANS, getPlanById, getPlanByStripePriceId } from '../data/subscriptionPlans';
 import { authService } from './authService';
+import { envConfig } from '../config/env';
 import { ForbiddenError, UnauthorizedError } from '../core/errors/AppError';
 
 interface SubscriptionRow {
@@ -100,7 +101,16 @@ export const subscriptionService = {
       // subscription is looked up, same as dbClient.ts used to --
       // requires the caller to be an org admin (RLS INSERT policy), same
       // as any other subscription write.
-      const isSeedOrg = organizationId.startsWith('org-');
+      // A "seed org" (auto-granted the Pro plan) must be an actual demo
+      // fixture, and only when demo mode is on. This used to be
+      // `organizationId.startsWith('org-')`, but organizationService
+      // creates EVERY real org with the id `org-<timestamp>-<rand>` --
+      // so every real organization was silently auto-provisioned Pro /
+      // unlimited jobs, and no per-vacancy payment gate could ever fire.
+      // Generated ids (org- followed by a 10+ digit timestamp) are never
+      // seed orgs; demo fixtures use readable ids like org-kofa-tech.
+      const isGeneratedOrgId = /^org-\d{10,}-/.test(organizationId);
+      const isSeedOrg = envConfig.enableDemoMode && !isGeneratedOrgId;
       const planToUse = isSeedOrg ? getPlanById('plan_pro')! : getPlanById('plan_free')!;
       const id = `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const { data: created, error: insertError } = await client()

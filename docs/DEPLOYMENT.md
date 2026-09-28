@@ -33,6 +33,7 @@ secret (server-only var accidentally read via `import.meta.env` in `src/`).
 | `VITE_STRIPE_PUBLIC_KEY` | Stripe publishable key, for client-side Stripe Elements/Checkout. |
 | `VITE_STRIPE_BASIC_MONTHLY_PRICE_ID`, `VITE_STRIPE_BASIC_ANNUAL_PRICE_ID`, `VITE_STRIPE_PRO_MONTHLY_PRICE_ID`, `VITE_STRIPE_PRO_ANNUAL_PRICE_ID` | Stripe Price IDs shown in the pricing/subscription UI. Not secret, but must match real Prices in your Stripe dashboard. |
 | `VITE_APP_ENV`, `VITE_API_BASE_URL`, `VITE_DEFAULT_CURRENCY`, `VITE_ENABLE_LOW_BANDWIDTH_MODE`, `VITE_PWA_ENABLED` | App configuration, no secrecy requirement. |
+| `VITE_MOMO_MTN_NUMBER`, `VITE_MOMO_ORANGE_NUMBER`, `VITE_MOMO_ACCOUNT_NAME` | The business's real mobile money numbers/account name shown to recruiters at checkout for manual payments (see `docs/PAYMENTS.md`). Public by design. Leave empty until real — checkout refuses to show payment details when unset. |
 | `VITE_ENABLE_DEMO_MODE` | See Section 7 (Seeding) below. Should be `"false"` in any real deployment. |
 | `APP_URL` | Public URL this app is hosted at (OAuth callbacks, self-referential links). Not secret, but not `VITE_`-prefixed for historical reasons (AI Studio injects it directly); `server.ts` reads it via `process.env`. |
 

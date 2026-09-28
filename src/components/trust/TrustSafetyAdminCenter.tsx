@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { PaymentReviewQueue } from '../payments/PaymentReviewQueue';
 import {
   ShieldCheck,
   ShieldAlert,
@@ -1353,10 +1354,18 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
         {/* VIEW 9: PAYMENTS LEDGER LOGS */}
         {adminTab === 'payments' && (
           <div className="space-y-6">
+            {/* REAL: manual mobile money payments awaiting admin confirmation. */}
+            <PaymentReviewQueue />
+
+            <hr className="border-[#E8E4D9]" />
+
+            {/* Everything below this line is SAMPLE DATA seeded in this component's
+                local state -- not real payments, not read from the database. It is
+                labeled as such so it can't be mistaken for revenue reporting. */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div className="space-y-1">
-                <h3 className="font-serif font-bold text-2xl text-[#132A13]">Stripe & Mobile Money Payments Ledger</h3>
-                <p className="text-stone-500 text-sm">Historical log of captured recruitment SaaS payments and multi-currency billing invoices.</p>
+                <h3 className="font-serif font-bold text-2xl text-[#132A13]">Sample billing ledger (demo data)</h3>
+                <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 text-xs inline-block font-semibold">These rows are sample data for UI preview only -- they are not real payments and are not revenue.</p>
               </div>
               <button
                 onClick={logDemoInvoice}
