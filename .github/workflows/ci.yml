@@ -102,6 +102,8 @@ jobs:
   # ------------------------------------------------------------------
   rls-security-tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -123,7 +125,7 @@ jobs:
             # Capture stderr too and DON'T let a psql error abort silently:
             # SQL errors (bad fixture, missing column, ...) must be visible.
             RC=0
-            OUT="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -t -A -f "$f" 2>&1)" || RC=$?
+            OUT="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -t -A -f "$f" 2>&1 | tee -a /tmp/pgtap_output.log)" || RC=$?
             echo "$OUT"
             if [ "$RC" -ne 0 ]; then
               MSG="$(echo "$OUT" | grep -iE 'ERROR|FATAL|DETAIL|HINT|CONTEXT' | head -6 | tr '\n' ' ' | cut -c1-900)"
@@ -145,6 +147,20 @@ jobs:
             [ "$FAILED" -gt 0 ] && STATUS=1
           done
           exit $STATUS
+
+      - name: Post failure details as a commit comment (debugging aid)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY="$(printf '### rls-security-tests failure (run %s)\n\n```\n%s\n```\n' \
+            "${{ github.run_id }}" \
+            "$(cat /tmp/pgtap_output.log 2>/dev/null | tail -c 60000 || echo 'no captured output')")"
+          curl -sS -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+            -d "$(python3 -c 'import json,sys; print(json.dumps({"body": sys.stdin.read()}))' <<< "$BODY")"
 
       - name: Stop local Supabase
         if: always()
