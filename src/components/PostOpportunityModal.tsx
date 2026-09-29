@@ -15,15 +15,13 @@ interface PostOpportunityModalProps {
   currency: 'USD' | 'LRD';
 }
 
-export const PostOpportunityModal: React.FC<PostOpportunityModalProps> = ({
+const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
   isOpen,
   onClose,
   onSave,
   opportunityToEdit,
   currency
 }) => {
-  if (!isOpen) return null;
-
   const { session, user, activeRole, userOrganizations, activeOrganization } = useAuth();
   const { showToast } = useToast();
 
@@ -624,4 +622,11 @@ export const PostOpportunityModal: React.FC<PostOpportunityModalProps> = ({
       </div>
     </div>
   );
+};
+
+// Wrapper renders nothing when closed. Hooks live in the inner component so the
+// hook order never changes between renders (React error #310).
+export const PostOpportunityModal: React.FC<PostOpportunityModalProps> = (props) => {
+  if (!props.isOpen) return null;
+  return <PostOpportunityModalInner {...props} />;
 };

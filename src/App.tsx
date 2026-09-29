@@ -193,6 +193,11 @@ function AppContent() {
     navigate(targetPath);
   };
 
+  // Must run before the landing-screen early return so hook order is stable
+  useEffect(() => {
+    setVisibleFeedCount(FEED_PAGE_SIZE);
+  }, [selectedCounty, selectedCategory, selectedEmploymentType, selectedWorkplaceModel, minSalary, searchQuery, opportunities]);
+
   if (!hasEnteredApp) {
     return (
       <LandingScreen
@@ -230,10 +235,6 @@ function AppContent() {
     }
     return true;
   });
-
-  useEffect(() => {
-    setVisibleFeedCount(FEED_PAGE_SIZE);
-  }, [selectedCounty, selectedCategory, selectedEmploymentType, selectedWorkplaceModel, minSalary, searchQuery, opportunities]);
 
   // Actions
   const handleToggleSave = (oppId: string) => {

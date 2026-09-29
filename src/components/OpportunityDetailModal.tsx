@@ -59,15 +59,13 @@ interface OpportunityDetailModalProps {
   onEdit?: (opp: Opportunity) => void;
 }
 
-export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
+const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
   opportunity,
   onClose,
   currency,
   onApplySuccess,
   onEdit
 }) => {
-  if (!opportunity) return null;
-
   const { session, activeRole, user, openAuthModal } = useAuth();
   const { showToast } = useToast();
 
@@ -540,4 +538,11 @@ export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = ({
       </div>
     </div>
   );
+};
+
+// Wrapper renders nothing when there is no opportunity. Hooks live in the inner
+// component so the hook order never changes between renders (React error #310).
+export const OpportunityDetailModal: React.FC<OpportunityDetailModalProps> = (props) => {
+  if (!props.opportunity) return null;
+  return <OpportunityDetailModalInner {...props} opportunity={props.opportunity} />;
 };
