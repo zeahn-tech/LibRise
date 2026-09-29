@@ -29,6 +29,8 @@
 -- =====================================================================
 begin;
 
+select extensions.no_plan();
+
 create temp table test_log (seq serial primary key, line text);
 grant insert, select on test_log to authenticated, anon;
 grant usage, select on test_log_seq_seq to authenticated, anon;
