@@ -140,11 +140,30 @@ jobs:
               echo "::error title=No pgTAP assertions in $f::Output format may have changed; treating as failure, not a pass."
               STATUS=1
             fi
-            # Surface each failed assertion as an annotation (readable via the checks API).
-            echo "$OUT" | grep -E '^not ok ' | head -20 | while IFS= read -r line; do
-              echo "::error title=Failed assertion ($f)::$(echo "$line" | cut -c1-500)"
-            done
-            [ "$FAILED" -gt 0 ] && STATUS=1
+            # Surface each failed assertion as an annotation. Every command in
+            # this block is defensively neutralized against a non-zero exit
+            # (|| true, or an explicit if instead of a bare `test && action`)
+            # because GitHub Actions runs `run:` steps as `bash -e {0}` --
+            # errexit is ALREADY on by default regardless of this script's own
+            # `set` line. A bare statement that legitimately evaluates to
+            # "false"/"no matches" (exactly what happens on the fully-passing,
+            # zero-failures case) still returns non-zero as A STATEMENT, and
+            # under -e that silently kills the whole script mid-loop -- which
+            # is exactly what was happening here: file 1 passed 112/112,
+            # `[ "$FAILED" -gt 0 ]` was false, and the script died right there,
+            # before ever starting file 2, reported as a bare "exit 1" with no
+            # indication why. Confirmed by temporarily posting raw captured
+            # output as a commit comment (see the step below) -- do not
+            # reintroduce a bare test/pipeline as the last thing in a loop
+            # iteration here.
+            if echo "$OUT" | grep -qE '^not ok '; then
+              echo "$OUT" | grep -E '^not ok ' | head -20 | while IFS= read -r line; do
+                echo "::error title=Failed assertion ($f)::$(echo "$line" | cut -c1-500)"
+              done || true
+            fi
+            if [ "$FAILED" -gt 0 ]; then
+              STATUS=1
+            fi
           done
           exit $STATUS
 
