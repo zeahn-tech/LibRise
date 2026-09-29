@@ -66,10 +66,10 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ onEnterPortal }) =
             </div>
             <div>
               <span className="font-serif font-bold text-lg text-[#132A13] tracking-tight block">
-                Liberia Economic & Career Portal
+                LibRise
               </span>
               <span className="text-[11px] text-[#606C38] font-medium block">
-                Official Ministry of Labour & LBR Verified Gateway
+                Liberia Economic & Career Portal
               </span>
             </div>
           </div>
@@ -78,7 +78,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ onEnterPortal }) =
               onClick={() => onEnterPortal('job_seeker')}
               className="px-5 py-2.5 bg-[#283618] hover:bg-[#386641] text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer"
             >
-              <span>Enter Main App</span>
+              <span>Get started</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -169,7 +169,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ onEnterPortal }) =
 
       {/* Footer */}
       <footer className="bg-white border-t border-[#E8E4D9] py-8 px-6 text-center text-xs text-stone-500 space-y-2">
-        <p>© 2026 Republic of Liberia Economic Portal. All rights reserved.</p>
+        <p>© 2026 LibRise. All rights reserved.</p>
         <p className="text-stone-400">Powered by Ministry of Labour & Liberia Business Registry (LBR) Compliance Standards.</p>
       </footer>
     </div>

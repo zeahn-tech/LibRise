@@ -50,7 +50,7 @@ export const PLATFORM_ROLES: { id: UserRole; label: string; description: string 
 
 export const APP_METADATA = {
   name: 'LibRise',
-  shortName: 'OppHub LR',
+  shortName: 'LibRise',
   tagline: "Liberia's Digital Opportunity Marketplace",
   supportEmail: 'support@opportunityhub.lr',
   version: '1.0.0-foundation',

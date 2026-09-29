@@ -19,7 +19,7 @@ export const PWAInstallButton: React.FC<{ className?: string }> = ({ className =
         className={`inline-flex items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-orange-700 active:scale-95 transition-all cursor-pointer ${className}`}
       >
         <Download className="h-4 w-4" />
-        <span>Install OppHub App</span>
+        <span>Install LibRise App</span>
       </button>
     );
   }
@@ -50,7 +50,7 @@ export const PWAInstallButton: React.FC<{ className?: string }> = ({ className =
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="text-lg font-bold text-stone-900 dark:text-white">Install LibRise</h3>
-                  <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">Add OppHub to your iPhone / iPad home screen</p>
+                  <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">Add LibRise to your iPhone / iPad home screen</p>
                 </div>
                 <button 
                   onClick={() => setShowIOSGuide(false)}
