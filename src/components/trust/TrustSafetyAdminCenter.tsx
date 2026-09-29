@@ -554,6 +554,11 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
           <p className="text-stone-500 text-sm leading-relaxed">
             The platform command center is restricted to registered **Platform Administrators** and **Trust & Safety Officers** with authorized security credentials.
           </p>
+          <p className="text-stone-400 text-xs leading-relaxed">
+            Note: an "Organization Account Admin" role (set at sign-up) manages your own company's account and
+            listings only -- it's different from platform-wide administrator access, which is granted separately
+            and isn't available through self-service sign-up.
+          </p>
         </div>
 
         {DEMO_ADMIN_LOGIN_ENABLED && (

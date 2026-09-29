@@ -317,8 +317,12 @@ export const AuthModal: React.FC = () => {
                     <option value="business_seller">Business Seller (M&A)</option>
                     <option value="buyer">Investor / Buyer</option>
                     <option value="service_provider">Service Provider / Contractor</option>
-                    <option value="organization_admin">Organization Administrator</option>
+                    <option value="organization_admin">Organization Account Admin (manages your company&apos;s listings/team)</option>
                   </select>
+                  <p className="text-[11px] text-stone-500 mt-1">
+                    This sets your role within your own organization's account, not platform-wide admin access
+                    (which isn't self-service and is granted separately).
+                  </p>
                 </div>
 
                 <div>

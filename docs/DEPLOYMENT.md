@@ -284,6 +284,33 @@ also runs automatically in CI (Section 4). See
 
 ---
 
+## 6a. Granting the First Platform Administrator
+
+Platform-admin access (the Trust & Safety Center — moderation, verification review, account
+restrictions) is **never** self-service through sign-up, on purpose: the registration form only
+offers `job_seeker`, `employer`, `recruiter`, `business_seller`, `buyer`, `service_provider`, and
+`organization_admin` — none of these grant platform-wide access, and none should. `organization_admin`
+in particular is easy to mistake for "administrator of the whole platform" — it isn't; it only
+manages that person's own organization's account and listings. Platform admin status is checked via
+`system_role = 'platform_admin'` (or `primary_role = 'platform_admin'`) on `public.users`, enforced by
+`public.is_platform_admin()` (see `supabase/migrations/20260911100000_verification_service_backend.sql`)
+in RLS policies — a client-side role check alone would not actually restrict access.
+
+To grant it, after the intended person has registered a normal account, run this once in the Supabase
+SQL Editor (or via `psql`/`supabase db`) against your project — never expose this as an in-app action:
+
+```sql
+UPDATE public.users
+SET system_role = 'platform_admin'
+WHERE email = 'the-real-admin@example.com';
+```
+
+They then need to sign out and back in — role is loaded into the session at login, so an existing
+session won't pick up the change. Grant this sparingly and only to people who should have moderation
+and account-restriction power over every user on the platform.
+
+---
+
 ## 7. Seeding a Fresh Environment — Demo vs Real
 
 There are two distinct, non-overlapping ways this app gets data, and they must not be
