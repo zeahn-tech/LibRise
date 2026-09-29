@@ -1,4 +1,4 @@
-# OpportunityHub Liberia — Authorization & RBAC Architecture
+# LibRise — Authorization & RBAC Architecture
 
 ## 1. Core Authorization Model
 Authorization is governed by the evaluation of:

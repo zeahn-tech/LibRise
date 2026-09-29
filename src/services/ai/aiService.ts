@@ -1,6 +1,6 @@
 /**
  * AI Service Manager & Facade
- * OpportunityHub Liberia
+ * LibRise
  * 
  * Orchestrates AI providers, sanitization guardrails, and seamless fallback cascades.
  */

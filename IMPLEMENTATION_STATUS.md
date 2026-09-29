@@ -1,7 +1,7 @@
-# OpportunityHub Liberia — Implementation Status
+# LibRise — Implementation Status
 
 ## Overview
-OpportunityHub Liberia is a high-integrity digital opportunity and business exchange marketplace specifically engineered for Liberia's economic landscape. It features multi-tenant job and tender management, verified enterprise credentials, business acquisition data rooms, candidate profile management, and comprehensive candidate recruitment pipelines.
+LibRise is a high-integrity digital opportunity and business exchange marketplace specifically engineered for Liberia's economic landscape. It features multi-tenant job and tender management, verified enterprise credentials, business acquisition data rooms, candidate profile management, and comprehensive candidate recruitment pipelines.
 
 ---
 

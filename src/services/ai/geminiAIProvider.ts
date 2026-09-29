@@ -1,6 +1,6 @@
 /**
  * Gemini Server-Backed AI Provider
- * OpportunityHub Liberia
+ * LibRise
  * 
  * Communicates with server-side Express endpoints powered by @google/genai (gemini-3.8-flash).
  */

@@ -1,8 +1,8 @@
-# OPPORTUNITYHUB LIBERIA — TRUST AND SAFETY SYSTEM SPECIFICATION
+# LIBRISE — TRUST AND SAFETY SYSTEM SPECIFICATION
 
 ## 1. Executive Overview & Policy Mandate
 
-OpportunityHub Liberia enforces strict, zero-tolerance platform security and anti-fraud measures to safeguard job seekers, verified enterprises, international development partners, and small business sellers.
+LibRise enforces strict, zero-tolerance platform security and anti-fraud measures to safeguard job seekers, verified enterprises, international development partners, and small business sellers.
 
 To eradicate illegal application fees, fraudulent job postings, phantom recruitment agencies, and identity impersonation across all 15 Liberian counties, the platform enforces statutory verification, automated AI scam filtering, community violation reporting, sliding-window rate limiting, and immutable audit logging.
 
@@ -130,7 +130,7 @@ All administrative actions, verification decisions, restriction issuances, and r
 
 ## 8. Privacy-Preserving Analytics & Tenant Isolation Engine
 
-To protect candidates, businesses, and employers, OpportunityHub Liberia enforces a comprehensive Privacy-Preserving Analytics framework across all marketplace activities.
+To protect candidates, businesses, and employers, LibRise enforces a comprehensive Privacy-Preserving Analytics framework across all marketplace activities.
 
 ### 1. Tenant Isolation Guidelines
 * **Employer Dashboard Isolation**: Recruiters and company profiles only receive aggregated metrics matching their exact authorized `organizationId`. They are strictly prevented from querying or viewing applicants, shortlists, or hiring conversion stats belonging to any other company.

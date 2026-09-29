@@ -1,6 +1,6 @@
 /**
  * Ethical AI Guardrails & Non-Discrimination Pipeline
- * OpportunityHub Liberia
+ * LibRise
  */
 
 import { CandidateMatchInput } from './aiTypes';
@@ -79,7 +79,7 @@ export function stripSensitiveKeywords(text: string): string {
  * Injected System Prompt for Ethical & Assistive AI Operations
  */
 export const ETHICAL_SYSTEM_INSTRUCTION = `
-You are the Ethical AI Copilot for OpportunityHub Liberia.
+You are the Ethical AI Copilot for LibRise.
 Your primary duty is to act as an objective, non-discriminatory decision-support system.
 
 STRICT MANDATES:
@@ -94,4 +94,4 @@ STRICT MANDATES:
  * Ethical Notice appended to all AI Candidate Evaluations
  */
 export const ETHICAL_NOTICE_TEXT = 
-  "OpportunityHub Ethical AI Guarantee: This score is generated strictly from objective skill overlap, experience level, and geographic fit. Protected attributes (gender, age, ethnicity, religion, marital status) are sanitized and excluded from evaluation. Final hiring decisions are strictly performed by human hiring managers.";
+  "LibRise Ethical AI Guarantee: This score is generated strictly from objective skill overlap, experience level, and geographic fit. Protected attributes (gender, age, ethnicity, religion, marital status) are sanitized and excluded from evaluation. Final hiring decisions are strictly performed by human hiring managers.";

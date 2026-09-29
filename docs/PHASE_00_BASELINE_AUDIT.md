@@ -1,7 +1,7 @@
 # Phase 00 — Baseline Audit & Implementation Truth
 
 ## Executive Summary
-OpportunityHub Liberia is an advanced React + Vite + TypeScript platform featuring rich marketplace workflows for jobs, career opportunities, businesses, tenders, subscriptions, verification, and messaging. However, an exhaustive audit of the repository reveals that the platform's authentication, session management, and authorization model currently rely on a **prototype/demo persistence layer** rather than true production-grade Supabase Auth and RLS enforcement.
+LibRise is an advanced React + Vite + TypeScript platform featuring rich marketplace workflows for jobs, career opportunities, businesses, tenders, subscriptions, verification, and messaging. However, an exhaustive audit of the repository reveals that the platform's authentication, session management, and authorization model currently rely on a **prototype/demo persistence layer** rather than true production-grade Supabase Auth and RLS enforcement.
 
 Specifically:
 1. **Authentication Authority**: Currently managed by `src/services/authService.ts` and `src/db/dbClient.ts` using localStorage/in-memory session objects, rather than Supabase Auth.

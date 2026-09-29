@@ -1,8 +1,8 @@
-# OpportunityHub AI Intelligence Layer — Architecture & Ethical Governance
+# LibRise AI Intelligence Layer — Architecture & Ethical Governance
 
 ## Overview
 
-OpportunityHub's AI-ready intelligence layer is designed as an **assistive, non-discriminatory copilot** for job seekers, recruiters, employers, and platform administrators in Liberia. It accelerates talent matching and opportunity drafting while upholding strict ethical standards, data privacy, and provider portability.
+LibRise's AI-ready intelligence layer is designed as an **assistive, non-discriminatory copilot** for job seekers, recruiters, employers, and platform administrators in Liberia. It accelerates talent matching and opportunity drafting while upholding strict ethical standards, data privacy, and provider portability.
 
 ---
 

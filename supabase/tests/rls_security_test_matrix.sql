@@ -1,5 +1,5 @@
 -- =====================================================================
--- RLS SECURITY TEST MATRIX — OpportunityHub Liberia
+-- RLS SECURITY TEST MATRIX — LibRise
 -- Phase 6: proves the role x resource x action matrix against the LIVE
 -- Supabase Postgres database with pgTAP (extensions schema), impersonating
 -- each role via SET LOCAL role + request.jwt.claim.sub inside one

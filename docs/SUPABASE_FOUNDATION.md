@@ -1,4 +1,4 @@
-# OpportunityHub Liberia — Supabase Foundation & Environment Architecture
+# LibRise — Supabase Foundation & Environment Architecture
 
 ## 1. Supabase Client Configuration
 * **Browser Client (`src/lib/supabaseClient.ts`)**: Initializes a single singleton Supabase client using public `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.

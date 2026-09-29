@@ -1,4 +1,4 @@
-# Gitleaks configuration for OpportunityHub Liberia.
+# Gitleaks configuration for LibRise.
 # See docs/DEPLOYMENT.md -> "Secret hygiene" for how this fits into CI
 # (.github/workflows/ci.yml's `validate` job, gitleaks/gitleaks-action@v2).
 

@@ -1,6 +1,6 @@
-# OpportunityHub Liberia — Deployment Blueprint
+# LibRise — Deployment Blueprint
 
-This document details the configuration, continuous integration, containerization, and production deployment guidelines for OpportunityHub Liberia.
+This document details the configuration, continuous integration, containerization, and production deployment guidelines for LibRise.
 
 ---
 

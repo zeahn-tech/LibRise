@@ -1,7 +1,7 @@
 /**
  * scripts/verify-supabase-connection.ts
  * ====================================================================
- * Standalone verification for Phase 2 of the OpportunityHub Liberia
+ * Standalone verification for Phase 2 of the LibRise
  * Supabase migration (see docs/PRODUCTION_CERTIFICATION_REPORT.md and
  * docs/DEPLOYMENT.md § 6). This does NOT touch src/services/*.ts or
  * src/db/dbClient.ts -- the app still runs on localStorage. This
@@ -242,7 +242,7 @@ async function checkServiceRoleBypass(serviceClient: SupabaseClient) {
 }
 
 async function main() {
-  console.log('OpportunityHub Liberia -- Supabase backend verification\n');
+  console.log('LibRise -- Supabase backend verification\n');
 
   if (!SUPABASE_URL || !ANON_KEY) {
     console.error('Missing SUPABASE_URL/VITE_SUPABASE_URL or SUPABASE_ANON_KEY/VITE_SUPABASE_ANON_KEY.');

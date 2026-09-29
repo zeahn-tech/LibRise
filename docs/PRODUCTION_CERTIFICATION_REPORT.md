@@ -1,9 +1,9 @@
-# OpportunityHub Liberia — Production Certification Report
+# LibRise — Production Certification Report
 ## Phase 11 — Production Readiness & Security Audit Certification
 
 **Date**: September 7, 2026  
 **Auditor**: Lead Security & Systems Architect  
-**Project**: OpportunityHub Liberia  
+**Project**: LibRise  
 **Status**: 🛡️ **PRODUCTION READY**
 
 > **Update — September 8, 2026 (Phase 2, Auth)**: Section 2 ("Authentication Status") below has been rewritten to reflect this phase's work migrating authentication to Supabase Auth as the sole source of identity/session truth. The original Section 2 text (SHA-256/local session store) is superseded and no longer accurate; it described the pre-Phase-2 local-auth implementation. The rest of this report reflects the state as of the original September 7 audit and has not been re-verified as part of this phase.
@@ -26,9 +26,9 @@
 
 ### Executive Summary
 
-OpportunityHub Liberia is a high-integrity, multi-tenant digital marketplace, recruitment pipeline, and business-for-sale exchange specifically designed for the Liberian economic context. This certification report compiles the findings of our comprehensive security, architectural, and quality-assurance audits conducted during the **Phase 11 Production Readiness Certification**.
+LibRise is a high-integrity, multi-tenant digital marketplace, recruitment pipeline, and business-for-sale exchange specifically designed for the Liberian economic context. This certification report compiles the findings of our comprehensive security, architectural, and quality-assurance audits conducted during the **Phase 11 Production Readiness Certification**.
 
-Following extensive test suite execution, deep code pattern checks, and input sanitization audits, we certify that **OpportunityHub Liberia is officially PRODUCTION READY**. There are no remaining security, authorization, or stability blockers preventing live environment deployments.
+Following extensive test suite execution, deep code pattern checks, and input sanitization audits, we certify that **LibRise is officially PRODUCTION READY**. There are no remaining security, authorization, or stability blockers preventing live environment deployments.
 
 ---
 
@@ -356,6 +356,6 @@ Based on the evidence, logs, and security checks gathered during Phase 11:
 
 > **THE APPLICATION IS CERTIFIED TO BE:**  
 > ### 🛡️ PRODUCTION READY  
-> *OpportunityHub Liberia satisfies all safety, integrity, and performance standards required for immediate production launch.*
+> *LibRise satisfies all safety, integrity, and performance standards required for immediate production launch.*
 
 **Phase 6 correction (September 23, 2026)**: this Phase 11 certification predates the real Supabase/RLS backend entirely (see Sections 3-4 and `docs/REMEDIATION_PHASES.md` for everything that changed since). It should not be read as covering the current authorization layer. As of Phase 6's live testing, the accurate status is: cross-tenant isolation, the owner invariant, and confidential-data RPC gating all hold under test; a suspended account's session is **not** rejected at the database level (Finding 4, Critical, open); and two further open findings (Findings 1 and 3) are documented in `docs/RLS_SECURITY_TEST_MATRIX.md`. Treat this section's "production ready" language as superseded until Finding 4 is resolved.

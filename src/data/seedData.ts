@@ -992,7 +992,7 @@ export const INITIAL_APPLICATIONS = [
         stage: 'applied' as const,
         changedAt: '2026-09-02T09:15:00Z',
         changedByName: 'Tamba Kollie',
-        note: 'Application submitted via OpportunityHub portal.'
+        note: 'Application submitted via LibRise portal.'
       },
       {
         id: 'hist-2',

@@ -1,7 +1,7 @@
-# OpportunityHub Liberia — Authentication Implementation Specification
+# LibRise — Authentication Implementation Specification
 
 ## 1. Executive Overview
-OpportunityHub Liberia has completed its migration from prototype local session storage to **Supabase Auth** as the primary production authentication authority.
+LibRise has completed its migration from prototype local session storage to **Supabase Auth** as the primary production authentication authority.
 
 ## 2. Authentication Flows
 * **Guest State**: New visitors start in an unauthenticated guest state (`user = null`, `session = null`, `isAuthenticated = false`). Automatic fallback login (e.g., `user-seeker-1`) has been entirely removed for production.

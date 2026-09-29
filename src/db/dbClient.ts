@@ -338,7 +338,7 @@ export class DatabaseClient {
         ? SEED_USERS.map((u) => ({
             userId: u.id,
             headline: `${u.primaryRole?.replace('_', ' ')?.toUpperCase() || 'PROFESSIONAL'} in ${u.primaryCounty}`,
-            bio: `Verified professional on OpportunityHub Liberia.`,
+            bio: `Verified professional on LibRise.`,
             phone: u.phoneNumber,
             county: u.primaryCounty,
             city: 'Monrovia',
@@ -677,7 +677,7 @@ export class DatabaseClient {
     profiles.push({
       userId,
       headline: `${newUser.primaryRole?.replace('_', ' ')?.toUpperCase() || 'PROFESSIONAL'} in ${newUser.primaryCounty}`,
-      bio: 'New member of OpportunityHub Liberia.',
+      bio: 'New member of LibRise.',
       phone: newUser.phoneNumber,
       county: newUser.primaryCounty,
       skills: [],
@@ -1075,7 +1075,7 @@ export class DatabaseClient {
     const profile: UserProfile = {
       userId: user.id,
       headline: `${user.primaryRole?.replace('_', ' ')?.toUpperCase() || 'PROFESSIONAL'} in ${user.primaryCounty}`,
-      bio: 'New member of OpportunityHub Liberia.',
+      bio: 'New member of LibRise.',
       phone: user.phoneNumber,
       county: user.primaryCounty,
       skills: [],
@@ -2626,7 +2626,7 @@ export class DatabaseClient {
         changedAt: now,
         changedByUserId: actorUserId || app.applicantUserId,
         changedByName: app.applicantName,
-        note: 'Application submitted via OpportunityHub Liberia portal.'
+        note: 'Application submitted via LibRise portal.'
       }
     ];
 

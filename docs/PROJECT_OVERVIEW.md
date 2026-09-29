@@ -1,10 +1,10 @@
-# OPPORTUNITYHUB LIBERIA — PROJECT OVERVIEW
+# LIBRISE — PROJECT OVERVIEW
 
 ## 1. Executive Summary & Vision
 
-**OpportunityHub Liberia** is a modern, production-grade digital opportunity marketplace engineered specifically for the Republic of Liberia, designed with an architectural foundation that supports eventual expansion across West Africa (ECOWAS).
+**LibRise** is a modern, production-grade digital opportunity marketplace engineered specifically for the Republic of Liberia, designed with an architectural foundation that supports eventual expansion across West Africa (ECOWAS).
 
-Traditional platforms in emerging economies often suffer from narrow scope—acting merely as static job boards—or importing Western desktop-centric assumptions that fail on mobile devices operating on fluctuating 3G/4G bandwidth. OpportunityHub Liberia shatters this limitation by providing a **unified multi-stakeholder ecosystem** bridging:
+Traditional platforms in emerging economies often suffer from narrow scope—acting merely as static job boards—or importing Western desktop-centric assumptions that fail on mobile devices operating on fluctuating 3G/4G bandwidth. LibRise shatters this limitation by providing a **unified multi-stakeholder ecosystem** bridging:
 
 1. **Employment & Careers**: Jobs, Internships, Consultancies, Freelance Services.
 2. **Academic & Professional Development**: Scholarships, Fellowships, Vocational Training Programs, Grants.
@@ -33,7 +33,7 @@ Traditional platforms in emerging economies often suffer from narrow scope—act
 
 ## 3. Core Ecosystem Stakeholders & Roles
 
-OpportunityHub Liberia is built around an enterprise-grade Multi-Tenant Role-Based Access Control (RBAC) model. A single registered user can hold distinct roles across multiple organizations:
+LibRise is built around an enterprise-grade Multi-Tenant Role-Based Access Control (RBAC) model. A single registered user can hold distinct roles across multiple organizations:
 
 | Persona / Role | Key Functional Capabilities & Objectives |
 | :--- | :--- |

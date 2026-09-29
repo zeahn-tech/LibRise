@@ -105,7 +105,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ activeTab, set
             <div className="flex items-center justify-between pb-4 border-b border-stone-100 dark:border-stone-900">
               <div>
                 <h3 className="text-base font-bold text-stone-900 dark:text-white">Workspace Services</h3>
-                <p className="text-[11px] text-stone-500 dark:text-stone-400">OpportunityHub Liberia Services Menu</p>
+                <p className="text-[11px] text-stone-500 dark:text-stone-400">LibRise Services Menu</p>
               </div>
               <button 
                 onClick={() => setShowMoreMenu(false)}

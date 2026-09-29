@@ -147,7 +147,7 @@ export const AuthModal: React.FC = () => {
                 <Lock className="w-3.5 h-3.5" />
               </div>
               <span className="text-xs font-bold uppercase tracking-widest text-[#606C38]">
-                OpportunityHub Liberia
+                LibRise
               </span>
             </div>
             <h2 className="text-xl font-serif font-bold text-[#132A13] mt-1">

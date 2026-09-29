@@ -49,7 +49,7 @@ export const PWAInstallButton: React.FC<{ className?: string }> = ({ className =
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="text-lg font-bold text-stone-900 dark:text-white">Install OpportunityHub</h3>
+                  <h3 className="text-lg font-bold text-stone-900 dark:text-white">Install LibRise</h3>
                   <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">Add OppHub to your iPhone / iPad home screen</p>
                 </div>
                 <button 

@@ -758,7 +758,7 @@ function AppContent() {
 
       {/* Natural Tones Footer */}
       <Footer
-        onOpenSafetyModal={() => showToast('OpportunityHub strictly forbids advance-fee recruitment scams. Report any suspicious poster.', 'info')}
+        onOpenSafetyModal={() => showToast('LibRise strictly forbids advance-fee recruitment scams. Report any suspicious poster.', 'info')}
         onOpenVerification={() => handleTabChange('verification')}
       />
     </div>

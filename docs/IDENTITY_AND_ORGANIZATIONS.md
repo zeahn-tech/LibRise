@@ -1,4 +1,4 @@
-# OpportunityHub Liberia — Identity & Organizations Architecture
+# LibRise — Identity & Organizations Architecture
 
 ## 1. Person & User Account Model
 * A person has **ONE real account** (`auth.users.id` linked to `public.users.id`).

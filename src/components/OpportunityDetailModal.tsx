@@ -344,7 +344,7 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
               <div className="max-w-md mx-auto">
                 <h3 className="font-bold text-[#132A13] text-base">Sign In to Apply</h3>
                 <p className="text-xs text-[#606C38] mt-1.5 leading-relaxed">
-                  You must be registered as a Candidate on OpportunityHub Liberia to submit your standard CV and track application progress.
+                  You must be registered as a Candidate on LibRise to submit your standard CV and track application progress.
                 </p>
               </div>
               <div className="flex items-center justify-center gap-3">
@@ -487,7 +487,7 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
           <div className="p-4 bg-[#FEFAE0] rounded-2xl border border-[#E8E4D9] flex items-start gap-3">
             <ShieldAlert className="w-5 h-5 text-[#BC6C25] shrink-0 mt-0.5" />
             <div className="text-xs text-[#606C38] leading-relaxed">
-              <strong className="text-[#283618]">Trust & Safety Notice:</strong> OpportunityHub Liberia enforces strict zero-tolerance policies against advance-fee recruitment scams. Legitimate employers never require payment for job interviews, uniforms, medical checkups, or tender registration.
+              <strong className="text-[#283618]">Trust & Safety Notice:</strong> LibRise enforces strict zero-tolerance policies against advance-fee recruitment scams. Legitimate employers never require payment for job interviews, uniforms, medical checkups, or tender registration.
             </div>
           </div>
         </div>

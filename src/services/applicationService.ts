@@ -259,7 +259,7 @@ export const applicationService = {
           changedAt: now,
           changedByUserId: actorUserId,
           changedByName: data.applicantName,
-          note: 'Application submitted via OpportunityHub Liberia portal.'
+          note: 'Application submitted via LibRise portal.'
         }
       ];
 

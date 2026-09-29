@@ -106,7 +106,7 @@ export const AccessDenied: React.FC<AccessDeniedProps> = ({
 
       {/* Security Statement */}
       <div className="text-[11px] text-[#A3B18A] pt-4">
-        OpportunityHub Liberia enforces statutory role-based security in accordance with the Decent Work Act and LBR regulations.
+        LibRise enforces statutory role-based security in accordance with the Decent Work Act and LBR regulations.
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
-# OpportunityHub Liberia — Operations Manual
+# LibRise — Operations Manual
 
-This guide describes operational workflows, diagnostics, maintenance, and moderation strategies for OpportunityHub Liberia.
+This guide describes operational workflows, diagnostics, maintenance, and moderation strategies for LibRise.
 
 ---
 

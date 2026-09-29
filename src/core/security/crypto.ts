@@ -1,5 +1,5 @@
 /**
- * Cryptographic and security primitives for OpportunityHub Liberia
+ * Cryptographic and security primitives for LibRise
  * Implements Web Crypto API (SHA-256) salted hashing, token generation,
  * password policy verification, and sensitive data sanitization.
  *

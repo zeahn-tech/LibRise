@@ -1,4 +1,4 @@
-# OpportunityHub Liberia — Authentication UX & Flow Specification
+# LibRise — Authentication UX & Flow Specification
 
 ## 1. Professional Registration & Login UI
 * **Clean Forms**: Standard email, password, full name, and optional phone inputs with clear labels, focus states, validation feedback, and password visibility toggles.

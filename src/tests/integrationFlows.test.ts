@@ -11,7 +11,7 @@ import { OrgRole, OrgPermission, OrganizationSubscription } from '../types';
 // call in this file was retargeted to dbClient.ts directly as of Phase 3,
 // Service 3 -- see src/tests/candidateAndApplication.test.ts's header
 // comment for the full rationale.
-describe('OpportunityHub Liberia — Integration & Regression Flow Suite', () => {
+describe('LibRise — Integration & Regression Flow Suite', () => {
   const testPassword = 'StrongPassword2026!';
 
   beforeEach(() => {

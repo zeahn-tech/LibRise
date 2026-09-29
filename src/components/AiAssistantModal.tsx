@@ -77,7 +77,7 @@ Competency Overlap:
 • Regulatory compliance in Liberia (88% match)
 
 Ethical Advisory:
-This assessment is strictly an objective competency summary. In accordance with OpportunityHub ethical directives, human recruiters must conduct all interviews and make final employment determinations.`);
+This assessment is strictly an objective competency summary. In accordance with LibRise ethical directives, human recruiters must conduct all interviews and make final employment determinations.`);
       }
       setIsProcessing(false);
     }, 900);
@@ -101,7 +101,7 @@ This assessment is strictly an objective competency summary. In accordance with 
           </div>
 
           <h2 className="text-xl sm:text-2xl font-serif font-bold text-[#132A13]">
-            OpportunityHub AI Copilot
+            LibRise AI Copilot
           </h2>
           <p className="text-xs text-[#606C38] mt-1">
             Assisting employers with job descriptions, screening design, and anti-scam fraud defense.

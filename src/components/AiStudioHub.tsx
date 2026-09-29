@@ -123,7 +123,7 @@ export const AiStudioHub: React.FC = () => {
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-serif font-bold tracking-tight">
-            OpportunityHub AI Engine & Governance
+            LibRise AI Engine & Governance
           </h1>
 
           <p className="text-xs sm:text-sm text-[#A3B18A] leading-relaxed">

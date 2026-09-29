@@ -1,5 +1,5 @@
 -- =====================================================================
--- PAYMENT SECURITY TESTS -- OpportunityHub Liberia
+-- PAYMENT SECURITY TESTS -- LibRise
 -- Companion to rls_security_test_matrix.sql; same harness: pgTAP in the
 -- `extensions` schema, roles impersonated via set_config('role', ...) +
 -- request.jwt.claim.sub inside ONE transaction that is always ROLLED

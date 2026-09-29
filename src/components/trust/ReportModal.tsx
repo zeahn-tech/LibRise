@@ -95,7 +95,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
               <CheckCircle className="w-12 h-12 text-[#4F772D] mx-auto animate-bounce" />
               <h4 className="font-bold text-lg text-[#132A13]">Report Submitted Successfully</h4>
               <p className="text-xs text-[#606C38] max-w-sm mx-auto">
-                Thank you for helping keep OpportunityHub secure. Our Trust & Safety officers are reviewing your report.
+                Thank you for helping keep LibRise secure. Our Trust & Safety officers are reviewing your report.
               </p>
             </div>
           ) : (

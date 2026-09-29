@@ -1,6 +1,6 @@
 /**
  * Fallback / Heuristic AI Provider
- * OpportunityHub Liberia
+ * LibRise
  * 
  * Provides robust deterministic logic when Gemini API is offline, unconfigured, or timing out.
  */
@@ -22,7 +22,7 @@ import {
 import { sanitizeCandidateProfileForAI, ETHICAL_NOTICE_TEXT } from './aiGuardrails';
 
 export class FallbackAIProvider implements IAIProvider {
-  name = 'OpportunityHub Heuristic Engine (Offline Fallback)';
+  name = 'LibRise Heuristic Engine (Offline Fallback)';
 
   async isAvailable(): Promise<boolean> {
     return true; // Always available

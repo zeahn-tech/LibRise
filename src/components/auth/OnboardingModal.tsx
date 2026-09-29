@@ -78,7 +78,7 @@ export const OnboardingModal: React.FC = () => {
         <div className="px-6 sm:px-8 pt-8 pb-6 border-b border-[#E8E4D9] bg-[#F9F8F6]">
           <div className="flex items-center gap-2 text-[#BC6C25] text-xs font-bold uppercase tracking-wider mb-2">
             <Sparkles className="w-4 h-4" />
-            <span>Welcome to OpportunityHub Liberia</span>
+            <span>Welcome to LibRise</span>
           </div>
           <h2 className="text-2xl font-serif font-bold text-[#283618]">What would you like to do?</h2>
           <p className="text-sm text-[#606C38] mt-1">

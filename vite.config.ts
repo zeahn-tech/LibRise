@@ -16,7 +16,7 @@ export default defineConfig(() => {
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg', 'icon-maskable.svg'],
         manifest: {
           id: '/',
-          name: 'OpportunityHub Liberia',
+          name: 'LibRise',
           short_name: 'OppHub LR',
           description: 'Liberia\'s Digital Opportunity Marketplace connecting job seekers, businesses, tenders, scholarships, and investors across all 15 counties.',
           theme_color: '#283618',

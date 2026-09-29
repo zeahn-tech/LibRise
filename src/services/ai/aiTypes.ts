@@ -1,6 +1,6 @@
 /**
  * AI Service Layer Types & Contracts
- * OpportunityHub Liberia
+ * LibRise
  */
 
 // 1. Job Recommendation Types

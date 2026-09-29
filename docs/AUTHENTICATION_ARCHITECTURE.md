@@ -1,7 +1,7 @@
-# OpportunityHub Liberia — Authentication Architecture Specification
+# LibRise — Authentication Architecture Specification
 
 ## 1. Executive Overview
-OpportunityHub Liberia utilizes **Supabase Auth** as the production-grade authentication authority. The frontend application never manufactures authentication tokens or persists raw credentials in local storage.
+LibRise utilizes **Supabase Auth** as the production-grade authentication authority. The frontend application never manufactures authentication tokens or persists raw credentials in local storage.
 
 ## 2. Authentication Lifecycle
 * **Registration**: Users register with Full Name, Email, Password, Confirm Password, and optional Phone Number. Role selection is not forced during registration.

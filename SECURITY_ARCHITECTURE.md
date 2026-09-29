@@ -1,6 +1,6 @@
-# OpportunityHub Liberia — Security Architecture
+# LibRise — Security Architecture
 
-This document provides a comprehensive overview of the production-grade security architecture, vulnerability mitigations, and defensive design patterns implemented for OpportunityHub Liberia. 
+This document provides a comprehensive overview of the production-grade security architecture, vulnerability mitigations, and defensive design patterns implemented for LibRise. 
 
 ---
 
@@ -8,7 +8,7 @@ This document provides a comprehensive overview of the production-grade security
 
 > **Updated September 8, 2026 (Phase 2 — Supabase Auth migration)**: this section previously described a local, client-side password-hashing and in-process session-validation architecture. That architecture has been replaced; the description below reflects the current implementation. See `docs/PRODUCTION_CERTIFICATION_REPORT.md`'s "Authentication Status" section for exact verification evidence.
 
-OpportunityHub Liberia uses **Supabase Auth** as the sole source of identity and session truth for real user accounts, spanning both the server-side Node.js environment and browser environments:
+LibRise uses **Supabase Auth** as the sole source of identity and session truth for real user accounts, spanning both the server-side Node.js environment and browser environments:
 
 - **Password Storage & Verification**: Supabase Auth owns password hashing and verification exclusively. The application (`src/services/authService.ts`) never hashes, stores, or compares a real user's password itself, and never falls back to a local credential check if Supabase is unreachable — a Supabase error is surfaced to the caller as a real error. The local SHA-256 salted-hashing routine in `src/core/security/crypto.ts` still exists, but is scoped and documented as demo-mode-only (`VITE_ENABLE_DEMO_MODE=true`, off by default in production — see `src/config/env.ts`), used exclusively by `src/db/dbClient.ts`'s opt-in local sample-account path.
 - **Server-Side Session Verification**: On every protected API request, the server (`src/server/authMiddleware.ts`, used by `server.ts`) calls `supabase.auth.getUser(token)` using the anon key, which asks Supabase itself to verify the token's signature and expiry against the live project. There is no local secret to keep in sync. A local `dbClient.ts -> validateSession` check is consulted **only** as an explicit, opt-in demo-mode fallback (`VITE_ENABLE_DEMO_MODE=true` set server-side) and **only after** Supabase itself has rejected the token — never silently, and never when Supabase is configured, reachable, and demo mode is off.

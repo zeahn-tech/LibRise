@@ -1,4 +1,4 @@
-# OpportunityHub Liberia — Production Release Checklist
+# LibRise — Production Release Checklist
 
 This checklist has been fully audited and completed for the Phase 11 Production Readiness Certification.
 

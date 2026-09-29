@@ -1,4 +1,4 @@
-# OPPORTUNITYHUB LIBERIA
+# LIBRISE
 ## PHASE 09 — SECURITY, PRIVACY, AUDIT & ABUSE HARDENING IMPLEMENTATION
 
 **Version:** 1.0.0  
@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-Phase 09 establishes a comprehensive defense-in-depth security perimeter for **OpportunityHub Liberia**. Operating in an environment where employment scams, advance-fee recruitment fraud, and unauthorized candidate data scraping pose significant risks to job seekers and businesses, this phase enforces strict input/output sanitization, rate limiting, audit trail emission, privilege boundaries, file upload validation, and privacy guardrails.
+Phase 09 establishes a comprehensive defense-in-depth security perimeter for **LibRise**. Operating in an environment where employment scams, advance-fee recruitment fraud, and unauthorized candidate data scraping pose significant risks to job seekers and businesses, this phase enforces strict input/output sanitization, rate limiting, audit trail emission, privilege boundaries, file upload validation, and privacy guardrails.
 
 ---
 

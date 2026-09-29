@@ -1,4 +1,4 @@
-# OpportunityHub Liberia — Row Level Security (RLS) Model
+# LibRise — Row Level Security (RLS) Model
 
 ## 1. Security Principles
 * **Deny by Default**: Unauthenticated visitors (`anon`) have strictly read-only access to published public listings (opportunities and public business teasers).

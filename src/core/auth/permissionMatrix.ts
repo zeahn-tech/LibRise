@@ -1,5 +1,5 @@
 /**
- * OPPORTUNITYHUB LIBERIA
+ * LIBRISE
  * PRODUCTION RBAC & PERMISSION MATRIX
  *
  * Separation of Platform Roles, Organization Roles, and Personal Capabilities
