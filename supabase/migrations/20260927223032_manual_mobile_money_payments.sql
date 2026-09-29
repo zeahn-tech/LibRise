@@ -275,7 +275,7 @@ begin
     if (tg_op = 'INSERT') or (old.status is distinct from new.status) then
         insert into public.payment_events (id, payment_id, event_type, provider, actor_user_id, payload)
         values (
-            'pevt-' || replace(uuid_generate_v4()::text, '-', ''),
+            'pevt-' || replace(extensions.uuid_generate_v4()::text, '-', ''),
             new.id,
             case when tg_op = 'INSERT' then 'payment.created' else 'payment.status_changed' end,
             new.payment_provider,
