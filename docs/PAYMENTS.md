@@ -78,9 +78,12 @@ confirmed it. If you can't, **reject with a reason** — don't guess. The reason
 
 ## Known limitations (read before launch)
 
-1. **Never executed.** The migration and `payments_security_tests.sql` were written in an environment with no Postgres/Docker.
-   They have passed only structural checks (balanced quoting/parens). Expect fixes on first real run. The TypeScript
-   layer type-checks and its pure-logic unit tests pass; the database behaviour is untested.
+1. **Now verified against a real database, via CI.** The migration and `payments_security_tests.sql` were originally
+   written with no Postgres/Docker available and were untested on first push; three real bugs surfaced and were fixed
+   once CI actually ran them (a bash `errexit` bug that silently skipped the payments test file entirely, a missing
+   pgTAP `no_plan()` declaration, and an unschema-qualified `uuid_generate_v4()` call). As of commit `2c3fc32`,
+   `rls-security-tests` passes in CI — both the original 112-assertion suite and the new payments suite, running
+   against a fresh `supabase start` Postgres instance on every push. See the CI run history for the current numbers.
 2. **The publish gate's free-quota branch can be forged today.** Quota is derived from `organization_subscriptions`, whose
    existing RLS lets an org *admin* write their own subscription row (a documented demo/mock path — real Stripe webhook
    fulfilment does not exist yet). An org admin could set themselves to `pro` and skip payment. The gate closes the
