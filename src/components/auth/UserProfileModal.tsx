@@ -163,16 +163,16 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#132A13]/60 backdrop-blur-xs overflow-y-auto">
       <div className="relative w-full max-w-2xl bg-white rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden my-8">
         {/* Header */}
-        <div className="px-6 sm:px-8 py-5 border-b border-[#E8E4D9] flex items-center justify-between bg-[#F9F8F6]">
-          <div className="flex items-center gap-3">
+        <div className="px-6 sm:px-8 py-5 border-b border-[#E8E4D9] flex items-center justify-between bg-[#F9F8F6] gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="w-11 h-11 rounded-2xl bg-[#283618] text-white flex items-center justify-center font-bold text-base shadow-sm">
               {user.fullName.substring(0, 2).toUpperCase()}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-serif font-bold text-[#132A13]">{user.fullName}</h2>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg font-serif font-bold text-[#132A13] break-words">{user.fullName}</h2>
                 <span
-                  className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                  className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${
                     user.accountStatus === 'active'
                       ? 'bg-[#ECF3E9] text-[#283618]'
                       : 'bg-[#FCF0E8] text-[#BC6C25]'
@@ -181,10 +181,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                   {user.accountStatus?.replace('_', ' ')}
                 </span>
               </div>
-              <div className="text-xs text-[#606C38] flex items-center gap-2">
-                <span>{user.email}</span>
-                <span>•</span>
-                <span className="capitalize">{user.primaryRole?.replace('_', ' ')}</span>
+              <div className="text-xs text-[#606C38] flex items-center gap-2 min-w-0 flex-wrap">
+                <span className="break-all">{user.email}</span>
+                <span className="shrink-0">•</span>
+                <span className="capitalize shrink-0">{user.primaryRole?.replace('_', ' ')}</span>
               </div>
             </div>
           </div>

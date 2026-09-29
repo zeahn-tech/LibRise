@@ -104,8 +104,8 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex justify-end">
-      <div className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col border-l border-[#E8E4D9] animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white w-full sm:max-w-md sm:max-h-[85vh] h-full sm:h-auto shadow-2xl flex flex-col rounded-t-3xl sm:rounded-3xl overflow-hidden">
         {/* Header */}
         <div className="p-5 border-b border-[#E8E4D9] flex items-center justify-between bg-[#F9F8F6]">
           <div className="flex items-center gap-2">

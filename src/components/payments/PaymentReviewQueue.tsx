@@ -107,19 +107,19 @@ export const PaymentReviewQueue: React.FC = () => {
           {items.map((item) => (
             <li key={item.id} className="border border-[#E8E4D9] rounded-2xl p-4 space-y-3 bg-white">
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="font-bold text-[#132A13] text-sm">{item.opportunityTitle || item.opportunityId || 'Vacancy'}</p>
-                  <p className="text-xs text-stone-500">{item.organizationName || item.organizationId}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-[#132A13] text-sm break-words">{item.opportunityTitle || item.opportunityId || 'Vacancy'}</p>
+                  <p className="text-xs text-stone-500 break-words">{item.organizationName || item.organizationId}</p>
                 </div>
-                <p className="font-bold text-lg text-[#132A13]">{formatMinorAmount(item.amountMinor, item.currency)}</p>
+                <p className="font-bold text-lg text-[#132A13] shrink-0">{formatMinorAmount(item.amountMinor, item.currency)}</p>
               </div>
 
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
-                <div className="flex justify-between gap-2"><dt className="text-stone-500">Network</dt><dd className="font-semibold">{item.paymentProvider === 'manual_momo_mtn' ? 'MTN Mobile Money' : 'Orange Money'}</dd></div>
-                <div className="flex justify-between gap-2"><dt className="text-stone-500">Transaction ID</dt><dd className="font-mono font-bold break-all text-right">{item.providerTransactionId}</dd></div>
-                <div className="flex justify-between gap-2"><dt className="text-stone-500">Sender number</dt><dd className="font-semibold">{item.senderPhoneNumber || 'Not provided'}</dd></div>
-                <div className="flex justify-between gap-2"><dt className="text-stone-500">Our reference</dt><dd className="font-mono">{item.providerReference}</dd></div>
-                <div className="flex justify-between gap-2"><dt className="text-stone-500">Submitted</dt><dd>{new Date(item.updatedAt).toLocaleString()}</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-stone-500 shrink-0">Network</dt><dd className="font-semibold min-w-0 break-words text-right">{item.paymentProvider === 'manual_momo_mtn' ? 'MTN Mobile Money' : 'Orange Money'}</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-stone-500 shrink-0">Transaction ID</dt><dd className="font-mono font-bold break-all text-right min-w-0">{item.providerTransactionId}</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-stone-500 shrink-0">Sender number</dt><dd className="font-semibold min-w-0 break-words text-right">{item.senderPhoneNumber || 'Not provided'}</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-stone-500 shrink-0">Our reference</dt><dd className="font-mono min-w-0 break-all text-right">{item.providerReference}</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-stone-500 shrink-0">Submitted</dt><dd className="min-w-0 text-right">{new Date(item.updatedAt).toLocaleString()}</dd></div>
               </dl>
 
               {rejectingId === item.id ? (

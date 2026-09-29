@@ -160,9 +160,9 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-label="Pay to publish vacancy">
       <div className="bg-white w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl shadow-2xl">
         <div className="flex items-start justify-between gap-3 p-5 border-b border-[#E8E4D9]">
-          <div>
-            <h2 className="font-serif font-bold text-xl text-[#132A13]">Publish your vacancy</h2>
-            {opportunityTitle && <p className="text-xs text-stone-500 mt-0.5">{opportunityTitle}</p>}
+          <div className="min-w-0 flex-1">
+            <h2 className="font-serif font-bold text-xl text-[#132A13] break-words">Publish your vacancy</h2>
+            {opportunityTitle && <p className="text-xs text-stone-500 mt-0.5 break-words">{opportunityTitle}</p>}
           </div>
           <button onClick={onClose} aria-label="Close" className="w-11 h-11 shrink-0 rounded-full bg-[#F9F8F4] flex items-center justify-center text-[#283618] cursor-pointer">
             <X className="w-5 h-5" />
@@ -243,18 +243,18 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
                   </div>
                   <dl className="bg-[#F9F8F4] rounded-2xl p-4 space-y-3 text-sm">
                     <div className="flex justify-between gap-3 items-center">
-                      <dt className="text-stone-500">Send to</dt>
-                      <dd className="font-bold text-[#132A13] flex items-center gap-2">
-                        {instructions.phoneNumber}
-                        <button onClick={() => copy(instructions.phoneNumber || '')} aria-label="Copy number" className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-[#E8E4D9] cursor-pointer"><Copy className="w-4 h-4" /></button>
+                      <dt className="text-stone-500 shrink-0">Send to</dt>
+                      <dd className="font-bold text-[#132A13] flex items-center gap-2 min-w-0">
+                        <span className="break-all text-right">{instructions.phoneNumber}</span>
+                        <button onClick={() => copy(instructions.phoneNumber || '')} aria-label="Copy number" className="w-9 h-9 shrink-0 flex items-center justify-center rounded-lg bg-white border border-[#E8E4D9] cursor-pointer"><Copy className="w-4 h-4" /></button>
                       </dd>
                     </div>
-                    <div className="flex justify-between gap-3"><dt className="text-stone-500">Account name</dt><dd className="font-bold text-[#132A13]">{instructions.accountName}</dd></div>
+                    <div className="flex justify-between gap-3"><dt className="text-stone-500 shrink-0">Account name</dt><dd className="font-bold text-[#132A13] min-w-0 break-words text-right">{instructions.accountName}</dd></div>
                     <div className="flex justify-between gap-3 items-center">
-                      <dt className="text-stone-500">Reference</dt>
-                      <dd className="font-mono font-bold text-[#132A13] flex items-center gap-2">
-                        {payment.providerReference}
-                        <button onClick={() => copy(payment.providerReference)} aria-label="Copy reference" className="w-9 h-9 flex items-center justify-center rounded-lg bg-white border border-[#E8E4D9] cursor-pointer"><Copy className="w-4 h-4" /></button>
+                      <dt className="text-stone-500 shrink-0">Reference</dt>
+                      <dd className="font-mono font-bold text-[#132A13] flex items-center gap-2 min-w-0">
+                        <span className="break-all text-right">{payment.providerReference}</span>
+                        <button onClick={() => copy(payment.providerReference)} aria-label="Copy reference" className="w-9 h-9 shrink-0 flex items-center justify-center rounded-lg bg-white border border-[#E8E4D9] cursor-pointer"><Copy className="w-4 h-4" /></button>
                       </dd>
                     </div>
                   </dl>
@@ -309,7 +309,7 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
                   </p>
                 </div>
               </div>
-              <p className="text-xs text-stone-500">Reference: <span className="font-mono">{payment.providerReference}</span></p>
+              <p className="text-xs text-stone-500 break-all">Reference: <span className="font-mono">{payment.providerReference}</span></p>
               <div className="flex gap-2">
                 <button onClick={refreshStatus} className={`${busyBtn} flex-1 border border-[#E8E4D9] text-stone-700`}>Check status</button>
                 <button onClick={onClose} className={`${busyBtn} flex-1 bg-[#4F772D] hover:bg-[#283618] text-white`}>Close</button>
@@ -338,7 +338,7 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
                   <p>If you did send money, please contact support with your reference so we can sort it out.</p>
                 </div>
               </div>
-              {payment && <p className="text-xs text-stone-500">Reference: <span className="font-mono">{payment.providerReference}</span></p>}
+              {payment && <p className="text-xs text-stone-500 break-all">Reference: <span className="font-mono">{payment.providerReference}</span></p>}
               <button
                 onClick={() => { setPayment(null); setTxnId(''); setFieldError(null); setStep('plan'); }}
                 className={`${busyBtn} w-full bg-[#4F772D] hover:bg-[#283618] text-white`}

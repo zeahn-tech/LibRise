@@ -78,22 +78,22 @@ export const CandidateProfileDrawer: React.FC<CandidateProfileDrawerProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-end z-50 overflow-hidden">
-      <div className="bg-white w-full max-w-2xl h-full shadow-2xl flex flex-col border-l border-[#E8E4D9] overflow-hidden animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 overflow-hidden">
+      <div className="bg-white w-full sm:max-w-2xl h-full sm:h-auto sm:max-h-[90vh] shadow-2xl flex flex-col rounded-t-3xl sm:rounded-3xl overflow-hidden">
         {/* Header */}
-        <div className="p-6 bg-[#ECF3E9] border-b border-[#D9E3D5] flex items-start justify-between">
-          <div className="flex items-center gap-3">
+        <div className="p-6 bg-[#ECF3E9] border-b border-[#D9E3D5] flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="w-12 h-12 rounded-2xl bg-[#283618] text-white flex items-center justify-center font-bold text-base shadow-xs">
               {displayName.charAt(0)}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-xl font-serif font-bold text-[#132A13]">{displayName}</h3>
-                <span className="px-2.5 py-0.5 bg-[#FEFAE0] text-[#BC6C25] text-[10px] font-bold rounded-md uppercase">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-xl font-serif font-bold text-[#132A13] break-words">{displayName}</h3>
+                <span className="px-2.5 py-0.5 bg-[#FEFAE0] text-[#BC6C25] text-[10px] font-bold rounded-md uppercase shrink-0">
                   Verified Candidate
                 </span>
               </div>
-              <p className="text-xs text-[#606C38] mt-0.5">{displayHeadline}</p>
+              <p className="text-xs text-[#606C38] mt-0.5 break-words">{displayHeadline}</p>
             </div>
           </div>
 
