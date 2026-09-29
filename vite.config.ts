@@ -17,7 +17,7 @@ export default defineConfig(() => {
         manifest: {
           id: '/',
           name: 'LibRise',
-          short_name: 'OppHub LR',
+          short_name: 'LibRise',
           description: 'Liberia\'s Digital Opportunity Marketplace connecting job seekers, businesses, tenders, scholarships, and investors across all 15 counties.',
           theme_color: '#283618',
           background_color: '#F9F8F6',

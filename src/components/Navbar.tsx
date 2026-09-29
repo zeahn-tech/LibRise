@@ -176,7 +176,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             <div>
               <div className="text-lg sm:text-xl font-bold tracking-tight text-[#132A13] leading-none">
-                OPPORTUNITY<span className="text-[#BC6C25]">HUB</span>
+                Lib<span className="text-[#BC6C25]">Rise</span>
               </div>
               <div className="text-[10px] tracking-widest uppercase font-bold text-[#606C38]">
                 LIBERIA
