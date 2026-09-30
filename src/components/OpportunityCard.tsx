@@ -4,6 +4,7 @@ import { MapPin, Calendar, CheckCircle2, Building, ShieldCheck, Sparkles, Bookma
 import { OPPORTUNITY_TYPES } from '../config/constants';
 import { ReportModal } from './trust/ReportModal';
 import { useAuth } from '../context/AuthContext';
+import { formatSalaryRange } from '../lib/currency';
 
 interface OpportunityCardProps {
   opportunity: Opportunity;
@@ -22,7 +23,6 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({
 }) => {
   const { user } = useAuth();
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const LRD_RATE = 195;
 
   const isTodayExpired =
     opportunity.deadline && new Date(opportunity.deadline) < new Date();
@@ -37,20 +37,10 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({
       return opportunity.isSalaryNegotiable ? 'Negotiable' : 'Competitive';
     }
 
-    const min = opportunity.salaryMin || 0;
-    const max = opportunity.salaryMax || 0;
-
-    if (currency === 'USD') {
-      if (max > 0 && min > 0) return `$${min.toLocaleString()} - $${max.toLocaleString()}`;
-      if (min > 0) return `From $${min.toLocaleString()}`;
-      return `Up to $${max.toLocaleString()}`;
-    } else {
-      const lrdMin = Math.round(min * LRD_RATE);
-      const lrdMax = Math.round(max * LRD_RATE);
-      if (lrdMax > 0 && lrdMin > 0) return `LRD ${lrdMin.toLocaleString()} - ${lrdMax.toLocaleString()}`;
-      if (lrdMin > 0) return `From LRD ${lrdMin.toLocaleString()}`;
-      return `Up to LRD ${lrdMax.toLocaleString()}`;
-    }
+    return (
+      formatSalaryRange(opportunity.salaryMin, opportunity.salaryMax, opportunity.currency || 'USD', currency) ||
+      (opportunity.isSalaryNegotiable ? 'Negotiable' : 'Competitive')
+    );
   };
 
   const getBadgeStyle = () => {

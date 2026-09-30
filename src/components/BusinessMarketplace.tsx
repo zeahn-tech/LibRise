@@ -31,6 +31,7 @@ import { BusinessDetailModal } from './business/BusinessDetailModal';
 import { BusinessModerationPanel } from './business/BusinessModerationPanel';
 import { BusinessAnalyticsDashboard } from './analytics/BusinessAnalyticsDashboard';
 import { useConfig } from '../context/ConfigContext';
+import { formatConverted } from '../lib/currency';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
@@ -156,13 +157,7 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
     }
   };
 
-  const LRD_RATE = 195;
-  const formatPrice = (usd: number) => {
-    if (currency === 'USD') {
-      return `$${usd.toLocaleString()}`;
-    }
-    return `LRD ${(usd * LRD_RATE).toLocaleString()}`;
-  };
+  const formatPrice = (usd: number) => formatConverted(usd, 'USD', currency);
 
   // Filter logic
   const filteredBusinesses = businesses.filter((b) => {

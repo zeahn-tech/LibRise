@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useConfig } from '../context/ConfigContext';
 import { PWAInstallButton } from './pwa/PWAInstallButton';
+import { CurrencySwitcher } from './common/CurrencySwitcher';
 
 interface MobileBottomNavProps {
   activeTab: 'opportunities' | 'businesses' | 'verification' | 'recruiter' | 'candidate' | 'ai-studio' | 'billing' | 'messages' | 'admin';
@@ -51,8 +52,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ activeTab, set
   return (
     <>
       {/* Primary Bottom Navigation Bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-stone-950 border-t border-[#E8E4D9] dark:border-stone-900 px-3 py-2 flex items-center justify-between shadow-[0_-4px_12px_rgba(0,0,0,0.05)] select-none">
-        <div className="flex w-full items-center justify-around">
+      <div className="xl:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-stone-950 border-t border-[#E8E4D9] dark:border-stone-900 px-1 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(0,0,0,0.05)] select-none">
+        <div className="grid w-full grid-cols-5 items-stretch">
           {primaryItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -60,7 +61,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ activeTab, set
               <button
                 key={item.id}
                 onClick={() => handleTabSelect(item.id)}
-                className={`flex flex-col items-center justify-center py-1 px-1 rounded-2xl transition-all min-w-[64px] min-h-[48px] cursor-pointer ${
+                className={`flex flex-col items-center justify-center py-1 px-0.5 min-w-0 rounded-2xl transition-all min-h-[48px] cursor-pointer ${
                   isActive 
                     ? 'text-[#283618] dark:text-stone-100 font-bold' 
                     : 'text-[#606C38] dark:text-stone-400 hover:text-[#283618]'
@@ -69,7 +70,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ activeTab, set
                 <div className={`p-1.5 rounded-xl transition-all ${isActive ? 'bg-[#ECF3E9] dark:bg-emerald-950/40 text-[#283618] dark:text-emerald-400' : ''}`}>
                   <Icon className="w-5 h-5" />
                 </div>
-                <span className="text-[10px] tracking-tight mt-0.5">{item.label}</span>
+                <span className="text-[10px] tracking-tight mt-0.5 max-w-full truncate">{item.label}</span>
               </button>
             );
           })}
@@ -77,7 +78,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ activeTab, set
           {/* "More" Trigger Tab */}
           <button
             onClick={() => setShowMoreMenu(true)}
-            className={`flex flex-col items-center justify-center py-1 px-1 rounded-2xl transition-all min-w-[64px] min-h-[48px] cursor-pointer ${
+            className={`flex flex-col items-center justify-center py-1 px-0.5 min-w-0 rounded-2xl transition-all min-h-[48px] cursor-pointer ${
               !isPrimaryActive 
                 ? 'text-[#283618] dark:text-stone-100 font-bold' 
                 : 'text-[#606C38] dark:text-stone-400 hover:text-[#283618]'
@@ -94,11 +95,11 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ activeTab, set
       {/* "More" Bottom Sheet/Drawer overlay */}
       {showMoreMenu && (
         <div 
-          className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end justify-center animate-fade-in"
+          className="xl:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end justify-center animate-fade-in"
           onClick={() => setShowMoreMenu(false)}
         >
           <div 
-            className="w-full max-w-md bg-white dark:bg-stone-950 rounded-t-3xl p-6 shadow-2xl border-t border-stone-200 dark:border-stone-900 animate-slide-up select-none"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain bg-white dark:bg-stone-950 rounded-t-3xl p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl border-t border-stone-200 dark:border-stone-900 animate-slide-up select-none"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -139,9 +140,14 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ activeTab, set
               })}
             </div>
 
+            {/* Display currency (the header switcher is hidden on phones) */}
+            <div className="border-t border-stone-100 dark:border-stone-900 pt-4 pb-3">
+              <CurrencySwitcher variant="full" />
+            </div>
+
             {/* Performance Optimizer & Low-Bandwidth Mode */}
-            <div className="border-t border-stone-100 dark:border-stone-900 pt-4 pb-2">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-orange-50/50 dark:bg-orange-950/10 border border-orange-100/40 dark:border-orange-900/20">
+            <div className="pb-2">
+              <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-orange-50/50 dark:bg-orange-950/10 border border-orange-100/40 dark:border-orange-900/20">
                 <div className="flex items-start gap-3">
                   <div className="p-1.5 rounded-lg bg-orange-100/50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 mt-0.5 shrink-0">
                     <Zap className="w-4 h-4" />

@@ -28,6 +28,7 @@ import { OrganizationTeamModal } from './organization/OrganizationTeamModal';
 import { notificationService } from '../services/notificationService';
 import { PWAInstallButton } from './pwa/PWAInstallButton';
 import { envConfig } from '../config/env';
+import { CurrencySwitcher } from './common/CurrencySwitcher';
 
 interface NavbarProps {
   activeTab: 'opportunities' | 'businesses' | 'verification' | 'recruiter' | 'candidate' | 'ai-studio' | 'billing' | 'messages' | 'admin';
@@ -162,14 +163,14 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-      <nav className="h-20 bg-white border-b border-[#E8E4D9] flex items-center justify-between px-4 sm:px-8 lg:px-10 shrink-0 sticky top-0 z-40">
+      <nav className="h-16 sm:h-20 w-full max-w-full bg-white border-b border-[#E8E4D9] flex items-center justify-between gap-2 px-3 sm:px-6 2xl:px-10 shrink-0 sticky top-0 z-40">
         {/* Brand Identity */}
-        <div className="flex items-center gap-6 lg:gap-8">
+        <div className="flex items-center gap-6 xl:gap-5 2xl:gap-8 min-w-0">
           <button
             onClick={() => setActiveTab('opportunities')}
-            className="flex items-center gap-2.5 text-left focus:outline-none group cursor-pointer"
+            className="flex items-center gap-2 sm:gap-2.5 text-left focus:outline-none group cursor-pointer shrink-0"
           >
-            <div className="w-10 h-10 bg-[#283618] rounded-xl flex items-center justify-center shadow-xs transition-transform group-hover:scale-105">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 bg-[#283618] rounded-xl flex items-center justify-center shadow-xs transition-transform group-hover:scale-105 shrink-0">
               <div className="w-5 h-5 border-2 border-white rounded-full flex items-center justify-center">
                 <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
               </div>
@@ -185,10 +186,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           {/* Primary Marketplace Tabs */}
-          <div className="hidden lg:flex items-center gap-1 xl:gap-2 text-sm font-medium text-[#606C38]">
+          <div className="hidden xl:flex items-center gap-0.5 2xl:gap-2 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden text-sm font-medium text-[#606C38]">
             <button
               onClick={() => setActiveTab('opportunities')}
-              className={`px-3 py-2 rounded-xl transition-all cursor-pointer ${
+              className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap cursor-pointer ${
                 activeTab === 'opportunities'
                   ? 'bg-[#ECF3E9] text-[#283618] font-bold'
                   : 'hover:text-[#283618] hover:bg-[#F9F8F6]'
@@ -198,7 +199,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
             <button
               onClick={() => setActiveTab('businesses')}
-              className={`px-3 py-2 rounded-xl transition-all cursor-pointer ${
+              className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap cursor-pointer ${
                 activeTab === 'businesses'
                   ? 'bg-[#ECF3E9] text-[#283618] font-bold'
                   : 'hover:text-[#283618] hover:bg-[#F9F8F6]'
@@ -209,7 +210,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {user && canAccessWorkspace('verification').allowed && (
               <button
                 onClick={() => setActiveTab('verification')}
-                className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
                   activeTab === 'verification'
                     ? 'bg-[#ECF3E9] text-[#283618] font-bold'
                     : 'hover:text-[#283618] hover:bg-[#F9F8F6]'
@@ -222,7 +223,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {user && canAccessWorkspace('recruiter').allowed && (
               <button
                 onClick={() => setActiveTab('recruiter')}
-                className={`px-3 py-2 rounded-xl transition-all cursor-pointer ${
+                className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap cursor-pointer ${
                   activeTab === 'recruiter'
                     ? 'bg-[#ECF3E9] text-[#283618] font-bold'
                     : 'hover:text-[#283618] hover:bg-[#F9F8F6]'
@@ -234,7 +235,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {user && canAccessWorkspace('candidate').allowed && (
               <button
                 onClick={() => setActiveTab('candidate')}
-                className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1 cursor-pointer ${
+                className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1 cursor-pointer ${
                   activeTab === 'candidate'
                     ? 'bg-[#ECF3E9] text-[#283618] font-bold'
                     : 'hover:text-[#283618] hover:bg-[#F9F8F6]'
@@ -246,7 +247,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {user && (
               <button
                 onClick={() => setActiveTab('ai-studio')}
-                className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1 text-[#BC6C25] font-semibold cursor-pointer ${
+                className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1 text-[#BC6C25] font-semibold cursor-pointer ${
                   activeTab === 'ai-studio'
                     ? 'bg-[#FEFAE0] border border-[#E8E4D9]'
                     : 'hover:bg-[#FEFAE0]/50'
@@ -258,7 +259,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {user && canAccessWorkspace('billing').allowed && (
               <button
                 onClick={() => setActiveTab('billing')}
-                className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1 cursor-pointer ${
+                className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1 cursor-pointer ${
                   activeTab === 'billing'
                     ? 'bg-[#ECF3E9] text-[#283618] font-bold'
                     : 'hover:text-[#283618] hover:bg-[#F9F8F6]'
@@ -270,7 +271,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {user && (
               <button
                 onClick={() => setActiveTab('messages')}
-                className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
                   activeTab === 'messages'
                     ? 'bg-[#ECF3E9] text-[#283618] font-bold'
                     : 'hover:text-[#283618] hover:bg-[#F9F8F6]'
@@ -283,7 +284,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {user && canAccessWorkspace('admin').allowed && (
               <button
                 onClick={() => setActiveTab('admin')}
-                className={`px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
                   activeTab === 'admin'
                     ? 'bg-[#283618] text-white font-bold'
                     : 'bg-red-50 text-red-800 hover:bg-red-100'
@@ -297,7 +298,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Action Controls & Multi-Role Context */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
           {/* Organization Multi-Tenant Switcher */}
           {user && (
             <OrganizationSwitcher onOpenCreateWizard={() => setIsOrgWizardOpen(true)} />
@@ -309,7 +310,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Notification Bell */}
           <button
             onClick={() => setShowNotificationsModal(true)}
-            className="p-2.5 bg-[#F9F8F6] hover:bg-[#ECF3E9] text-[#283618] rounded-xl border border-[#E8E4D9] relative transition-colors cursor-pointer"
+            className="w-9 h-9 sm:w-auto sm:h-auto sm:p-2.5 flex items-center justify-center bg-[#F9F8F6] hover:bg-[#ECF3E9] text-[#283618] rounded-xl border border-[#E8E4D9] relative transition-colors cursor-pointer shrink-0"
+            aria-label="Notifications"
             title="Notifications & Live Dispatches"
           >
             <Bell className="w-4 h-4 text-[#283618]" />
@@ -319,44 +321,22 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             )}
           </button>
-          {/* Currency Switcher */}
-          <div className="flex items-center bg-[#F2F2EC] rounded-xl p-1 border border-[#E8E4D9]">
-            <button
-              onClick={() => setCurrency('USD')}
-              className={`px-2 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                currency === 'USD'
-                  ? 'bg-white text-[#283618] shadow-xs'
-                  : 'text-[#606C38] hover:text-[#283618]'
-              }`}
-              title="United States Dollar"
-            >
-              USD $
-            </button>
-            <button
-              onClick={() => setCurrency('LRD')}
-              className={`px-2 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                currency === 'LRD'
-                  ? 'bg-white text-[#283618] shadow-xs'
-                  : 'text-[#606C38] hover:text-[#283618]'
-              }`}
-              title="Liberian Dollar (LRD)"
-            >
-              LRD $
-            </button>
-          </div>
+          {/* Display-currency switcher (phones get this in the More menu instead) */}
+          <CurrencySwitcher variant="compact" className="hidden sm:flex" />
 
           {/* User Profile / Account Menu */}
           {user ? (
-            <div className="relative">
+            <div className="relative shrink-0">
               <button
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
-                className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 bg-white border border-[#E8E4D9] rounded-xl hover:border-[#283618] transition-all cursor-pointer"
+                className="flex items-center gap-1.5 sm:gap-2 pl-1.5 pr-2 sm:pl-2 sm:pr-2.5 h-9 sm:h-auto sm:py-1.5 bg-white border border-[#E8E4D9] rounded-xl hover:border-[#283618] transition-all cursor-pointer shrink-0"
                 id="user-profile-menu-button"
+                aria-label="Account menu"
               >
                 <div className="w-7 h-7 rounded-lg bg-[#283618] text-white flex items-center justify-center font-bold text-xs shadow-xs">
                   {userInitials}
                 </div>
-                <div className="hidden xl:block text-left">
+                <div className="hidden 2xl:block text-left">
                   <div className="text-xs font-bold text-[#132A13] leading-tight truncate max-w-[120px]">
                     {user.fullName}
                   </div>
@@ -368,7 +348,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
 
               {showUserDropdown && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl border border-[#E8E4D9] shadow-2xl p-2 z-50 animate-fade-in" id="user-profile-dropdown">
+                <div className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-6rem)] overflow-y-auto bg-white rounded-2xl border border-[#E8E4D9] shadow-2xl p-2 z-50 animate-fade-in" id="user-profile-dropdown">
                   <div className="px-3 py-2.5 border-b border-[#E8E4D9]">
                     <div className="font-bold text-xs text-[#132A13]">{user.fullName}</div>
                     <div className="text-[11px] text-[#606C38] truncate">{user.email}</div>
@@ -510,38 +490,51 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-2 animate-fade-in" id="guest-auth-controls">
+            <div className="flex items-center gap-1.5 sm:gap-2 animate-fade-in shrink-0" id="guest-auth-controls">
               <button
                 onClick={() => openAuthModal('login')}
-                className="px-4 py-2 border border-[#E8E4D9] text-[#283618] hover:border-[#283618] transition-all text-xs sm:text-sm font-semibold rounded-xl cursor-pointer bg-white hover:bg-[#F9F8F6]"
+                className="px-3 sm:px-4 h-9 sm:h-auto sm:py-2 border border-[#E8E4D9] text-[#283618] hover:border-[#283618] transition-all text-xs sm:text-sm font-semibold rounded-xl cursor-pointer bg-white hover:bg-[#F9F8F6] whitespace-nowrap"
                 id="navbar-signin-button"
               >
                 Sign In
               </button>
               <button
                 onClick={() => openAuthModal('register')}
-                className="px-4 py-2 bg-[#283618] hover:bg-[#132A13] text-white transition-all text-xs sm:text-sm font-semibold rounded-xl shadow-xs cursor-pointer"
+                className="px-3 sm:px-4 h-9 sm:h-auto sm:py-2 bg-[#283618] hover:bg-[#132A13] text-white transition-all text-xs sm:text-sm font-semibold rounded-xl shadow-xs cursor-pointer whitespace-nowrap"
                 id="navbar-register-button"
               >
-                Create Account
+                <span className="sm:hidden">Join</span>
+                <span className="hidden sm:inline">Create Account</span>
               </button>
             </div>
           )}
 
-          {/* Post Opportunity CTA */}
+          {/* Post Opportunity CTA (tablet/desktop) */}
           {user && (
             <button
               onClick={onOpenPostModal}
-              className="flex items-center gap-1.5 px-3.5 sm:px-5 py-2 sm:py-2.5 bg-[#283618] hover:bg-[#132A13] text-white rounded-xl text-xs sm:text-sm font-semibold shadow-xs transition-transform active:scale-95 cursor-pointer"
+              className="hidden sm:flex items-center gap-1.5 px-3.5 2xl:px-5 py-2.5 bg-[#283618] hover:bg-[#132A13] text-white rounded-xl text-sm font-semibold shadow-xs transition-transform active:scale-95 cursor-pointer whitespace-nowrap"
               id="post-opportunity-button"
             >
               <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Post Opportunity</span>
-              <span className="sm:hidden">Post</span>
+              <span>Post<span className="hidden 2xl:inline"> Opportunity</span></span>
             </button>
           )}
         </div>
       </nav>
+
+      {/* Post Opportunity: floating action button on phones, sits clear of the bottom bar */}
+      {user && (
+        <button
+          onClick={onOpenPostModal}
+          className="sm:hidden fixed right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 flex items-center gap-2 h-12 pl-4 pr-5 bg-[#283618] text-white rounded-full text-sm font-semibold shadow-lg active:scale-95 transition-transform cursor-pointer"
+          id="post-opportunity-fab"
+          aria-label="Post opportunity"
+        >
+          <Plus className="w-5 h-5" />
+          <span>Post</span>
+        </button>
+      )}
 
       {/* User Profile Modal */}
       {user && (

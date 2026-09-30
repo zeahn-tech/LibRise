@@ -21,6 +21,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { useConfig } from '../../context/ConfigContext';
+import { formatConverted } from '../../lib/currency';
 
 interface BusinessDetailModalProps {
   isOpen: boolean;
@@ -54,13 +55,7 @@ export const BusinessDetailModal: React.FC<BusinessDetailModalProps> = ({
 
   if (!isOpen) return null;
 
-  const LRD_RATE = 195;
-  const formatPrice = (usd: number) => {
-    if (currency === 'USD') {
-      return `$${usd.toLocaleString()}`;
-    }
-    return `LRD ${(usd * LRD_RATE).toLocaleString()}`;
-  };
+  const formatPrice = (usd: number) => formatConverted(usd, 'USD', currency);
 
   const photos = listing.photos && listing.photos.length > 0
     ? listing.photos

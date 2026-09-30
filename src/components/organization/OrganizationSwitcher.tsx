@@ -122,7 +122,7 @@ export const OrganizationSwitcher: React.FC<OrganizationSwitcherProps> = ({
         <div className="w-6 h-6 rounded-lg bg-[#283618] text-white flex items-center justify-center font-bold text-[10px] shrink-0">
           {activeOrganization?.logoText || <Building2 className="w-3.5 h-3.5" />}
         </div>
-        <div className="hidden lg:block">
+        <div className="hidden 2xl:block">
           <div className="text-xs font-bold text-[#132A13] truncate max-w-[140px] leading-tight flex items-center gap-1">
             <span>{activeOrganization ? activeOrganization.name : 'Personal Profile'}</span>
             {activeOrganization?.isVerified && (
@@ -149,7 +149,7 @@ export const OrganizationSwitcher: React.FC<OrganizationSwitcherProps> = ({
 
       {/* Switcher Dropdown */}
       {isOpen && (
-        <div className="absolute left-0 sm:right-0 sm:left-auto mt-2 w-80 sm:w-96 bg-white rounded-2xl border border-[#E8E4D9] shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 duration-100">
+        <div className="fixed left-3 right-3 top-[4.25rem] max-h-[calc(100dvh-6rem)] overflow-y-auto sm:absolute sm:top-auto sm:left-auto sm:right-0 sm:mt-2 sm:w-96 bg-white rounded-2xl border border-[#E8E4D9] shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 duration-100">
           {/* Identity & Current Tenant Notice */}
           <div className="px-3 py-2 bg-[#F9F8F6] rounded-xl border border-[#E8E4D9] mb-3">
             <div className="flex items-center justify-between">

@@ -47,6 +47,7 @@ import {
   Lock
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { formatSalaryRange } from '../lib/currency';
 import { applicationService } from '../services/applicationService';
 import { candidateService } from '../services/candidateService';
 import { useToast } from '../context/ToastContext';
@@ -104,7 +105,6 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
     opportunity.status === 'published' && isTodayExpired ? 'expired' : opportunity.status;
   const isAcceptingApplications = effectiveStatus === 'published';
 
-  const LRD_RATE = 195;
 
   const formatSalary = () => {
     if (opportunity.isSalaryConfidential) {
@@ -113,20 +113,10 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
     if (!opportunity.salaryMin && !opportunity.salaryMax) {
       return opportunity.isSalaryNegotiable ? 'Negotiable Compensation' : 'Competitive Rates';
     }
-    const min = opportunity.salaryMin || 0;
-    const max = opportunity.salaryMax || 0;
-
-    if (currency === 'USD') {
-      if (max > 0 && min > 0) return `$${min.toLocaleString()} - $${max.toLocaleString()}`;
-      if (min > 0) return `From $${min.toLocaleString()}`;
-      return `Up to $${max.toLocaleString()}`;
-    } else {
-      const lrdMin = Math.round(min * LRD_RATE);
-      const lrdMax = Math.round(max * LRD_RATE);
-      if (lrdMax > 0 && lrdMin > 0) return `LRD ${lrdMin.toLocaleString()} - ${lrdMax.toLocaleString()}`;
-      if (lrdMin > 0) return `From LRD ${lrdMin.toLocaleString()}`;
-      return `Up to LRD ${lrdMax.toLocaleString()}`;
-    }
+    return (
+      formatSalaryRange(opportunity.salaryMin, opportunity.salaryMax, opportunity.currency || 'USD', currency) ||
+      (opportunity.isSalaryNegotiable ? 'Negotiable Compensation' : 'Competitive Rates')
+    );
   };
 
   const handleApply = async (e: React.FormEvent) => {
