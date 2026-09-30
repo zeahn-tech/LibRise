@@ -17,11 +17,13 @@ import {
   Mail,
   ChevronLeft,
   ChevronRight,
+  Maximize2,
   Edit,
   Trash2
 } from 'lucide-react';
 import { useConfig } from '../../context/ConfigContext';
 import { formatConverted } from '../../lib/currency';
+import { ImageLightbox } from '../common/ImageLightbox';
 
 interface BusinessDetailModalProps {
   isOpen: boolean;
@@ -52,6 +54,7 @@ export const BusinessDetailModal: React.FC<BusinessDetailModalProps> = ({
 }) => {
   const { isLowBandwidthMode } = useConfig();
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const [showLightbox, setShowLightbox] = useState(false);
 
   if (!isOpen) return null;
 
@@ -117,7 +120,7 @@ export const BusinessDetailModal: React.FC<BusinessDetailModalProps> = ({
         </div>
 
         {/* Photo Gallery */}
-        <div className="relative rounded-2xl overflow-hidden bg-[#283618] aspect-video max-h-72 border border-[#E8E4D9] flex flex-col items-center justify-center p-6 text-center">
+        <div className="relative rounded-2xl overflow-hidden bg-[#283618] aspect-[4/3] sm:aspect-video max-h-[26rem] flex flex-col items-center justify-center text-center">
           {isLowBandwidthMode ? (
             <div className="flex flex-col items-center gap-2 text-stone-200">
               <Building className="w-12 h-12 text-[#BC6C25] opacity-85" />
@@ -129,10 +132,19 @@ export const BusinessDetailModal: React.FC<BusinessDetailModalProps> = ({
               <img
                 src={photos[activePhotoIndex]}
                 alt={listing.title}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover cursor-zoom-in"
                 loading="lazy"
                 referrerPolicy="no-referrer"
+                onClick={() => setShowLightbox(true)}
               />
+              <button
+                type="button"
+                onClick={() => setShowLightbox(true)}
+                aria-label="Expand photo"
+                className="absolute top-2 right-2 p-2 bg-black/50 hover:bg-black/80 text-white rounded-lg cursor-pointer"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
               {photos.length > 1 && (
                 <>
                   <button
@@ -161,6 +173,15 @@ export const BusinessDetailModal: React.FC<BusinessDetailModalProps> = ({
             </>
           )}
         </div>
+
+        {showLightbox && (
+          <ImageLightbox
+            photos={photos}
+            startIndex={activePhotoIndex}
+            alt={listing.title}
+            onClose={() => setShowLightbox(false)}
+          />
+        )}
 
         {/* Financial Highlights Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-[#F9F8F4] rounded-2xl border border-[#E8E4D9] text-xs">

@@ -23,7 +23,8 @@ import {
   Tag,
   Shield,
   Layers,
-  BarChart3
+  BarChart3,
+  Maximize2
 } from 'lucide-react';
 import { CreateBusinessModal } from './business/CreateBusinessModal';
 import { ContactSellerModal } from './business/ContactSellerModal';
@@ -32,6 +33,7 @@ import { BusinessModerationPanel } from './business/BusinessModerationPanel';
 import { BusinessAnalyticsDashboard } from './analytics/BusinessAnalyticsDashboard';
 import { useConfig } from '../context/ConfigContext';
 import { formatConverted } from '../lib/currency';
+import { ImageLightbox } from './common/ImageLightbox';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
@@ -93,6 +95,7 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
   // Status").
   const PAGE_SIZE = 24;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [lightbox, setLightbox] = useState<{ photos: string[]; alt: string } | null>(null);
 
   // Search and Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -497,20 +500,28 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
                   <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
                     {/* Visual Photo Thumbnail or Letter Avatar */}
                     {firstPhoto && !isLowBandwidthMode ? (
-                      <div className="w-full sm:w-44 h-32 rounded-2xl overflow-hidden bg-gray-100 flex-none border border-[#E8E4D9] relative">
-                        <img 
-                          src={firstPhoto} 
-                          alt={biz.title} 
-                          className="w-full h-full object-cover" 
+                      <button
+                        type="button"
+                        onClick={() => setLightbox({ photos: biz.photos || [firstPhoto], alt: biz.title })}
+                        aria-label={`View photos of ${biz.title}`}
+                        className="group w-full sm:w-56 h-48 sm:h-40 rounded-2xl overflow-hidden bg-gray-100 flex-none relative cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4F772D]"
+                      >
+                        <img
+                          src={firstPhoto}
+                          alt={biz.title}
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                           loading="lazy"
                           referrerPolicy="no-referrer"
                         />
+                        <span className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-lg opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                          <Maximize2 className="w-3.5 h-3.5" />
+                        </span>
                         {biz.photos && biz.photos.length > 1 && (
-                          <span className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/60 text-white text-[10px] rounded-md font-bold">
+                          <span className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-black/60 text-white text-[10px] rounded-md font-bold">
                             +{biz.photos.length - 1} photos
                           </span>
                         )}
-                      </div>
+                      </button>
                     ) : (
                       <div className="w-full sm:w-28 h-28 bg-[#F9F8F4] rounded-2xl flex-none flex items-center justify-center text-[#4F772D] font-bold font-serif text-2xl border border-[#E8E4D9]">
                         {biz.title.charAt(0)}
@@ -828,6 +839,9 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
             </form>
           </div>
         </div>
+      )}
+      {lightbox && (
+        <ImageLightbox photos={lightbox.photos} alt={lightbox.alt} onClose={() => setLightbox(null)} />
       )}
     </div>
   );
