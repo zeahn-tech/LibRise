@@ -29,6 +29,7 @@ import { notificationService } from '../services/notificationService';
 import { PWAInstallButton } from './pwa/PWAInstallButton';
 import { envConfig } from '../config/env';
 import { CurrencySwitcher } from './common/CurrencySwitcher';
+import { BrandLogo } from './common/BrandLogo';
 
 interface NavbarProps {
   activeTab: 'opportunities' | 'businesses' | 'verification' | 'recruiter' | 'candidate' | 'ai-studio' | 'billing' | 'messages' | 'admin';
@@ -170,19 +171,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => setActiveTab('opportunities')}
             className="flex items-center gap-2 sm:gap-2.5 text-left focus:outline-none group cursor-pointer shrink-0"
           >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 bg-[#283618] rounded-xl flex items-center justify-center shadow-xs transition-transform group-hover:scale-105 shrink-0">
-              <div className="w-5 h-5 border-2 border-white rounded-full flex items-center justify-center">
-                <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-              </div>
-            </div>
-            <div>
-              <div className="text-lg sm:text-xl font-bold tracking-tight text-[#132A13] leading-none">
-                Lib<span className="text-[#BC6C25]">Rise</span>
-              </div>
-              <div className="text-[10px] tracking-widest uppercase font-bold text-[#606C38]">
-                LIBERIA
-              </div>
-            </div>
+            <BrandLogo />
           </button>
 
           {/* Primary Marketplace Tabs */}
