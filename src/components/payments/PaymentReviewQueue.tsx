@@ -36,7 +36,7 @@ export const PaymentReviewQueue: React.FC = () => {
 
   const approve = async (item: PaymentWithContext) => {
     const ok = window.confirm(
-      `Approve ${formatMinorAmount(item.amountMinor, item.currency)} and publish this vacancy?\n\n` +
+      `Approve ${formatMinorAmount(item.amountMinor, item.currency)} and ${item.opportunityId ? 'publish this vacancy' : 'activate this subscription'}?\n\n` +
         `Only approve if you have confirmed in the mobile money records that this exact amount, ` +
         `transaction ID (${item.providerTransactionId}) and sender arrived.`
     );
@@ -45,7 +45,7 @@ export const PaymentReviewQueue: React.FC = () => {
     const res = await paymentService.reviewPayment(item.id, 'approve');
     setWorkingId(null);
     if (res.data) {
-      showToast('Payment approved and vacancy published.', 'success');
+      showToast(item.opportunityId ? 'Payment approved and vacancy published.' : 'Payment approved and subscription activated.', 'success');
       setItems((prev) => prev.filter((p) => p.id !== item.id));
     } else if (res.error) {
       showToast(res.error.message, 'error');
@@ -108,7 +108,9 @@ export const PaymentReviewQueue: React.FC = () => {
             <li key={item.id} className="border border-[#E8E4D9] rounded-2xl p-4 space-y-3 bg-white">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <p className="font-bold text-[#132A13] text-sm break-words">{item.opportunityTitle || item.opportunityId || 'Vacancy'}</p>
+                  <p className="font-bold text-[#132A13] text-sm break-words">
+                    {item.opportunityTitle || (item.opportunityId ? item.opportunityId : `Subscription: ${item.planName || 'plan upgrade'}`)}
+                  </p>
                   <p className="text-xs text-stone-500 break-words">{item.organizationName || item.organizationId}</p>
                 </div>
                 <p className="font-bold text-lg text-[#132A13] shrink-0">{formatMinorAmount(item.amountMinor, item.currency)}</p>

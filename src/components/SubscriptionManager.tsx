@@ -1,15 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { CreditCard, CheckCircle2, Zap, Calendar, AlertCircle } from 'lucide-react';
 import { SubscriptionPlan, OrganizationSubscription } from '../types';
 import { SUBSCRIPTION_PLANS } from '../data/subscriptionPlans';
 import { subscriptionService } from '../services/subscriptionService';
 import { authService } from '../services/authService';
+import { useToast } from '../context/ToastContext';
+
+const PaymentCheckoutFlow = lazy(() => import('./payments/PaymentCheckoutFlow').then((m) => ({ default: m.PaymentCheckoutFlow })));
 
 export const SubscriptionManager: React.FC = () => {
+  const { showToast } = useToast();
   const [subscription, setSubscription] = useState<OrganizationSubscription | null>(null);
   const [loading, setLoading] = useState(true);
-  const [processingId, setProcessingId] = useState<string | null>(null);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
+  const [checkoutPlanId, setCheckoutPlanId] = useState<string | null>(null);
 
   const session = authService.getSession();
   const orgId = session.activeOrganization?.id;
@@ -30,31 +34,30 @@ export const SubscriptionManager: React.FC = () => {
     setLoading(false);
   };
 
-  const handleSubscribe = async (plan: SubscriptionPlan) => {
+  /**
+   * Opens the real manual mobile-money checkout flow instead of faking an
+   * instant upgrade. subscriptionService.mockFulfillSubscription() (still
+   * present, see that file) wrote directly to organization_subscriptions
+   * with no payment involved at all -- exactly the gap a user reported:
+   * clicking "Upgrade" switched plans with nowhere to actually send
+   * money. organization_subscriptions is no longer writable by org
+   * admins at all (see supabase/migrations/
+   * *_route_subscriptions_through_manual_payments.sql); the ONLY way a
+   * subscription becomes active now is a platform admin approving a real
+   * payment, same as publishing a paid vacancy. See docs/PAYMENTS.md.
+   */
+  const handleSubscribe = (plan: SubscriptionPlan) => {
     if (!orgId) return;
-    setProcessingId(plan.id);
-
-    // In a real app, we would hit createCheckoutSession.
-    // For this prototype, we'll hit the mock fulfiller to simulate an instant purchase.
-    try {
-      const priceId = billingCycle === 'annual' ? plan.stripePriceIdAnnual : plan.stripePriceIdMonthly;
-      if (!priceId) {
-        // Fallback mock logic for test environments without stripe config
-        const mockRes = await subscriptionService.mockFulfillSubscription(orgId, plan.id);
-        if (mockRes.data) setSubscription(mockRes.data);
-      } else {
-        // Here we would redirect to Stripe checkout:
-        // const res = await subscriptionService.createCheckoutSession(priceId, orgId, window.location.href, window.location.href);
-        // if (res.data) window.location.href = res.data.url;
-        
-        // Simulating the webhook fulfillment for demo purposes
-        const mockRes = await subscriptionService.mockFulfillSubscription(orgId, priceId);
-        if (mockRes.data) setSubscription(mockRes.data);
-      }
-    } catch (e) {
-      console.error(e);
+    if (plan.tier === 'free') {
+      // Free has no payment_plans row (nothing to pay for) and there is
+      // no self-service downgrade/cancellation flow yet -- see
+      // docs/PAYMENTS.md. Say so plainly rather than opening a paid
+      // checkout for a free plan, which initiate() would reject anyway
+      // (no matching plan) after a confusing silent fallback.
+      showToast('Downgrading to the free plan isn\'t self-service yet -- contact support.', 'info');
+      return;
     }
-    setProcessingId(null);
+    setCheckoutPlanId(`plan-sub-${plan.tier}-${billingCycle}`);
   };
 
   const handleManageBilling = async () => {
@@ -75,6 +78,18 @@ export const SubscriptionManager: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
+      {checkoutPlanId && orgId && (
+        <Suspense fallback={null}>
+          <PaymentCheckoutFlow
+            organizationId={orgId}
+            planType="subscription"
+            preferredPlanId={checkoutPlanId}
+            title="Upgrade your subscription"
+            onClose={() => setCheckoutPlanId(null)}
+            onPublished={() => { void loadSubscription(orgId); }}
+          />
+        </Suspense>
+      )}
       {/* Current Status Header */}
       <div className="bg-white p-6 md:p-8 rounded-[32px] border border-[#E8E4D9]">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -145,7 +160,6 @@ export const SubscriptionManager: React.FC = () => {
           {SUBSCRIPTION_PLANS.map((plan) => {
             const isCurrent = subscription?.planId === plan.id;
             const price = billingCycle === 'annual' ? Math.round(plan.annualPrice / 12) : plan.monthlyPrice;
-            const isProcessing = processingId === plan.id;
 
             return (
               <div 
@@ -193,7 +207,7 @@ export const SubscriptionManager: React.FC = () => {
                 </ul>
 
                 <button
-                  disabled={isCurrent || isProcessing}
+                  disabled={isCurrent}
                   onClick={() => handleSubscribe(plan)}
                   className={`w-full py-3.5 rounded-2xl text-sm font-bold transition-all cursor-pointer ${
                     isCurrent
@@ -203,7 +217,7 @@ export const SubscriptionManager: React.FC = () => {
                         : 'bg-[#283618] text-white hover:bg-[#3A4D23]'
                   }`}
                 >
-                  {isProcessing ? 'Processing...' : isCurrent ? 'Current Plan' : `Upgrade to ${plan.name}`}
+                  {isCurrent ? 'Current Plan' : `Upgrade to ${plan.name}`}
                 </button>
               </div>
             );

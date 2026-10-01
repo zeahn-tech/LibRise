@@ -32,6 +32,7 @@ import {
   Payment,
   PaymentEvent,
   PaymentPlan,
+  PaymentPlanType,
   PaymentProviderId,
   PaymentStatus
 } from '../types';
@@ -86,6 +87,9 @@ interface PaymentPlanRow {
   duration_days: number;
   features: string[];
   active: boolean;
+  plan_type: PaymentPlanType;
+  subscription_tier: string | null;
+  billing_cycle: string | null;
 }
 
 function rowToPlan(row: PaymentPlanRow): PaymentPlan {
@@ -97,7 +101,10 @@ function rowToPlan(row: PaymentPlanRow): PaymentPlan {
     currency: row.currency,
     durationDays: row.duration_days,
     features: row.features || [],
-    active: row.active
+    active: row.active,
+    planType: row.plan_type,
+    subscriptionTier: row.subscription_tier,
+    billingCycle: row.billing_cycle as 'monthly' | 'annual' | null
   };
 }
 
@@ -203,6 +210,7 @@ export function formatMinorAmount(amountMinor: number, currency: string): string
 export interface PaymentWithContext extends Payment {
   opportunityTitle?: string | null;
   organizationName?: string | null;
+  planName?: string | null;
 }
 
 /** If an unsubmitted payment's window has passed, expire it server-side
@@ -246,13 +254,11 @@ export const paymentService = {
    *  ever supply) the final amount; see initiatePayment() below, which
    *  reads the plan's amount server-side via RLS-scoped SELECT rather
    *  than trusting anything the caller passes in. */
-  async getPlans(): Promise<ApiResponse<PaymentPlan[]>> {
+  async getPlans(planType?: PaymentPlanType): Promise<ApiResponse<PaymentPlan[]>> {
     return apiClient.execute(async () => {
-      const { data, error } = await client()
-        .from('payment_plans')
-        .select('*')
-        .eq('active', true)
-        .order('amount_minor', { ascending: true });
+      let query = client().from('payment_plans').select('*').eq('active', true);
+      if (planType) query = query.eq('plan_type', planType);
+      const { data, error } = await query.order('amount_minor', { ascending: true });
       if (error) translateError(error);
       return (data as PaymentPlanRow[]).map(rowToPlan);
     });
@@ -272,24 +278,45 @@ export const paymentService = {
     planId: string,
     provider: PaymentProviderId
   ): Promise<ApiResponse<Payment>> {
+    return paymentService.initiate({ opportunityId, planId, provider });
+  },
+
+  /**
+   * Generalized payment initiation for both targets:
+   *  - vacancy: pass opportunityId (organizationId is looked up from it)
+   *  - subscription: pass organizationId directly, no opportunityId
+   * Reuses one open (created/awaiting-review) payment per target if one
+   * already exists, same idempotency reasoning as vacancy payments had.
+   */
+  async initiate(params: {
+    opportunityId?: string;
+    organizationId?: string;
+    planId: string;
+    provider: PaymentProviderId;
+  }): Promise<ApiResponse<Payment>> {
+    const { opportunityId, planId, provider } = params;
     return apiClient.execute(async () => {
       const session = authService.getSession();
       if (!session.user) throw new UnauthorizedError('Sign-in required.');
 
-      const { data: opp, error: oppError } = await client()
-        .from('opportunities')
-        .select('id, organization_id, status')
-        .eq('id', opportunityId)
-        .maybeSingle();
-      if (oppError) translateError(oppError);
-      if (!opp) throw new NotFoundError('Opportunity', opportunityId);
-      const organizationId = (opp as { organization_id: string }).organization_id;
+      let organizationId = params.organizationId;
+      if (opportunityId) {
+        const { data: opp, error: oppError } = await client()
+          .from('opportunities')
+          .select('id, organization_id, status')
+          .eq('id', opportunityId)
+          .maybeSingle();
+        if (oppError) translateError(oppError);
+        if (!opp) throw new NotFoundError('Opportunity', opportunityId);
+        organizationId = (opp as { organization_id: string }).organization_id;
+      }
+      if (!organizationId) throw new ValidationError('An organization is required to start a payment.');
 
-      const { data: existing, error: existingError } = await client()
-        .from('payments')
-        .select('*')
-        .eq('opportunity_id', opportunityId)
-        .in('status', ['created', 'payment_pending'])
+      let existingQuery = client().from('payments').select('*').in('status', ['created', 'payment_pending']);
+      existingQuery = opportunityId
+        ? existingQuery.eq('opportunity_id', opportunityId)
+        : existingQuery.eq('organization_id', organizationId).is('opportunity_id', null);
+      const { data: existing, error: existingError } = await existingQuery
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -314,7 +341,7 @@ export const paymentService = {
         public_payment_id: generatePaymentId(),
         organization_id: organizationId,
         created_by_user_id: session.user.id,
-        opportunity_id: opportunityId,
+        opportunity_id: opportunityId ?? null,
         plan_id: planRow.id,
         payment_provider: provider,
         provider_reference: generatePaymentReference(),
@@ -324,7 +351,7 @@ export const paymentService = {
         // directly from the client."
         amount_minor: planRow.amount_minor,
         currency: planRow.currency,
-        description: `${planRow.name} -- vacancy publishing`,
+        description: `${planRow.name} -- ${planRow.plan_type === 'subscription' ? 'subscription upgrade' : 'vacancy publishing'}`,
         status: 'created'
       };
 
@@ -334,29 +361,26 @@ export const paymentService = {
         .select('*')
         .maybeSingle();
       if (error) {
-        // 23505 = unique_violation on uq_payments_one_open_per_opportunity:
-        // another request (a double-click, a second tab) created the open
-        // payment for this vacancy between our check above and this
-        // insert. That is the idempotency guarantee working -- return the
-        // payment that won the race instead of surfacing an error.
+        // 23505 = unique_violation on one of the "one open payment per
+        // target" partial indexes (vacancy or subscription): another
+        // request (a double-click, a second tab) created the open
+        // payment between our check above and this insert. That is the
+        // idempotency guarantee working -- return the payment that won
+        // the race instead of surfacing an error.
         if (error.code === '23505') {
-          const { data: winner } = await client()
-            .from('payments')
-            .select('*')
-            .eq('opportunity_id', opportunityId)
-            .in('status', ['created', 'payment_pending'])
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+          let winnerQuery = client().from('payments').select('*').in('status', ['created', 'payment_pending']);
+          winnerQuery = opportunityId
+            ? winnerQuery.eq('opportunity_id', opportunityId)
+            : winnerQuery.eq('organization_id', organizationId).is('opportunity_id', null);
+          const { data: winner } = await winnerQuery.order('created_at', { ascending: false }).limit(1).maybeSingle();
           if (winner) return rowToPayment(winner as PaymentRow);
         }
         translateError(error);
       }
 
-      await client()
-        .from('opportunities')
-        .update({ status: 'payment_required' })
-        .eq('id', opportunityId);
+      if (opportunityId) {
+        await client().from('opportunities').update({ status: 'payment_required' }).eq('id', opportunityId);
+      }
 
       return rowToPayment(created as PaymentRow);
     });
@@ -480,23 +504,46 @@ export const paymentService = {
     });
   },
 
+  /** Subscription equivalent of getOpenPaymentForOpportunity -- lets the
+   *  upgrade flow resume an in-progress subscription payment instead of
+   *  starting a second one. */
+  async getOpenSubscriptionPayment(organizationId: string): Promise<ApiResponse<Payment | null>> {
+    return apiClient.execute(async () => {
+      const { data, error } = await client()
+        .from('payments')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .is('opportunity_id', null)
+        .in('status', ['created', 'payment_pending'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) translateError(error);
+      if (!data) return null;
+      const stillOpen = await dropIfExpired(data as PaymentRow);
+      return stillOpen ? rowToPayment(stillOpen) : null;
+    });
+  },
+
   /** Admin review queue with vacancy title / organization name where the
    *  caller's RLS allows reading them (falls back to ids otherwise). */
   async listPendingReviewWithContext(): Promise<ApiResponse<PaymentWithContext[]>> {
     return apiClient.execute(async () => {
       const { data, error } = await client()
         .from('payments')
-        .select('*, opportunities(title), organizations(name)')
+        .select('*, opportunities(title), organizations(name), payment_plans(name)')
         .eq('status', 'payment_pending')
         .order('created_at', { ascending: true });
       if (error) translateError(error);
       return (data as Array<PaymentRow & {
         opportunities?: { title?: string } | null;
         organizations?: { name?: string } | null;
+        payment_plans?: { name?: string } | null;
       }>).map((row) => ({
         ...rowToPayment(row),
         opportunityTitle: row.opportunities?.title ?? null,
-        organizationName: row.organizations?.name ?? null
+        organizationName: row.organizations?.name ?? null,
+        planName: row.payment_plans?.name ?? null
       }));
     });
   },

@@ -191,6 +191,22 @@ export const subscriptionService = {
     });
   },
 
+  /**
+   * UNUSED BY THE UI as of the manual-mobile-money-payments-for-
+   * subscriptions work (see docs/PAYMENTS.md and
+   * supabase/migrations/*_route_subscriptions_through_manual_payments.sql).
+   * SubscriptionManager.tsx now opens PaymentCheckoutFlow instead, which
+   * requires a real payment + platform-admin approval before
+   * organization_subscriptions changes at all.
+   *
+   * Left in place only because src/tests/subscriptionService.test.ts
+   * exercises it against a fully mocked Supabase client (no real RLS
+   * involved, so that test is unaffected either way) -- not because
+   * this is still a legitimate way to grant a subscription. Called for
+   * real, against a real database, this will now be rejected: the
+   * direct INSERT/UPDATE permissions on organization_subscriptions that
+   * made it work were removed. Do not wire this back into any UI.
+   */
   async mockFulfillSubscription(organizationId: string, priceIdOrPlanId: string): Promise<ApiResponse<OrganizationSubscription>> {
     return apiClient.execute(async () => {
       const session = authService.getSession();

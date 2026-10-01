@@ -1,11 +1,14 @@
-# Vacancy Payments — Manual Mobile Money (interim system)
+# Vacancy & Subscription Payments — Manual Mobile Money (interim system)
 
 ## What this is, and what it is not
 
-Recruiters pay a one-time fee to publish a vacancy once their plan's free publishing quota is used up.
-Payment is a **real person-to-person mobile money transfer (MTN MoMo or Orange Money) to the business's own
-number**, followed by the recruiter submitting the transaction ID they received. **A platform admin then checks that
-transaction against the real MoMo records and approves or rejects it.** Only approval publishes the vacancy.
+Two payment targets share one system: recruiters pay a one-time fee to publish a vacancy once their plan's
+free publishing quota is used up, and organizations pay a recurring fee to upgrade their subscription tier
+(Basic/Pro). Both work identically: payment is a **real person-to-person mobile money transfer (MTN MoMo or
+Orange Money) to the business's own number**, followed by the payer submitting the transaction ID they
+received. **A platform admin then checks that transaction against the real MoMo records and approves or
+rejects it.** Only approval publishes the vacancy, or activates the subscription tier — see
+`payment_plans.plan_type` (`vacancy` | `subscription`) and `admin_review_payment()`'s branching.
 
 - **Not automatic, not instant.** There is no MTN/Orange API or webhook involved. Human review is the stand-in for one.
   The UI says so and makes no turnaround-time promise (none has been agreed).
@@ -84,11 +87,18 @@ confirmed it. If you can't, **reject with a reason** — don't guess. The reason
    pgTAP `no_plan()` declaration, and an unschema-qualified `uuid_generate_v4()` call). As of commit `2c3fc32`,
    `rls-security-tests` passes in CI — both the original 112-assertion suite and the new payments suite, running
    against a fresh `supabase start` Postgres instance on every push. See the CI run history for the current numbers.
-2. **The publish gate's free-quota branch can be forged today.** Quota is derived from `organization_subscriptions`, whose
-   existing RLS lets an org *admin* write their own subscription row (a documented demo/mock path — real Stripe webhook
-   fulfilment does not exist yet). An org admin could set themselves to `pro` and skip payment. The gate closes the
-   *direct-publish* bypass; it does not close this separate, pre-existing hole. **Fix: lock subscription writes to
-   platform admins/service role.** That would also disable the current mock-upgrade demo, so it needs your decision.
+2. **Fixed — subscription upgrades now go through the real payment system.** Previously "Upgrade" in
+   `SubscriptionManager.tsx` called `subscriptionService.mockFulfillSubscription()`, which wrote straight to
+   `organization_subscriptions` with no payment of any kind — exactly why a user reported "I click upgrade and it
+   switches plans, but I never see anywhere to send money." `organization_subscriptions` is no longer writable by
+   org admins at all (no INSERT/UPDATE policy exists); the only way it changes now is `admin_review_payment()`
+   approving a real, manually-verified payment — the identical flow vacancy publishing already used. This also closes
+   the previously-documented hole where an org admin could forge a `pro` row to skip the vacancy publish gate's quota
+   check. `payment_plans` now has a `plan_type` (`vacancy` | `subscription`) column; subscription tiers/pricing are
+   seeded there matching `src/data/subscriptionPlans.ts` exactly — **keep both in sync manually**, the DB can't read
+   the TypeScript file. `mockFulfillSubscription()` is left in `subscriptionService.ts` only because a fully-mocked
+   unit test exercises it; calling it against a real database is now rejected. There is still no self-service
+   downgrade/cancellation flow — `SubscriptionManager.tsx` shows a plain message instead of pretending one exists.
 3. **Tier limits are duplicated in SQL** (`org_has_publish_quota`: free 1 / basic 5 / pro unlimited) because the DB can't
    read `src/data/subscriptionPlans.ts`. Change both together.
 4. **A pre-existing bug was fixed along the way:** every real org was auto-provisioned the Pro plan (any id starting with

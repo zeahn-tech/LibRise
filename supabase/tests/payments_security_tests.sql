@@ -242,6 +242,80 @@ insert into test_log(line) select * from extensions.lives_ok(
 reset role;
 
 -- =============================================================================
+-- 7. SUBSCRIPTION PAYMENTS: the hole that caused all this, now closed
+-- =============================================================================
+-- Direct writes to organization_subscriptions are no longer possible for
+-- anyone but admin_review_payment() -- this is the actual fix for
+-- "clicking Upgrade switched plans with nowhere to send money": that
+-- mock path worked specifically because this table was writable by org
+-- admins. Confirm it no longer is, for both INSERT and UPDATE.
+reset role;
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
+with ins as (
+  insert into public.organization_subscriptions (id, organization_id, plan_id, tier, status, billing_cycle, current_period_start, current_period_end)
+  values ('osub-forged', 'org-paytest-a', 'plan-sub-pro-annual', 'pro', 'active', 'annual', now(), now() + interval '1 year')
+  on conflict do nothing
+  returning 1
+)
+insert into test_log(line) select * from extensions.ok((select count(*) from ins) = 0,
+  '[organization_subscriptions][org A owner][INSERT] *** the actual fix *** org admin cannot grant themselves a paid tier directly -- no insert policy exists');
+reset role;
+
+-- Give org A a real existing (free-tier-implicit, i.e. no row) baseline, then
+-- attempt a direct UPDATE as well, in case a row happens to already exist.
+insert into public.organization_subscriptions (id, organization_id, plan_id, tier, status, billing_cycle, current_period_start, current_period_end)
+values ('osub-paytest-a', 'org-paytest-a', 'plan-sub-basic-monthly', 'basic', 'active', 'monthly', now(), now() + interval '30 days')
+on conflict (organization_id) do nothing;
+
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
+with upd as (update public.organization_subscriptions set tier = 'pro' where organization_id = 'org-paytest-a' returning 1)
+insert into test_log(line) select * from extensions.ok((select count(*) from upd) = 0,
+  '[organization_subscriptions][org A owner][UPDATE] org admin cannot upgrade their own tier directly either');
+reset role;
+
+-- Amount manipulation + ownership + the full approve path, same rigor as
+-- the vacancy-payment tests above.
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
+insert into test_log(line) select * from extensions.lives_ok(
+  $$insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
+    values ('pay-paytest-sub', 'pub-paytest-sub', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', NULL, 'plan-sub-pro-annual', 'manual_momo_orange', 'OHL-PAYTEST-SUB', 1, 'USD', 'created')$$,
+  '[payments][subscription][org A owner][INSERT] can start a subscription payment (attempting amount_minor = 1, no opportunity_id)'
+);
+insert into test_log(line) select * from extensions.ok(
+  (select amount_minor from public.payments where id = 'pay-paytest-sub') = 143000,
+  '[payments][subscription][amount manipulation] *** server-authoritative pricing *** overwritten with the real annual Pro price (143000 = $1,430.00)'
+);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
+    values ('pay-paytest-sub-badopp', 'pub-paytest-sub-badopp', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', 'opp-paytest-a-draft', 'plan-sub-pro-annual', 'manual_momo_orange', 'OHL-PAYTEST-SUB-BADOPP', 143000, 'USD', 'created')$$,
+  'P0001'::char(5), NULL::text,
+  '[payments][subscription] *** target integrity *** a subscription-plan payment must NOT reference an opportunity'
+);
+insert into test_log(line) select * from extensions.lives_ok(
+  $$select public.submit_payment_reference('pay-paytest-sub', 'txn-sub-77777')$$,
+  '[payments][subscription][submit_payment_reference] recruiter submits the reference same as a vacancy payment'
+);
+reset role;
+
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000003',true);
+insert into test_log(line) select * from extensions.lives_ok(
+  $$select public.admin_review_payment('pay-paytest-sub', 'approve', 'verified against MoMo statement')$$,
+  '[payments][subscription][platform admin] admin can approve a pending subscription payment'
+);
+insert into test_log(line) select * from extensions.ok(
+  (select status from public.payments where id = 'pay-paytest-sub') = 'payment_success'
+  and (select tier from public.organization_subscriptions where organization_id = 'org-paytest-a') = 'pro'
+  and (select status from public.organization_subscriptions where organization_id = 'org-paytest-a') = 'active'
+  and (select plan_id from public.organization_subscriptions where organization_id = 'org-paytest-a') = 'plan-sub-pro-annual',
+  '[payments][subscription][admin approval] *** atomic, the actual grant *** org A''s subscription is upserted to pro/active/plan-sub-pro-annual -- the ONLY way this happens now'
+);
+insert into test_log(line) select * from extensions.ok(
+  (select count(*) from public.organization_subscriptions where organization_id = 'org-paytest-a') = 1,
+  '[organization_subscriptions][upsert] approving a second time (conceptually) would update, not duplicate -- confirmed exactly one row exists for org A'
+);
+reset role;
+
+-- =============================================================================
 -- FINAL: dump the log
 -- =============================================================================
 select line from test_log order by seq;

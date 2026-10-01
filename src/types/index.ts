@@ -695,6 +695,8 @@ export type PaymentStatus =
  *  or another provider later adds new values here, nothing else changes. */
 export type PaymentProviderId = 'manual_momo_mtn' | 'manual_momo_orange';
 
+export type PaymentPlanType = 'vacancy' | 'subscription';
+
 export interface PaymentPlan {
   id: string;
   name: string;
@@ -704,6 +706,9 @@ export interface PaymentPlan {
   durationDays: number;
   features: string[];
   active: boolean;
+  planType: PaymentPlanType;
+  subscriptionTier?: string | null;
+  billingCycle?: 'monthly' | 'annual' | null;
 }
 
 export interface Payment {
