@@ -111,6 +111,13 @@ jobs:
         uses: supabase/setup-cli@v1
         with:
           version: latest
+          # Authenticates the "resolve latest release" lookup against
+          # GitHub's API so it isn't subject to the unauthenticated rate
+          # limit -- hit exactly once already (see commit 17aeecc's CI
+          # run: "Failed to resolve latest Supabase CLI release: rate
+          # limit exceeded"), which is otherwise a real, random source of
+          # CI flakiness unrelated to any actual code change.
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Start local Supabase (applies all migrations)
         run: supabase start --ignore-health-check
