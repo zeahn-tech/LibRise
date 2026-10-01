@@ -368,6 +368,40 @@ export const notificationService = {
     });
   },
 
+  async notifyPaymentSubmitted(params: { recipientUserId: string; amountLabel: string; paymentId: string }) {
+    return this.createAndDispatchNotification({
+      recipientUserId: params.recipientUserId,
+      category: 'payment_event',
+      title: 'Payment Received - Under Review',
+      message: `We received your payment reference for ${params.amountLabel}. An administrator will verify it shortly and you'll be notified as soon as it's approved.`,
+      actionUrl: '/billing',
+      contextId: params.paymentId,
+      channels: { email: true, pushSms: false }
+    });
+  },
+
+  async notifyPaymentReviewed(params: {
+    recipientUserId: string;
+    amountLabel: string;
+    paymentId: string;
+    decision: 'approved' | 'rejected';
+    publishedVacancy?: boolean;
+    reason?: string | null;
+  }) {
+    const approved = params.decision === 'approved';
+    return this.createAndDispatchNotification({
+      recipientUserId: params.recipientUserId,
+      category: 'payment_event',
+      title: approved ? 'Payment Approved' : 'Payment Not Approved',
+      message: approved
+        ? `Your payment of ${params.amountLabel} was approved.${params.publishedVacancy ? ' Your vacancy is now live.' : ''}`
+        : `Your payment of ${params.amountLabel} could not be approved.${params.reason ? ` Reason: ${params.reason}` : ''} You can start a new payment from Billing.`,
+      actionUrl: approved && params.publishedVacancy ? '/recruiter' : '/billing',
+      contextId: params.paymentId,
+      channels: { email: true, pushSms: true }
+    });
+  },
+
   async notifyVerificationEvent(params: { recipientUserId: string; organizationName: string; status: string }) {
     return this.createAndDispatchNotification({
       recipientUserId: params.recipientUserId,

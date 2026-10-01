@@ -847,6 +847,7 @@ export type NotificationCategory =
   | 'job_recommendation'
   | 'business_inquiry'
   | 'subscription_event'
+  | 'payment_event'
   | 'verification_event'
   | 'system_alert';
 

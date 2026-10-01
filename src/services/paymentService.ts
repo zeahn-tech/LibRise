@@ -40,6 +40,8 @@ import { getSupabaseClient } from '../lib/supabaseClient';
 import { apiClient, ApiResponse } from './apiClient';
 import { authService } from './authService';
 import { envConfig } from '../config/env';
+import { notificationService } from './notificationService';
+import { fireAndForget } from '../lib/fireAndForget';
 import {
   ForbiddenError,
   NotFoundError,
@@ -405,7 +407,16 @@ export const paymentService = {
         p_sender_phone_number: senderPhoneNumber ?? null
       });
       if (error) translateError(error);
-      return rowToPayment(data as PaymentRow);
+      const submitted = rowToPayment(data as PaymentRow);
+      fireAndForget(
+        notificationService.notifyPaymentSubmitted({
+          recipientUserId: session.user.id,
+          amountLabel: formatMinorAmount(submitted.amountMinor, submitted.currency),
+          paymentId: submitted.id
+        }),
+        'notify payment submitted'
+      );
+      return submitted;
     });
   },
 
@@ -480,7 +491,30 @@ export const paymentService = {
         p_notes: notes ?? null
       });
       if (error) translateError(error);
-      return rowToPayment(data as PaymentRow);
+      const reviewed = rowToPayment(data as PaymentRow);
+
+      // Tell the person who paid and their organization's team how it went.
+      // Best effort: the review itself has already succeeded atomically.
+      fireAndForget(
+        notificationService
+          .getOrganizationRecipientIds(reviewed.organizationId, [reviewed.createdByUserId])
+          .then((ids) =>
+            Promise.all(
+              ids.map((recipientUserId) =>
+                notificationService.notifyPaymentReviewed({
+                  recipientUserId,
+                  amountLabel: formatMinorAmount(reviewed.amountMinor, reviewed.currency),
+                  paymentId: reviewed.id,
+                  decision: decision === 'approve' ? 'approved' : 'rejected',
+                  publishedVacancy: decision === 'approve' && !!reviewed.opportunityId,
+                  reason: notes || reviewed.failureReason
+                })
+              )
+            )
+          ),
+        'notify payment review'
+      );
+      return reviewed;
     });
   },
 
