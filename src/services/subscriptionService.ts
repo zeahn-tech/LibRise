@@ -34,6 +34,8 @@ import { getSupabaseClient } from '../lib/supabaseClient';
 import { apiClient, ApiResponse } from './apiClient';
 import { SUBSCRIPTION_PLANS, getPlanById, getPlanByStripePriceId } from '../data/subscriptionPlans';
 import { authService } from './authService';
+import { notificationService } from './notificationService';
+import { fireAndForget } from '../lib/fireAndForget';
 import { envConfig } from '../config/env';
 import { ForbiddenError, UnauthorizedError } from '../core/errors/AppError';
 
@@ -233,6 +235,20 @@ export const subscriptionService = {
         stripe_subscription_id: `sub_stripe_mock_${Date.now()}`
       };
 
+      const notifySubscription = () =>
+        fireAndForget(
+          notificationService
+            .getOrganizationRecipientIds(organizationId, [session.user!.id])
+            .then((ids) =>
+              Promise.all(
+                ids.map((recipientUserId) =>
+                  notificationService.notifySubscriptionEvent({ recipientUserId, planName: plan.name, status: 'active' })
+                )
+              )
+            ),
+          'notify subscription'
+        );
+
       if (existing) {
         const { data, error } = await client()
           .from('organization_subscriptions')
@@ -241,6 +257,7 @@ export const subscriptionService = {
           .select('*')
           .maybeSingle();
         if (error) translateError(error);
+        notifySubscription();
         return rowToSubscription(data as SubscriptionRow);
       }
 
@@ -251,6 +268,7 @@ export const subscriptionService = {
         .select('*')
         .maybeSingle();
       if (error) translateError(error);
+      notifySubscription();
       return rowToSubscription(data as SubscriptionRow);
     });
   }

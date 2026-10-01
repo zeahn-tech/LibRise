@@ -36,7 +36,7 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     <ToastContext.Provider value={{ showToast, removeToast }}>
       {children}
       {/* Toast Render View */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0">
+      <div className="fixed z-50 flex flex-col gap-2 pointer-events-none inset-x-3 bottom-[calc(8.5rem+env(safe-area-inset-bottom))] sm:inset-x-auto sm:bottom-6 sm:right-6 sm:w-full sm:max-w-sm">
         {toasts.map((toast) => (
           <div
             key={toast.id}

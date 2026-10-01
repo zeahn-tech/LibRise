@@ -37,6 +37,7 @@ import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } fro
 import { apiClient, ApiResponse } from './apiClient';
 import { authService } from './authService';
 import { notificationService } from './notificationService';
+import { fireAndForget } from '../lib/fireAndForget';
 import type { Application, ApplicationStage, ApplicationStatusLog, InterviewScheduleDetails } from '../types';
 
 interface HiringOfferDetails {
@@ -242,7 +243,7 @@ export const applicationService = {
 
       const { data: oppRow, error: oppError } = await client()
         .from('opportunities')
-        .select('id, organization_id')
+        .select('id, organization_id, created_by_user_id')
         .eq('id', data.opportunityId)
         .maybeSingle();
       if (oppError) translateError(oppError);
@@ -291,31 +292,46 @@ export const applicationService = {
       if (error) translateError(error);
       const app = rowToApplication(created as ApplicationRow);
 
-      // Notify Organization Admins/Recruiters about new application. Best
-      // effort -- notificationService still reads org membership via
-      // dbClient.ts (a later phase step), so this may not reflect a
-      // Supabase-created org's real membership yet; failures here must
-      // never block the application itself from being recorded.
-      try {
-        if (organizationId) {
-          const { db } = await import('../db/dbClient');
-          const org = db.getOrganizationById(organizationId);
-          const members = db.getMembershipsByOrganization(organizationId);
-          members.forEach((m) => {
-            notificationService.createAndDispatchNotification({
-              recipientUserId: m.userId,
-              category: 'application_update',
-              title: `New Candidate Application Received`,
-              message: `${data.applicantName} applied for "${app.opportunityTitle}" at ${org?.name || 'your organization'}.`,
-              actionUrl: '/recruiter',
-              contextId: app.id,
-              channels: { email: true, pushSms: true }
-            });
-          });
-        }
-      } catch {
-        // Non-critical.
-      }
+      // Notify the hiring side (the person who posted the opportunity plus the
+      // org's active members) and confirm to the applicant. Best effort: never
+      // blocks the application itself. Recipients come from Supabase, NOT the
+      // legacy in-memory db, so real organizations are covered.
+      fireAndForget(
+        (async () => {
+          const poster = (oppRow as { created_by_user_id?: string }).created_by_user_id;
+          const recipients = await notificationService.getOrganizationRecipientIds(organizationId, [poster], actorUserId);
+          const orgName = app.organizationName || 'your organization';
+          recipients.forEach((recipientUserId) =>
+            fireAndForget(
+              notificationService.createAndDispatchNotification({
+                recipientUserId,
+                category: 'application_update',
+                title: 'New Candidate Application Received',
+                message: `${data.applicantName} applied for "${app.opportunityTitle}" at ${orgName}.`,
+                actionUrl: '/recruiter',
+                contextId: app.id,
+                channels: { email: true, pushSms: true }
+              }),
+              'notify hiring team'
+            )
+          );
+          if (actorUserId) {
+            fireAndForget(
+              notificationService.createAndDispatchNotification({
+                recipientUserId: actorUserId,
+                category: 'application_update',
+                title: 'Application Submitted',
+                message: `Your application for "${app.opportunityTitle}" was submitted successfully. We'll notify you when the employer reviews it.`,
+                actionUrl: '/candidate',
+                contextId: app.id,
+                channels: { email: false, pushSms: false }
+              }),
+              'notify applicant'
+            );
+          }
+        })(),
+        'application notifications'
+      );
 
       return app;
     });
@@ -417,33 +433,34 @@ export const applicationService = {
       if (!data) throw new NotFoundError('Application', applicationId);
       const updatedApp = rowToApplication(data as ApplicationRow);
 
-      // Notifications -- best effort, see submit()'s note on why this is
-      // wrapped rather than allowed to fail the whole stage update.
-      try {
-        const { db } = await import('../db/dbClient');
-        const org = db.getOrganizationById(updatedApp.organizationId || '');
-
-        notificationService.notifyApplicationUpdate({
-          recipientUserId: updatedApp.candidateUserId!,
-          opportunityTitle: updatedApp.opportunityTitle,
-          newStage: stage,
-          organizationName: org?.name || updatedApp.organizationName || 'Employer',
-          applicationId: updatedApp.id
-        });
+      // Notifications -- best effort, never fails the stage update itself.
+      if (updatedApp.candidateUserId) {
+        const orgName = updatedApp.organizationName || 'Employer';
+        fireAndForget(
+          notificationService.notifyApplicationUpdate({
+            recipientUserId: updatedApp.candidateUserId,
+            opportunityTitle: updatedApp.opportunityTitle,
+            newStage: stage,
+            organizationName: orgName,
+            applicationId: updatedApp.id
+          }),
+          'notify stage change'
+        );
 
         if (stage === 'interview' && normalizedOptions?.interviewDetails) {
           const details = normalizedOptions.interviewDetails;
           const detailsString = `${details.scheduledDate || 'TBD'} at ${details.scheduledTime || 'TBD'} (${details.format || 'Virtual/On-site'}) - ${details.locationOrLink}`;
-          notificationService.notifyInterviewInvitation({
-            recipientUserId: updatedApp.candidateUserId!,
-            opportunityTitle: updatedApp.opportunityTitle,
-            organizationName: org?.name || updatedApp.organizationName || 'Employer',
-            interviewDetails: detailsString,
-            applicationId: updatedApp.id
-          });
+          fireAndForget(
+            notificationService.notifyInterviewInvitation({
+              recipientUserId: updatedApp.candidateUserId,
+              opportunityTitle: updatedApp.opportunityTitle,
+              organizationName: orgName,
+              interviewDetails: detailsString,
+              applicationId: updatedApp.id
+            }),
+            'notify interview'
+          );
         }
-      } catch {
-        // Non-critical.
       }
 
       return updatedApp;

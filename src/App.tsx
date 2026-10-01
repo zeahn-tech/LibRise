@@ -26,6 +26,7 @@ import { OfflineIndicator } from './components/pwa/OfflineIndicator';
 // Foundational Core Providers & Infrastructure
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ConfigProvider, useConfig } from './context/ConfigContext';
+import { convertAmount } from './lib/currency';
 import { ToastProvider, useToast } from './context/ToastContext';
 import { RouterProvider, useRouter } from './routes/router';
 import { ErrorBoundary } from './core/errors/ErrorBoundary';
@@ -221,7 +222,8 @@ function AppContent() {
     
     if (minSalary.trim()) {
       const minVal = parseFloat(minSalary);
-      if (!isNaN(minVal) && (opp.salaryMin || 0) < minVal) return false;
+      // Filter value is entered in the viewer's display currency; compare like-for-like.
+      if (!isNaN(minVal) && convertAmount(opp.salaryMin || 0, opp.currency || 'USD', currency) < minVal) return false;
     }
 
     if (searchQuery.trim()) {
@@ -405,7 +407,7 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6] text-[#2D2D2D] font-sans flex flex-col pb-16 lg:pb-0">
+    <div className="min-h-screen bg-[#F9F8F6] text-[#2D2D2D] font-sans flex flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] xl:pb-0">
       {/* Offline Status Alert */}
       <DemoModeBanner />
       <OfflineBanner />

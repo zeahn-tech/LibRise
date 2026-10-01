@@ -25,6 +25,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { useConfig } from '../../context/ConfigContext';
+import { formatSalaryRange } from '../../lib/currency';
 
 interface JobManagementDashboardProps {
   opportunities: Opportunity[];
@@ -313,10 +314,7 @@ export const JobManagementDashboard: React.FC<JobManagementDashboardProps> = ({
                     {opp.salaryMin ? (
                       <span className="text-[#BC6C25] font-semibold flex items-center gap-0.5">
                         <DollarSign className="w-3.5 h-3.5" />
-                        <span>
-                          {opp.currency} {opp.salaryMin.toLocaleString()}
-                          {opp.salaryMax ? ` - ${opp.salaryMax.toLocaleString()}` : '+'}
-                        </span>
+                        <span>{formatSalaryRange(opp.salaryMin, opp.salaryMax, opp.currency || 'USD', currency)}</span>
                       </span>
                     ) : (
                       <span className="text-[#606C38] italic">Compensation Negotiable</span>

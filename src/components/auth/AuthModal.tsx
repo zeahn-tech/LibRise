@@ -17,6 +17,7 @@ import {
   
 } from 'lucide-react';
 import { Button } from '../../design-system/Button';
+import { BrandLogo } from '../common/BrandLogo';
 
 export const AuthModal: React.FC = () => {
   const {
@@ -142,15 +143,8 @@ export const AuthModal: React.FC = () => {
         {/* Header */}
         <div className="px-6 sm:px-8 pt-6 pb-4 border-b border-[#E8E4D9] flex items-center justify-between bg-[#F9F8F6]">
           <div>
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-[#283618] rounded-lg flex items-center justify-center text-white">
-                <Lock className="w-3.5 h-3.5" />
-              </div>
-              <span className="text-xs font-bold uppercase tracking-widest text-[#606C38]">
-                LibRise
-              </span>
-            </div>
-            <h2 className="text-xl font-serif font-bold text-[#132A13] mt-1">
+            <BrandLogo />
+            <h2 className="text-xl font-serif font-bold text-[#132A13] mt-3">
               {authModalView === 'login' && 'Sign in to your account'}
               {authModalView === 'register' && 'Create an opportunity account'}
               {authModalView === 'forgot_password' && 'Account Recovery'}

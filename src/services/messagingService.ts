@@ -45,6 +45,7 @@ import { getSupabaseClient } from '../lib/supabaseClient';
 import { apiClient, ApiResponse } from './apiClient';
 import { authService } from './authService';
 import { notificationService } from './notificationService';
+import { fireAndForget } from '../lib/fireAndForget';
 import { trustSafetyService } from './trustSafetyService';
 import { ForbiddenError, UnauthorizedError, ValidationError } from '../core/errors/AppError';
 
@@ -321,12 +322,15 @@ export const messagingService = {
 
       try {
         const { data: conv } = await client().from('conversations').select('title').eq('id', data.conversationId).maybeSingle();
-        notificationService.notifyNewMessage({
-          recipientUserId: data.recipientId,
-          senderName: data.senderName,
-          conversationTitle: (conv as { title: string } | null)?.title || 'Platform Message',
-          conversationId: data.conversationId
-        });
+        fireAndForget(
+          notificationService.notifyNewMessage({
+            recipientUserId: data.recipientId,
+            senderName: data.senderName,
+            conversationTitle: (conv as { title: string } | null)?.title || 'Platform Message',
+            conversationId: data.conversationId
+          }),
+          'notify new message'
+        );
       } catch {
         // Non-critical.
       }

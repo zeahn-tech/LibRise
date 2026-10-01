@@ -32,6 +32,8 @@ import { VerificationAudit } from '../types';
 import { getSupabaseClient } from '../lib/supabaseClient';
 import { apiClient, ApiResponse } from './apiClient';
 import { authService } from './authService';
+import { notificationService } from './notificationService';
+import { fireAndForget } from '../lib/fireAndForget';
 import { ForbiddenError, UnauthorizedError, ValidationError } from '../core/errors/AppError';
 
 interface VerificationAuditRow {
@@ -118,7 +120,20 @@ export const verificationService = {
         .select(SELECT_WITH_ORG)
         .maybeSingle();
       if (error) translateError(error);
-      return rowToAudit(data as VerificationAuditRow);
+      const submitted = rowToAudit(data as VerificationAuditRow);
+      fireAndForget(
+        notificationService.createAndDispatchNotification({
+          recipientUserId: session.user.id,
+          category: 'verification_event',
+          title: 'Verification Request Received',
+          message: `Your verification request for "${submitted.organizationName || 'your organization'}" was submitted and is awaiting review.`,
+          actionUrl: '/verification',
+          contextId: submitted.id,
+          channels: { email: true, pushSms: false }
+        }),
+        'notify verification submitted'
+      );
+      return submitted;
     });
   },
 
@@ -144,7 +159,25 @@ export const verificationService = {
         .eq('id', (data as VerificationAuditRow).id)
         .maybeSingle();
       if (fetchError) throw new Error(fetchError.message);
-      return rowToAudit(full as VerificationAuditRow);
+      const decided = rowToAudit(full as VerificationAuditRow);
+      const fullRow = full as VerificationAuditRow;
+      fireAndForget(
+        notificationService
+          .getOrganizationRecipientIds(fullRow.organization_id, [fullRow.requested_by_user_id])
+          .then((ids) =>
+            Promise.all(
+              ids.map((recipientUserId) =>
+                notificationService.notifyVerificationEvent({
+                  recipientUserId,
+                  organizationName: decided.organizationName || 'your organization',
+                  status
+                })
+              )
+            )
+          ),
+        'notify verification decision'
+      );
+      return decided;
     });
   }
 };

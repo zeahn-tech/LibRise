@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { BusinessListing } from '../../types';
+import { formatConverted } from '../../lib/currency';
 import { ShieldCheck, CheckCircle2, XCircle, AlertTriangle, Building, Eye, FileText, Search, Filter } from 'lucide-react';
 
 interface BusinessModerationPanelProps {
@@ -127,7 +128,7 @@ export const BusinessModerationPanel: React.FC<BusinessModerationPanelProps> = (
               </div>
 
               <div className="text-xs text-[#606C38]">
-                {biz.industry} • {biz.county} County • Asking: ${biz.askingPriceUSD.toLocaleString()} • Owner: {biz.sellerName || 'Anonymous Seller'}
+                {biz.industry} • {biz.county} County • Asking: {formatConverted(biz.askingPriceUSD, 'USD', currency)} • Owner: {biz.sellerName || 'Anonymous Seller'}
               </div>
             </div>
 
@@ -175,7 +176,7 @@ export const BusinessModerationPanel: React.FC<BusinessModerationPanelProps> = (
             <div className="p-4 bg-[#F9F8F4] rounded-2xl border border-[#E8E4D9] text-xs space-y-2">
               <div><strong>Industry:</strong> {selectedListing.industry}</div>
               <div><strong>County / Location:</strong> {selectedListing.county} ({selectedListing.locationSummary})</div>
-              <div><strong>Asking Price:</strong> ${selectedListing.askingPriceUSD.toLocaleString()}</div>
+              <div><strong>Asking Price:</strong> {formatConverted(selectedListing.askingPriceUSD, 'USD', currency)}</div>
               <div><strong>Public Teaser:</strong> {selectedListing.publicTeaser}</div>
               <div><strong>Assets:</strong> {selectedListing.assetsIncluded.join(', ')}</div>
               <div><strong>Seller Contact:</strong> {selectedListing.sellerName} ({selectedListing.sellerContactEmail || 'N/A'})</div>

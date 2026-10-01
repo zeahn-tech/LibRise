@@ -36,3 +36,7 @@
 .text-natural-ochre {
   color: #BC6C25;
 }
+
+
+/* Never let the page scroll sideways or grow wider than the phone screen. */
+html, body { max-width: 100%; overflow-x: clip; }

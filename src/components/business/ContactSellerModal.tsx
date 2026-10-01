@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { BusinessListing } from '../../types';
+import { formatConverted } from '../../lib/currency';
 import { Mail, Phone, Send, CheckCircle2, Building, DollarSign, Calendar, MessageSquare } from 'lucide-react';
 
 interface ContactSellerModalProps {
@@ -72,7 +73,7 @@ export const ContactSellerModal: React.FC<ContactSellerModalProps> = ({
         <div className="p-3.5 bg-[#F9F8F4] rounded-2xl border border-[#E8E4D9] text-xs space-y-1">
           <div className="font-bold text-[#283618]">{listing.title}</div>
           <div className="text-[#606C38]">
-            {listing.industry} • {listing.county} County • Asking: ${listing.askingPriceUSD.toLocaleString()}
+            {listing.industry} • {listing.county} County • Asking: {formatConverted(listing.askingPriceUSD, 'USD', currency)}
           </div>
         </div>
 

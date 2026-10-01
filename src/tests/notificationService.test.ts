@@ -109,4 +109,72 @@ describe('notificationService', () => {
     expect(payload.message).toContain('Backend Engineer');
     expect(payload.message).toContain('Acme Liberia');
   });
+
+  it('createAndDispatchNotification(): never asks Postgres to RETURN the new row (RLS lets only the recipient read it, so a cross-user insert + select is rejected)', async () => {
+    const builder = chain({ data: null, error: null });
+    // Background email/push dispatch legitimately reads the `users` table; keep it separate.
+    mockFrom.mockImplementation((table: string) => (table === 'notifications' ? builder : chain({ data: null, error: null })));
+
+    const { notificationService } = await import('../services/notificationService');
+    const created = await notificationService.createAndDispatchNotification({
+      recipientUserId: 'someone-else',
+      category: 'new_message',
+      title: 'Hi',
+      message: 'You have a message.'
+    });
+
+    expect(builder.insert).toHaveBeenCalledTimes(1);
+    expect(builder.select).not.toHaveBeenCalled();
+    // The returned notification is built locally and is unread.
+    expect(created.recipientUserId).toBe('someone-else');
+    expect(created.isRead).toBe(false);
+    expect(created.id).toMatch(/^notif-/);
+  });
+
+  it('createAndDispatchNotification(): surfaces a database error instead of pretending it worked', async () => {
+    mockFrom.mockReturnValue(chain({ data: null, error: { message: 'new row violates row-level security policy' } }));
+    const { notificationService } = await import('../services/notificationService');
+    await expect(
+      notificationService.createAndDispatchNotification({ recipientUserId: 'u', category: 'new_message', title: 't', message: 'm' })
+    ).rejects.toThrow(/row-level security/);
+  });
+
+  it('createAndDispatchNotification(): refuses a missing recipient', async () => {
+    mockFrom.mockReturnValue(chain({ data: null, error: null }));
+    const { notificationService } = await import('../services/notificationService');
+    await expect(
+      notificationService.createAndDispatchNotification({ recipientUserId: '', category: 'new_message', title: 't', message: 'm' })
+    ).rejects.toThrow(/recipient/i);
+  });
+
+  it('create / mark-read tell the bell and panel to refresh immediately', async () => {
+    mockFrom.mockReturnValue(chain({ data: null, error: null }));
+    vi.stubGlobal('window', new EventTarget());
+    const { notificationService } = await import('../services/notificationService');
+    const { onNotificationsChanged } = await import('../lib/notificationEvents');
+    const changed = vi.fn();
+    const off = onNotificationsChanged(changed);
+
+    await notificationService.createAndDispatchNotification({ recipientUserId: 'u', category: 'new_message', title: 't', message: 'm' });
+    await notificationService.markAsRead('notif-1');
+    await notificationService.markAllAsRead('u');
+    off();
+    vi.unstubAllGlobals();
+
+    expect(changed).toHaveBeenCalledTimes(3);
+  });
+
+  it('getOrganizationRecipientIds(): merges org members with extras, de-duplicates, and excludes the actor', async () => {
+    mockFrom.mockReturnValue(chain({ data: [{ user_id: 'm1' }, { user_id: 'poster' }], error: null }));
+    const { notificationService } = await import('../services/notificationService');
+    const ids = await notificationService.getOrganizationRecipientIds('org-1', ['poster', undefined, 'actor'], 'actor');
+    expect(ids.sort()).toEqual(['m1', 'poster']);
+  });
+
+  it('getOrganizationRecipientIds(): falls back to the extras when org membership is unreadable', async () => {
+    mockFrom.mockImplementation(() => { throw new Error('rls'); });
+    const { notificationService } = await import('../services/notificationService');
+    const ids = await notificationService.getOrganizationRecipientIds('org-1', ['poster']);
+    expect(ids).toEqual(['poster']);
+  });
 });

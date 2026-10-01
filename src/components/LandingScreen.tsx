@@ -1,5 +1,6 @@
 import React from 'react';
 import { UserRole } from '../types';
+import { BrandLogo } from './common/BrandLogo';
 import { Briefcase, Building2, ShieldCheck, ArrowRight, Sparkles, TrendingUp, Users, CheckCircle2 } from 'lucide-react';
 
 interface LandingScreenProps {
@@ -58,30 +59,23 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ onEnterPortal }) =
   return (
     <div className="min-h-screen bg-[#FDFBF7] text-[#283618] flex flex-col selection:bg-[#4F772D] selection:text-white">
       {/* Top Navigation Bar */}
-      <header className="w-full bg-white/80 backdrop-blur-md border-b border-[#E8E4D9] sticky top-0 z-40 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#283618] flex items-center justify-center text-white font-serif font-bold text-xl shadow-md">
-              L
-            </div>
-            <div>
-              <span className="font-serif font-bold text-lg text-[#132A13] tracking-tight block">
-                LibRise
-              </span>
-              <span className="text-[11px] text-[#606C38] font-medium block">
-                Liberia Economic & Career Portal
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => onEnterPortal('job_seeker')}
-              className="px-5 py-2.5 bg-[#283618] hover:bg-[#386641] text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer"
-            >
-              <span>Get started</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
+      <header className="h-16 sm:h-20 w-full max-w-full bg-white border-b border-[#E8E4D9] sticky top-0 z-40 flex items-center px-3 sm:px-6 2xl:px-10">
+        <div className="w-full max-w-7xl mx-auto flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="group cursor-pointer focus:outline-none"
+            aria-label="LibRise Liberia home"
+          >
+            <BrandLogo />
+          </button>
+          <button
+            onClick={() => onEnterPortal('job_seeker')}
+            className="px-4 sm:px-5 h-10 bg-[#283618] hover:bg-[#386641] text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0"
+          >
+            <span>Get started</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
         </div>
       </header>
 
