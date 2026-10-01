@@ -50,6 +50,8 @@ import { BusinessAccessRequest, BusinessInquiry, BusinessListing } from '../type
 import { getSupabaseClient } from '../lib/supabaseClient';
 import { apiClient, ApiResponse } from './apiClient';
 import { authService } from './authService';
+import { notificationService } from './notificationService';
+import { fireAndForget } from '../lib/fireAndForget';
 import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from '../core/errors/AppError';
 
 interface BusinessListingRow {
@@ -134,6 +136,17 @@ function translateError(error: { code?: string; message: string }): never {
     throw new ValidationError('A business listing with that slug already exists.');
   }
   throw new Error(error.message);
+}
+
+/** Owner + title of a listing, via the public RPC (readable by any signed-in user). */
+async function lookupListing(listingId: string): Promise<{ ownerUserId?: string; title: string }> {
+  try {
+    const { data } = await client().rpc('get_business_listing_public', { p_listing_id: listingId });
+    const row = data as BusinessListingRow | null;
+    return { ownerUserId: row?.owner_user_id, title: row?.title || 'your listing' };
+  } catch {
+    return { title: 'your listing' };
+  }
 }
 
 export const businessService = {
@@ -332,6 +345,19 @@ export const businessService = {
           .select('*')
           .maybeSingle();
         if (error) translateError(error);
+        fireAndForget(
+          lookupListing(businessId).then(({ ownerUserId, title }) =>
+            ownerUserId && ownerUserId !== user.id
+              ? notificationService.notifyBusinessAccessRequest({
+                  recipientUserId: ownerUserId,
+                  buyerName: buyerData.buyerName,
+                  businessTitle: title,
+                  businessId
+                })
+              : undefined
+          ),
+          'notify access request'
+        );
         return rowToRequest(data as BusinessAccessRequestRow);
       }
 
@@ -375,7 +401,19 @@ export const businessService = {
         .maybeSingle();
       if (error) translateError(error);
       if (!data) throw new NotFoundError('BusinessAccessRequest', requestId);
-      return rowToRequest(data as BusinessAccessRequestRow);
+      const reqRow = data as BusinessAccessRequestRow;
+      fireAndForget(
+        lookupListing(reqRow.listing_id).then(({ title }) =>
+          notificationService.notifyBusinessAccessDecision({
+            recipientUserId: reqRow.buyer_user_id,
+            businessTitle: title,
+            businessId: reqRow.listing_id,
+            decision
+          })
+        ),
+        'notify access decision'
+      );
+      return rowToRequest(reqRow);
     });
   },
 
@@ -500,6 +538,19 @@ export const businessService = {
         .select('*')
         .maybeSingle();
       if (error) translateError(error);
+      fireAndForget(
+        lookupListing(businessId).then(({ ownerUserId, title }) =>
+          ownerUserId && ownerUserId !== user.id
+            ? notificationService.notifyBusinessInquiry({
+                recipientUserId: ownerUserId,
+                buyerName: inquiryData.senderName,
+                businessTitle: title,
+                businessId
+              })
+            : undefined
+        ),
+        'notify inquiry'
+      );
       return rowToInquiry(data as BusinessInquiryRow);
     });
   },

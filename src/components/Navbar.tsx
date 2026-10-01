@@ -25,11 +25,11 @@ import { NotificationCenterModal } from './notifications/NotificationCenterModal
 import { OrganizationSwitcher } from './organization/OrganizationSwitcher';
 import { OrganizationWizardModal } from './organization/OrganizationWizardModal';
 import { OrganizationTeamModal } from './organization/OrganizationTeamModal';
-import { notificationService } from '../services/notificationService';
 import { PWAInstallButton } from './pwa/PWAInstallButton';
 import { envConfig } from '../config/env';
 import { CurrencySwitcher } from './common/CurrencySwitcher';
 import { BrandLogo } from './common/BrandLogo';
+import { useNotifications } from '../hooks/useNotifications';
 
 interface NavbarProps {
   activeTab: 'opportunities' | 'businesses' | 'verification' | 'recruiter' | 'candidate' | 'ai-studio' | 'billing' | 'messages' | 'admin';
@@ -59,17 +59,15 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [isOrgWizardOpen, setIsOrgWizardOpen] = useState(false);
   const [isOrgTeamModalOpen, setIsOrgTeamModalOpen] = useState(false);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
-  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
-
-  useEffect(() => {
-    if (user) {
-      notificationService.getUserNotifications(user.id).then((res) => {
-        if (res.data) {
-          setUnreadNotifCount(res.data.filter((n) => !n.isRead).length);
-        }
-      });
-    }
-  }, [user?.id, showNotificationsModal]);
+  const {
+    notifications,
+    unreadCount: unreadNotifCount,
+    loading: notificationsLoading,
+    error: notificationsError,
+    refresh: refreshNotifications,
+    markAsRead: markNotificationRead,
+    markAllAsRead: markAllNotificationsRead
+  } = useNotifications(user?.id, { announce: !showNotificationsModal });
 
   const roleLabels: Record<
     UserRole,
@@ -298,15 +296,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Notification Bell */}
           <button
-            onClick={() => setShowNotificationsModal(true)}
+            onClick={() => {
+              setShowNotificationsModal(true);
+              refreshNotifications();
+            }}
             className="w-9 h-9 sm:w-auto sm:h-auto sm:p-2.5 flex items-center justify-center bg-[#F9F8F6] hover:bg-[#ECF3E9] text-[#283618] rounded-xl border border-[#E8E4D9] relative transition-colors cursor-pointer shrink-0"
-            aria-label="Notifications"
-            title="Notifications & Live Dispatches"
+            aria-label={unreadNotifCount > 0 ? `Notifications, ${unreadNotifCount} unread` : 'Notifications'}
+            title="Notifications"
           >
             <Bell className="w-4 h-4 text-[#283618]" />
             {unreadNotifCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#BC6C25] text-white rounded-full text-[10px] font-extrabold flex items-center justify-center">
-                {unreadNotifCount}
+              <span className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-1 bg-[#BC6C25] text-white rounded-full text-[10px] font-extrabold flex items-center justify-center ring-2 ring-white">
+                {unreadNotifCount > 9 ? '9+' : unreadNotifCount}
               </span>
             )}
           </button>
@@ -548,6 +549,12 @@ export const Navbar: React.FC<NavbarProps> = ({
         isOpen={showNotificationsModal}
         onClose={() => setShowNotificationsModal(false)}
         onNavigateTab={(t) => setActiveTab(t as any)}
+        notifications={notifications}
+        loading={notificationsLoading}
+        error={notificationsError}
+        onRetry={refreshNotifications}
+        onMarkAsRead={markNotificationRead}
+        onMarkAllAsRead={markAllNotificationsRead}
       />
     </>
   );

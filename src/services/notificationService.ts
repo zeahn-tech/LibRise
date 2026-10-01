@@ -25,6 +25,7 @@ import { AppNotification, NotificationCategory, NotificationChannel } from '../t
 import { getSupabaseClient } from '../lib/supabaseClient';
 import { apiClient, ApiResponse } from './apiClient';
 import { ForbiddenError } from '../core/errors/AppError';
+import { emitNotificationsChanged } from '../lib/notificationEvents';
 
 interface NotificationRow {
   id: string;
@@ -124,6 +125,7 @@ export const notificationService = {
         .update({ is_read: true, read_at: new Date().toISOString() })
         .eq('id', notificationId);
       if (error) throw new Error(error.message);
+      emitNotificationsChanged();
     });
   },
 
@@ -135,6 +137,7 @@ export const notificationService = {
         .eq('recipient_user_id', userId)
         .eq('is_read', false);
       if (error) throw new Error(error.message);
+      emitNotificationsChanged();
     });
   },
 
@@ -153,24 +156,44 @@ export const notificationService = {
     const emailSent = payload.channels?.email ?? true;
     const pushSmsSent = payload.channels?.pushSms ?? (payload.category === 'interview_invitation' || payload.category === 'new_message');
 
+    if (!payload.recipientUserId) {
+      throw new Error('Cannot create a notification without a recipient.');
+    }
+
     const id = `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    const { data, error } = await client()
-      .from('notifications')
-      .insert({
-        id,
-        recipient_user_id: payload.recipientUserId,
-        category: payload.category,
-        title: payload.title,
-        message: payload.message,
-        action_url: payload.actionUrl ?? null,
-        context_id: payload.contextId ?? null,
-        delivery_channels: { inApp: true, emailSent, pushSmsSent }
-      })
-      .select('*')
-      .maybeSingle();
+    const deliveryChannels = { inApp: true, emailSent, pushSmsSent };
+
+    // NOTE: deliberately NO `.select()` here. Row-level security only lets the
+    // RECIPIENT read a notification, so asking Postgres to RETURN the row of a
+    // notification created for someone else fails the SELECT policy and the
+    // whole insert is rejected. Build the object locally instead.
+    const { error } = await client().from('notifications').insert({
+      id,
+      recipient_user_id: payload.recipientUserId,
+      category: payload.category,
+      title: payload.title,
+      message: payload.message,
+      action_url: payload.actionUrl ?? null,
+      context_id: payload.contextId ?? null,
+      delivery_channels: deliveryChannels
+    });
     if (error) throw new Error(error.message);
 
-    const notification = rowToNotification(data as NotificationRow);
+    const notification: AppNotification = {
+      id,
+      recipientUserId: payload.recipientUserId,
+      category: payload.category,
+      title: payload.title,
+      message: payload.message,
+      actionUrl: payload.actionUrl,
+      contextId: payload.contextId,
+      deliveryChannels,
+      isRead: false,
+      createdAt: new Date().toISOString()
+    };
+
+    // Tell this tab's bell/panel to refresh (matters when notifying yourself).
+    emitNotificationsChanged();
 
     // Execute background dispatches to external channels
     if (emailSent) {
@@ -181,6 +204,84 @@ export const notificationService = {
     }
 
     return notification;
+  },
+
+  /**
+   * Who should hear about something that happened in an organization?
+   * Active members of the org plus any extra user ids (e.g. the person who
+   * posted the opportunity). Best effort: org membership is only readable by
+   * the org's own members, so the extras are what keep this working when the
+   * actor is an outsider (like a candidate applying).
+   */
+  async getOrganizationRecipientIds(organizationId: string | undefined, extraUserIds: Array<string | undefined> = [], excludeUserId?: string): Promise<string[]> {
+    const ids = new Set<string>();
+    extraUserIds.forEach((id) => id && ids.add(id));
+    if (organizationId) {
+      try {
+        const { data } = await client()
+          .from('organization_memberships')
+          .select('user_id')
+          .eq('organization_id', organizationId)
+          .eq('status', 'active');
+        ((data as Array<{ user_id: string }> | null) || []).forEach((r) => r.user_id && ids.add(r.user_id));
+      } catch {
+        // Fall back to the extras only.
+      }
+    }
+    if (excludeUserId) ids.delete(excludeUserId);
+    return Array.from(ids);
+  },
+
+  /**
+   * Live updates: calls `onInsert` when a notification for `userId` is created
+   * (needs the table in the realtime publication; polling covers the rest).
+   * Returns an unsubscribe function. Never throws.
+   */
+  subscribeToUser(userId: string, onInsert: () => void): () => void {
+    try {
+      const c = getSupabaseClient() as any;
+      if (!c || typeof c.channel !== 'function') return () => {};
+      const channel = c
+        .channel(`notifications:${userId}`)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'notifications', filter: `recipient_user_id=eq.${userId}` },
+          () => onInsert()
+        )
+        .subscribe();
+      return () => {
+        try { c.removeChannel(channel); } catch { /* ignore */ }
+      };
+    } catch {
+      return () => {};
+    }
+  },
+
+  async notifyBusinessAccessRequest(params: { recipientUserId: string; buyerName: string; businessTitle: string; businessId: string }) {
+    return this.createAndDispatchNotification({
+      recipientUserId: params.recipientUserId,
+      category: 'business_inquiry',
+      title: 'New NDA Access Request',
+      message: `${params.buyerName} requested confidential data-room access for \"${params.businessTitle}\".`,
+      actionUrl: '/businesses',
+      contextId: params.businessId,
+      channels: { email: true, pushSms: true }
+    });
+  },
+
+  async notifyBusinessAccessDecision(params: { recipientUserId: string; businessTitle: string; businessId: string; decision: 'approved' | 'rejected' }) {
+    return this.createAndDispatchNotification({
+      recipientUserId: params.recipientUserId,
+      category: 'business_inquiry',
+      title: `Access Request ${params.decision === 'approved' ? 'Approved' : 'Declined'}`,
+      message:
+        params.decision === 'approved'
+          ? `The seller approved your request for \"${params.businessTitle}\". You can now review the confidential details after signing the NDA.`
+          : `The seller declined your access request for \"${params.businessTitle}\".`,
+      actionUrl: '/businesses',
+      contextId: params.businessId,
+      channels: { email: true, pushSms: true }
+    });
   },
 
   // Specific Notification Triggers
