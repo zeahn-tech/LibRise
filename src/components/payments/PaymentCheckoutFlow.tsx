@@ -70,6 +70,8 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
   const applyPaymentState = useCallback(
     (p: Payment) => {
       setPayment(p);
+      // Instructions must always match the provider recorded on the payment.
+      setProvider(p.paymentProvider);
       if (p.status === 'payment_success') {
         setStep('done');
         onPublished?.();
@@ -138,6 +140,12 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
     const res = await paymentService.initiate({ opportunityId, organizationId, planId: selectedPlan.id, provider });
     setBusy(false);
     if (res.data) {
+      if (res.data.paymentProvider !== provider) {
+        // Only possible when the payment can no longer be switched (e.g. a
+        // reference was already submitted). Say so rather than silently
+        // showing a different provider's number.
+        showToast(`You already have an open payment with ${PROVIDER_LABEL[res.data.paymentProvider]}. Showing its details.`, 'info');
+      }
       applyPaymentState(res.data);
     } else if (res.error) {
       showToast(res.error.message, 'error');

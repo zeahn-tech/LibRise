@@ -42,13 +42,7 @@ import { authService } from './authService';
 import { envConfig } from '../config/env';
 import { notificationService } from './notificationService';
 import { fireAndForget } from '../lib/fireAndForget';
-import {
-  ForbiddenError,
-  NotFoundError,
-  PaymentRequiredError,
-  UnauthorizedError,
-  ValidationError
-} from '../core/errors/AppError';
+import { ForbiddenError, NotFoundError, PaymentRequiredError, UnauthorizedError, ValidationError, AppError } from '../core/errors/AppError';
 
 function client() {
   const c = getSupabaseClient();
@@ -57,6 +51,10 @@ function client() {
   }
   return c;
 }
+
+/** Postgres/PostgREST codes that mean "the database schema is behind the app"
+ *  (missing column / table / function), i.e. a migration hasn't been applied. */
+const SCHEMA_DRIFT_CODES = new Set(['42703', '42P01', '42883', '23502', 'PGRST202', 'PGRST204', 'PGRST205']);
 
 function translateError(error: { code?: string; message: string }): never {
   // P0001 is the SQLSTATE used for the plain-language `raise exception`
@@ -74,10 +72,29 @@ function translateError(error: { code?: string; message: string }): never {
   if (error.code === 'P0002') {
     throw new NotFoundError('Payment');
   }
-  if (error.code === '28000') {
-    throw new UnauthorizedError();
+  if (error.code === '28000' || error.code === 'PGRST301' || /jwt (expired|invalid)/i.test(error.message)) {
+    throw new UnauthorizedError('Your session has expired. Please sign in again.');
   }
-  throw new Error(error.message);
+
+  // Anything else used to be rethrown as a bare Error, which the API layer
+  // reports as the useless "An unexpected system error occurred." Give people
+  // (and support) something actionable, and keep the technical detail in the
+  // error's details + console for diagnosis.
+  console.error('[paymentService] database error', { code: error.code, message: error.message });
+  if (error.code && SCHEMA_DRIFT_CODES.has(error.code)) {
+    throw new AppError(
+      "Payments aren't fully set up on this server yet (a database update is pending). Please contact support.",
+      'PAYMENTS_SETUP_INCOMPLETE',
+      503,
+      { dbCode: error.code, dbMessage: error.message }
+    );
+  }
+  throw new AppError(
+    `We couldn't complete this payment step${error.code ? ` (error ${error.code})` : ''}. Please try again, and contact support if it keeps happening.`,
+    'PAYMENT_ERROR',
+    500,
+    { dbCode: error.code, dbMessage: error.message }
+  );
 }
 
 interface PaymentPlanRow {
@@ -261,7 +278,24 @@ export const paymentService = {
       let query = client().from('payment_plans').select('*').eq('active', true);
       if (planType) query = query.eq('plan_type', planType);
       const { data, error } = await query.order('amount_minor', { ascending: true });
-      if (error) translateError(error);
+
+      if (error) {
+        // A database that hasn't had the "subscriptions via manual payments"
+        // migration yet has no plan_type column. Every plan in that world is a
+        // vacancy plan, so vacancy checkout can still work; subscription
+        // checkout genuinely needs the migration and says so clearly.
+        if (error.code === '42703' && /plan_type/.test(error.message)) {
+          if (planType === 'subscription') translateError(error);
+          const { data: all, error: allError } = await client()
+            .from('payment_plans')
+            .select('*')
+            .eq('active', true)
+            .order('amount_minor', { ascending: true });
+          if (allError) translateError(allError);
+          return (all as PaymentPlanRow[]).map((row) => rowToPlan({ ...row, plan_type: 'vacancy' }));
+        }
+        translateError(error);
+      }
       return (data as PaymentPlanRow[]).map(rowToPlan);
     });
   },
@@ -325,7 +359,23 @@ export const paymentService = {
       if (existingError) translateError(existingError);
       if (existing) {
         const stillOpen = await dropIfExpired(existing as PaymentRow);
-        if (stillOpen) return rowToPayment(stillOpen);
+        if (stillOpen) {
+          // The user may have tapped the OTHER mobile-money provider since the
+          // open payment was created. If no reference has been submitted yet,
+          // switch the payment to the provider they picked, so the number we
+          // show and the provider recorded for the admin always agree.
+          if (stillOpen.status === 'created' && stillOpen.payment_provider !== provider) {
+            const { data: switched, error: switchError } = await client().rpc('switch_payment_provider', {
+              p_payment_id: stillOpen.id,
+              p_provider: provider
+            });
+            if (!switchError && switched) return rowToPayment(switched as PaymentRow);
+            // If the switch function isn't installed yet (older database) or
+            // refuses, fall through to the existing payment: the UI then shows
+            // that payment's real provider instead of a mismatched number.
+          }
+          return rowToPayment(stillOpen);
+        }
       }
 
       const { data: plan, error: planError } = await client()
