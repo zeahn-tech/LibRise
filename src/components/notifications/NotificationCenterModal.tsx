@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Building,
   CreditCard,
+  Wallet,
   ShieldCheck,
   Sparkles,
   ExternalLink,
@@ -36,6 +37,7 @@ const FILTERS: Array<{ id: string; label: string }> = [
   { id: 'job_recommendation', label: 'Job Matches' },
   { id: 'business_inquiry', label: 'M&A Deals' },
   { id: 'verification_event', label: 'Verification' },
+  { id: 'payment_event', label: 'Payments' },
   { id: 'subscription_event', label: 'Subscriptions' }
 ];
 
@@ -78,6 +80,8 @@ const getCategoryIcon = (category: NotificationCategory) => {
       return <Sparkles className="w-4 h-4 text-[#BC6C25]" />;
     case 'business_inquiry':
       return <Building className="w-4 h-4 text-amber-600" />;
+    case 'payment_event':
+      return <Wallet className="w-4 h-4 text-emerald-700" />;
     case 'subscription_event':
       return <CreditCard className="w-4 h-4 text-emerald-600" />;
     case 'verification_event':
@@ -99,6 +103,11 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
   onMarkAllAsRead
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
+  // Always reopen on "All" so a new item in another category is never hidden.
+  useEffect(() => {
+    if (isOpen) setSelectedCategory('all');
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
