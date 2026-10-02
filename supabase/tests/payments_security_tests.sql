@@ -266,15 +266,20 @@ reset role;
 -- subscriptions now has ZERO write policies for any ordinary role (that
 -- IS the fix), so even this connection's default "postgres" role is not
 -- automatically exempt the way it is for other tables in this suite.
--- service_role is Supabase's real, designed-for-this RLS-bypass role
--- (what the backend's service-role key actually runs as) -- using it
--- here mirrors how a real trusted backend process would seed this, not
--- a loophole specific to this test.
-select set_config('role','service_role',true);
+-- (A first attempt at this used `set_config('role','service_role',true)`
+-- on the assumption that role has BYPASSRLS in this local/CI Supabase
+-- instance the way it does when connecting through Supabase's own API
+-- layer -- it does not appear to when reached this way, so don't repeat
+-- that pattern.) Toggling RLS off/on around just this one fixture
+-- insert is simpler and does not depend on that assumption: the
+-- connecting role is a genuine Postgres superuser (it can run
+-- migrations), so ALTER TABLE is unambiguously available regardless of
+-- how role-switching behaves here.
+alter table public.organization_subscriptions disable row level security;
 insert into public.organization_subscriptions (id, organization_id, plan_id, tier, status, billing_cycle, current_period_start, current_period_end)
 values ('osub-paytest-a', 'org-paytest-a', 'plan-sub-basic-monthly', 'basic', 'active', 'monthly', now(), now() + interval '30 days')
 on conflict (organization_id) do nothing;
-reset role;
+alter table public.organization_subscriptions enable row level security;
 
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
 with upd as (update public.organization_subscriptions set tier = 'pro' where organization_id = 'org-paytest-a' returning 1)
