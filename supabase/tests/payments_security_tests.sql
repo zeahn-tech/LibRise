@@ -261,11 +261,20 @@ insert into test_log(line) select * from extensions.ok((select count(*) from ins
   '[organization_subscriptions][org A owner][INSERT] *** the actual fix *** org admin cannot grant themselves a paid tier directly -- no insert policy exists');
 reset role;
 
--- Give org A a real existing (free-tier-implicit, i.e. no row) baseline, then
--- attempt a direct UPDATE as well, in case a row happens to already exist.
+-- Give org A a real existing baseline, then attempt a direct UPDATE as
+-- well. This is fixture setup, not a test of access -- organization_
+-- subscriptions now has ZERO write policies for any ordinary role (that
+-- IS the fix), so even this connection's default "postgres" role is not
+-- automatically exempt the way it is for other tables in this suite.
+-- service_role is Supabase's real, designed-for-this RLS-bypass role
+-- (what the backend's service-role key actually runs as) -- using it
+-- here mirrors how a real trusted backend process would seed this, not
+-- a loophole specific to this test.
+select set_config('role','service_role',true);
 insert into public.organization_subscriptions (id, organization_id, plan_id, tier, status, billing_cycle, current_period_start, current_period_end)
 values ('osub-paytest-a', 'org-paytest-a', 'plan-sub-basic-monthly', 'basic', 'active', 'monthly', now(), now() + interval '30 days')
 on conflict (organization_id) do nothing;
+reset role;
 
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
 with upd as (update public.organization_subscriptions set tier = 'pro' where organization_id = 'org-paytest-a' returning 1)
