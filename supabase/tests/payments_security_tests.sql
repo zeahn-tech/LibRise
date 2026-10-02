@@ -251,14 +251,15 @@ reset role;
 -- admins. Confirm it no longer is, for both INSERT and UPDATE.
 reset role;
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
-with ins as (
-  insert into public.organization_subscriptions (id, organization_id, plan_id, tier, status, billing_cycle, current_period_start, current_period_end)
-  values ('osub-forged', 'org-paytest-a', 'plan-sub-pro-annual', 'pro', 'active', 'annual', now(), now() + interval '1 year')
-  on conflict do nothing
-  returning 1
-)
-insert into test_log(line) select * from extensions.ok((select count(*) from ins) = 0,
-  '[organization_subscriptions][org A owner][INSERT] *** the actual fix *** org admin cannot grant themselves a paid tier directly -- no insert policy exists');
+-- A policy-less INSERT under RLS does not silently insert zero rows --
+-- it raises an error immediately (there is no WITH CHECK that can pass
+-- when no policy exists at all). throws_ok, not a count(*) = 0 check.
+insert into test_log(line) select * from extensions.throws_ok(
+  $$insert into public.organization_subscriptions (id, organization_id, plan_id, tier, status, billing_cycle, current_period_start, current_period_end)
+    values ('osub-forged', 'org-paytest-a', 'plan-sub-pro-annual', 'pro', 'active', 'annual', now(), now() + interval '1 year')$$,
+  '42501'::char(5), NULL::text,
+  '[organization_subscriptions][org A owner][INSERT] *** the actual fix *** org admin cannot grant themselves a paid tier directly -- no insert policy exists'
+);
 reset role;
 
 -- Give org A a real existing baseline, then attempt a direct UPDATE as
