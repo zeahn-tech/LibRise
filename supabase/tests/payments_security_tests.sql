@@ -317,16 +317,28 @@ insert into test_log(line) select * from extensions.lives_ok(
   $$select public.admin_review_payment('pay-paytest-sub', 'approve', 'verified against MoMo statement')$$,
   '[payments][subscription][platform admin] admin can approve a pending subscription payment'
 );
-insert into test_log(line) select * from extensions.ok(
-  (select status from public.payments where id = 'pay-paytest-sub') = 'payment_success'
-  and (select tier from public.organization_subscriptions where organization_id = 'org-paytest-a') = 'pro'
-  and (select status from public.organization_subscriptions where organization_id = 'org-paytest-a') = 'active'
-  and (select plan_id from public.organization_subscriptions where organization_id = 'org-paytest-a') = 'plan-sub-pro-annual',
-  '[payments][subscription][admin approval] *** atomic, the actual grant *** org A''s subscription is upserted to pro/active/plan-sub-pro-annual -- the ONLY way this happens now'
+-- Split into separate, specific checks (rather than one combined AND)
+-- so a failure pinpoints exactly which field is wrong instead of just
+-- "something about this didn't match".
+insert into test_log(line) select * from extensions.is(
+  (select status from public.payments where id = 'pay-paytest-sub'), 'payment_success'::text,
+  '[payments][subscription][admin approval] payment status is payment_success'
 );
-insert into test_log(line) select * from extensions.ok(
-  (select count(*) from public.organization_subscriptions where organization_id = 'org-paytest-a') = 1,
-  '[organization_subscriptions][upsert] approving a second time (conceptually) would update, not duplicate -- confirmed exactly one row exists for org A'
+insert into test_log(line) select * from extensions.is(
+  (select count(*)::int from public.organization_subscriptions where organization_id = 'org-paytest-a'), 1,
+  '[organization_subscriptions][upsert] exactly one row exists for org A (update, not duplicate, of the fixture row)'
+);
+insert into test_log(line) select * from extensions.is(
+  (select tier from public.organization_subscriptions where organization_id = 'org-paytest-a'), 'pro'::text,
+  '[payments][subscription][admin approval] *** the actual grant *** org A''s subscription tier is upserted to pro'
+);
+insert into test_log(line) select * from extensions.is(
+  (select status from public.organization_subscriptions where organization_id = 'org-paytest-a'), 'active'::text,
+  '[payments][subscription][admin approval] org A''s subscription status is active'
+);
+insert into test_log(line) select * from extensions.is(
+  (select plan_id from public.organization_subscriptions where organization_id = 'org-paytest-a'), 'plan-sub-pro-annual'::text,
+  '[payments][subscription][admin approval] org A''s subscription plan_id is plan-sub-pro-annual'
 );
 reset role;
 
