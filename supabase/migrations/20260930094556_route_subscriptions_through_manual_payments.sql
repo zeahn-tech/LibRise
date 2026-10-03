@@ -1,3 +1,12 @@
+-- Guard: this migration builds on public.payments. If that table is missing, say so
+-- clearly instead of failing later with: type "public.payments" does not exist.
+do $$
+begin
+  if to_regclass('public.payments') is null then
+    raise exception 'public.payments does not exist. Run 20260927223032_manual_mobile_money_payments.sql first, or run supabase/manual/payments_setup.sql, which installs all payment migrations in the right order.';
+  end if;
+end $$;
+
 -- Phase: Route subscription upgrades through the real manual mobile
 -- money payment system, and close the security hole that let it be
 -- skipped entirely.
