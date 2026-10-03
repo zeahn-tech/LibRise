@@ -321,7 +321,7 @@ insert into test_log(line) select * from extensions.lives_ok(
 -- so a failure pinpoints exactly which field is wrong instead of just
 -- "something about this didn't match".
 insert into test_log(line) select * from extensions.is(
-  (select status from public.payments where id = 'pay-paytest-sub'), 'payment_success'::text,
+  (select status from public.payments where id = 'pay-paytest-sub')::text, 'payment_success'::text,
   '[payments][subscription][admin approval] payment status is payment_success'
 );
 insert into test_log(line) select * from extensions.is(
@@ -329,15 +329,15 @@ insert into test_log(line) select * from extensions.is(
   '[organization_subscriptions][upsert] exactly one row exists for org A (update, not duplicate, of the fixture row)'
 );
 insert into test_log(line) select * from extensions.is(
-  (select tier from public.organization_subscriptions where organization_id = 'org-paytest-a'), 'pro'::text,
+  (select tier from public.organization_subscriptions where organization_id = 'org-paytest-a')::text, 'pro'::text,
   '[payments][subscription][admin approval] *** the actual grant *** org A''s subscription tier is upserted to pro'
 );
 insert into test_log(line) select * from extensions.is(
-  (select status from public.organization_subscriptions where organization_id = 'org-paytest-a'), 'active'::text,
+  (select status from public.organization_subscriptions where organization_id = 'org-paytest-a')::text, 'active'::text,
   '[payments][subscription][admin approval] org A''s subscription status is active'
 );
 insert into test_log(line) select * from extensions.is(
-  (select plan_id from public.organization_subscriptions where organization_id = 'org-paytest-a'), 'plan-sub-pro-annual'::text,
+  (select plan_id from public.organization_subscriptions where organization_id = 'org-paytest-a')::text, 'plan-sub-pro-annual'::text,
   '[payments][subscription][admin approval] org A''s subscription plan_id is plan-sub-pro-annual'
 );
 reset role;
