@@ -282,6 +282,14 @@ values ('osub-paytest-a', 'org-paytest-a', 'plan-sub-basic-monthly', 'basic', 'a
 on conflict (organization_id) do nothing;
 alter table public.organization_subscriptions enable row level security;
 
+-- DIAGNOSTIC: confirm the fixture row actually exists right now, before
+-- anything else runs. (count=0 kept being reported much later in the
+-- file, with no clear reason why -- narrowing down exactly where.)
+insert into test_log(line) select * from extensions.is(
+  (select count(*)::int from public.organization_subscriptions where organization_id = 'org-paytest-a'), 1,
+  '[DIAGNOSTIC] fixture row visible immediately after insert + re-enable RLS'
+);
+
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
 with upd as (update public.organization_subscriptions set tier = 'pro' where organization_id = 'org-paytest-a' returning 1)
 insert into test_log(line) select * from extensions.ok((select count(*) from upd) = 0,
@@ -312,10 +320,31 @@ insert into test_log(line) select * from extensions.lives_ok(
 );
 reset role;
 
+-- DIAGNOSTIC: is the fixture row (and the plan row's plan_type) still
+-- visible right before the admin_review_payment call?
+insert into test_log(line) select * from extensions.is(
+  (select count(*)::int from public.organization_subscriptions where organization_id = 'org-paytest-a'), 1,
+  '[DIAGNOSTIC] fixture row still visible immediately before admin_review_payment'
+);
+insert into test_log(line) select * from extensions.is(
+  (select plan_type from public.payment_plans where id = 'plan-sub-pro-annual')::text, 'subscription'::text,
+  '[DIAGNOSTIC] plan-sub-pro-annual has plan_type=subscription right before admin_review_payment'
+);
+insert into test_log(line) select * from extensions.is(
+  (select status from public.payments where id = 'pay-paytest-sub')::text, 'payment_pending'::text,
+  '[DIAGNOSTIC] pay-paytest-sub is payment_pending right before admin_review_payment'
+);
+
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000003',true);
 insert into test_log(line) select * from extensions.lives_ok(
   $$select public.admin_review_payment('pay-paytest-sub', 'approve', 'verified against MoMo statement')$$,
   '[payments][subscription][platform admin] admin can approve a pending subscription payment'
+);
+
+-- DIAGNOSTIC: immediately after, before any other statement can interfere.
+insert into test_log(line) select * from extensions.is(
+  (select count(*)::int from public.organization_subscriptions where organization_id = 'org-paytest-a'), 1,
+  '[DIAGNOSTIC] org A still has exactly 1 row immediately after admin_review_payment returns'
 );
 -- Split into separate, specific checks (rather than one combined AND)
 -- so a failure pinpoints exactly which field is wrong instead of just
