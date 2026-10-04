@@ -334,6 +334,10 @@ insert into test_log(line) select * from extensions.is(
   (select status from public.payments where id = 'pay-paytest-sub')::text, 'payment_pending'::text,
   '[DIAGNOSTIC] pay-paytest-sub is payment_pending right before admin_review_payment'
 );
+insert into test_log(line) select * from extensions.is(
+  (select plan_id from public.payments where id = 'pay-paytest-sub')::text, 'plan-sub-pro-annual'::text,
+  '[DIAGNOSTIC] pay-paytest-sub.plan_id is plan-sub-pro-annual right before admin_review_payment'
+);
 
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000003',true);
 insert into test_log(line) select * from extensions.lives_ok(
@@ -345,6 +349,19 @@ insert into test_log(line) select * from extensions.lives_ok(
 insert into test_log(line) select * from extensions.is(
   (select count(*)::int from public.organization_subscriptions where organization_id = 'org-paytest-a'), 1,
   '[DIAGNOSTIC] org A still has exactly 1 row immediately after admin_review_payment returns'
+);
+-- Unconditional (no WHERE) total row count, and every organization_id
+-- present, in case the row moved to a different org_id or the whole
+-- table is actually empty (would point to something far stranger than
+-- a logic bug in just this one branch).
+insert into test_log(line) select * from extensions.is(
+  (select count(*)::int from public.organization_subscriptions), 1,
+  '[DIAGNOSTIC] organization_subscriptions has exactly 1 row total (unconditional count) right after admin_review_payment'
+);
+insert into test_log(line) select * from extensions.is(
+  (select string_agg(organization_id, ',' order by organization_id) from public.organization_subscriptions)::text,
+  'org-paytest-a'::text,
+  '[DIAGNOSTIC] the org_id(s) actually present in organization_subscriptions right now'
 );
 -- Split into separate, specific checks (rather than one combined AND)
 -- so a failure pinpoints exactly which field is wrong instead of just
