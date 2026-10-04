@@ -687,3 +687,21 @@ grant execute on function public.switch_payment_provider(varchar, varchar) to au
 
 comment on function public.switch_payment_provider is
     'Recruiter switches MTN <-> Orange on a payment that has not had a reference submitted yet. Changes only payment_provider.';
+
+notify pgrst, 'reload schema';
+
+select
+  (select count(*) from public.payment_plans) as plans,
+  (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname in ('submit_payment_reference', 'admin_review_payment', 'switch_payment_provider')) as functions,
+  case
+    when (select count(*) from public.payment_plans) >= 7
+     and (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+           where n.nspname = 'public'
+             and p.proname in ('submit_payment_reference', 'admin_review_payment', 'switch_payment_provider')) = 3
+     and exists (select 1 from information_schema.columns
+                  where table_schema = 'public' and table_name = 'payment_plans' and column_name = 'plan_type')
+    then 'OK - payments fully installed'
+    else 'INCOMPLETE - run this whole script again with nothing selected'
+  end as status;
