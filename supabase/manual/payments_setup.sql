@@ -1,4 +1,6 @@
 -- LibRise payments setup. Paste ALL of this into the Supabase SQL Editor and click Run.
+-- Safe to run more than once. Each part reports its own result in the table at the bottom.
+-- LibRise payments setup. Paste ALL of this into the Supabase SQL Editor and click Run.
 -- Safe to run more than once. Checks prerequisites first and tells you what is missing.
 create extension if not exists "uuid-ossp" with schema extensions;
 
@@ -33,6 +35,14 @@ begin
   end if;
 end $$;
 
+create temp table if not exists _setup_log (step text, result text, details text);
+delete from _setup_log;
+
+do $run$
+declare
+  v_msg text; v_detail text; v_hint text;
+begin
+  execute $part2$
 create table if not exists public.payment_plans (
     id varchar(100) primary key,
     name varchar(255) not null,
@@ -452,7 +462,20 @@ drop trigger if exists trg_enforce_publish_payment_gate on public.opportunities;
 create trigger trg_enforce_publish_payment_gate
     before insert or update of status on public.opportunities
     for each row execute function public.enforce_publish_payment_gate();
+  $part2$;
+  insert into _setup_log values ('2. Base payments tables and functions', 'ok', null);
+exception when others then
+  get stacked diagnostics v_msg = message_text, v_detail = pg_exception_detail, v_hint = pg_exception_hint;
+  insert into _setup_log values ('2. Base payments tables and functions', 'FAILED',
+    concat_ws(' | ', v_msg, 'code ' || sqlstate, nullif(v_detail, ''), nullif(v_hint, '')));
+end
+$run$;
 
+do $run$
+declare
+  v_msg text; v_detail text; v_hint text;
+begin
+  execute $part3$
 do $$
 begin
   if to_regclass('public.payments') is null then
@@ -626,7 +649,20 @@ comment on function public.admin_review_payment is
 create unique index if not exists uq_payments_one_open_subscription_per_org
     on public.payments(organization_id)
     where opportunity_id is null and status in ('created', 'payment_pending');
+  $part3$;
+  insert into _setup_log values ('3. Subscription payments (adds 4 subscription plans)', 'ok', null);
+exception when others then
+  get stacked diagnostics v_msg = message_text, v_detail = pg_exception_detail, v_hint = pg_exception_hint;
+  insert into _setup_log values ('3. Subscription payments (adds 4 subscription plans)', 'FAILED',
+    concat_ws(' | ', v_msg, 'code ' || sqlstate, nullif(v_detail, ''), nullif(v_hint, '')));
+end
+$run$;
 
+do $run$
+declare
+  v_msg text; v_detail text; v_hint text;
+begin
+  execute $part4$
 do $$
 begin
   if to_regclass('public.payments') is null then
@@ -687,14 +723,20 @@ grant execute on function public.switch_payment_provider(varchar, varchar) to au
 
 comment on function public.switch_payment_provider is
     'Recruiter switches MTN <-> Orange on a payment that has not had a reference submitted yet. Changes only payment_provider.';
+  $part4$;
+  insert into _setup_log values ('4. MTN / Orange switching', 'ok', null);
+exception when others then
+  get stacked diagnostics v_msg = message_text, v_detail = pg_exception_detail, v_hint = pg_exception_hint;
+  insert into _setup_log values ('4. MTN / Orange switching', 'FAILED',
+    concat_ws(' | ', v_msg, 'code ' || sqlstate, nullif(v_detail, ''), nullif(v_hint, '')));
+end
+$run$;
 
 notify pgrst, 'reload schema';
 
-select
-  (select count(*) from public.payment_plans) as plans,
-  (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public'
-      and p.proname in ('submit_payment_reference', 'admin_review_payment', 'switch_payment_provider')) as functions,
+select step, result, details from _setup_log
+union all
+select 'FINAL CHECK',
   case
     when (select count(*) from public.payment_plans) >= 7
      and (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -703,5 +745,10 @@ select
      and exists (select 1 from information_schema.columns
                   where table_schema = 'public' and table_name = 'payment_plans' and column_name = 'plan_type')
     then 'OK - payments fully installed'
-    else 'INCOMPLETE - run this whole script again with nothing selected'
-  end as status;
+    else 'INCOMPLETE - see the FAILED row above'
+  end,
+  'plans=' || (select count(*) from public.payment_plans)
+    || ', functions=' || (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'public'
+           and p.proname in ('submit_payment_reference', 'admin_review_payment', 'switch_payment_provider'))
+order by 1;
