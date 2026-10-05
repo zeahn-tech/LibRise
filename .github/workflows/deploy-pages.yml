@@ -149,9 +149,12 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ steps.mode.outputs.supabase_anon_key }}
           VITE_ENABLE_DEMO_MODE: ${{ steps.mode.outputs.demo_mode }}
           VITE_APP_ENV: production
-          VITE_MOMO_MTN_NUMBER: ${{ vars.0880024653 || secrets.0880024653 }}
-          VITE_MOMO_ORANGE_NUMBER: ${{ vars.0776391531 || secrets.0776391531 }}
-          VITE_MOMO_ACCOUNT_NAME: ${{ vars.Emmanuel Zeahn || secrets.Emmanuel Zeahn }}
+          # Public-by-design checkout details (see docs/PAYMENTS.md). Optional
+          # repo Variables named VITE_MOMO_* override these defaults. NOTE: the
+          # part after `vars.` must be a variable NAME -- never the value itself.
+          VITE_MOMO_MTN_NUMBER: ${{ vars.VITE_MOMO_MTN_NUMBER || '0880024653' }}
+          VITE_MOMO_ORANGE_NUMBER: ${{ vars.VITE_MOMO_ORANGE_NUMBER || '0776391531' }}
+          VITE_MOMO_ACCOUNT_NAME: ${{ vars.VITE_MOMO_ACCOUNT_NAME || 'Emmanuel Zeahn' }}
 
       - name: Remove server bundle from the Pages artifact
         # dist/server.cjs (+ .map) is the Node server bundle -- GitHub Pages

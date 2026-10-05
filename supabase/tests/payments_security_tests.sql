@@ -345,24 +345,14 @@ insert into test_log(line) select * from extensions.lives_ok(
   '[payments][subscription][platform admin] admin can approve a pending subscription payment'
 );
 
--- DIAGNOSTIC: immediately after, before any other statement can interfere.
-insert into test_log(line) select * from extensions.is(
-  (select count(*)::int from public.organization_subscriptions where organization_id = 'org-paytest-a'), 1,
-  '[DIAGNOSTIC] org A still has exactly 1 row immediately after admin_review_payment returns'
-);
--- Unconditional (no WHERE) total row count, and every organization_id
--- present, in case the row moved to a different org_id or the whole
--- table is actually empty (would point to something far stranger than
--- a logic bug in just this one branch).
-insert into test_log(line) select * from extensions.is(
-  (select count(*)::int from public.organization_subscriptions), 1,
-  '[DIAGNOSTIC] organization_subscriptions has exactly 1 row total (unconditional count) right after admin_review_payment'
-);
-insert into test_log(line) select * from extensions.is(
-  (select string_agg(organization_id, ',' order by organization_id) from public.organization_subscriptions)::text,
-  'org-paytest-a'::text,
-  '[DIAGNOSTIC] the org_id(s) actually present in organization_subscriptions right now'
-);
+-- The platform admin is NOT a member of org A, so the SELECT policy on
+-- organization_subscriptions (is_org_member(organization_id)) correctly hides
+-- the row from them under RLS. The upsert itself is done by the SECURITY
+-- DEFINER admin_review_payment(); to VERIFY its effect we must read as the
+-- privileged test role, not as the (non-member) admin who triggered it.
+-- (Reading as that admin was what made these checks see 0 rows.)
+reset role;
+
 -- Split into separate, specific checks (rather than one combined AND)
 -- so a failure pinpoints exactly which field is wrong instead of just
 -- "something about this didn't match".
