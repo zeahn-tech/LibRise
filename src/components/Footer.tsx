@@ -1,5 +1,7 @@
 import React from 'react';
 import { ShieldCheck, MapPin } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { getFeatureAccess } from '../core/auth/featureAccess';
 
 interface FooterProps {
   onOpenSafetyModal: () => void;
@@ -7,6 +9,8 @@ interface FooterProps {
 }
 
 export const Footer: React.FC<FooterProps> = ({ onOpenSafetyModal, onOpenVerification }) => {
+  const { authContext } = useAuth();
+  const canSeeVerification = getFeatureAccess(authContext).tabs.verification.allowed;
   return (
     <footer className="bg-[#F2F2EC] border-t border-[#E8E4D9] px-4 sm:px-10 py-3 sm:py-0 sm:h-14 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 text-[11px] font-bold text-[#A3B18A] uppercase tracking-wider shrink-0 mt-auto">
       <div className="text-center sm:text-left">
@@ -20,12 +24,14 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSafetyModal, onOpenVerific
         >
           Safety & Anti-Scam Policy
         </button>
-        <button
-          onClick={onOpenVerification}
-          className="text-[#606C38] hover:text-[#283618] transition-colors"
-        >
-          LBR Verification Standards
-        </button>
+        {canSeeVerification && (
+          <button
+            onClick={onOpenVerification}
+            className="text-[#606C38] hover:text-[#283618] transition-colors"
+          >
+            LBR Verification Standards
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-2 text-[10px] text-[#283618] font-semibold">

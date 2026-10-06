@@ -53,12 +53,35 @@ describe('role-based visibility', () => {
   it('job seeker: candidate portal + shared tabs, but NO posting / recruiter / billing / admin', () => {
     const c = ctx({ role: 'job_seeker', caps: ['find_opportunities'] });
     const a = getFeatureAccess(c);
-    expect(visible(c)).toEqual(['ai-studio', 'businesses', 'candidate', 'messages', 'opportunities', 'verification']);
+    expect(visible(c)).toEqual(['ai-studio', 'businesses', 'candidate', 'messages', 'opportunities']);
     expect(a.canPost).toBe(false);
     expect(a.isEmployer).toBe(false);
     expect(a.canSeeBilling).toBe(false);
     expect(a.canListBusiness).toBe(false);
     expect(a.showOrgSwitcher).toBe(false);
+  });
+
+  it('verification hub is invisible to job seekers, freelancers, buyers and guests', () => {
+    for (const c of [
+      ctx({ guest: true }),
+      ctx({ role: 'job_seeker', caps: ['find_opportunities'] }),
+      ctx({ role: 'service_provider', caps: ['offer_services'] }),
+      ctx({ role: 'buyer', caps: ['find_business'] })
+    ]) {
+      expect(getFeatureAccess(c).tabs.verification.allowed).toBe(false);
+    }
+  });
+
+  it('verification hub is visible to employers, org members, sellers and staff', () => {
+    for (const c of [
+      ctx({ role: 'employer', caps: ['hire_or_recruit'], orgRole: 'owner' }),
+      ctx({ role: 'employer', orgRole: 'member' }),
+      ctx({ role: 'business_seller', caps: ['sell_business'] }),
+      ctx({ role: 'verification_officer', system: 'verification_officer' }),
+      ctx({ role: 'platform_admin', system: 'platform_admin' })
+    ]) {
+      expect(getFeatureAccess(c).tabs.verification.allowed).toBe(true);
+    }
   });
 
   it('freelancer / service provider is treated as a job seeker (cannot post)', () => {

@@ -80,6 +80,7 @@ describe('Navbar + mobile nav markup per account type', () => {
     expect(html).not.toContain('SaaS Subscriptions');
     expect(html).not.toContain('Trust &amp; Safety');
     expect(html).not.toContain('org-switcher');
+    expect(html).not.toContain('Verification Hub');
     expect(html).toContain('Candidate Portal');
     expect(html).toContain('My Career');
     expect(html).toContain('Messages');
@@ -92,6 +93,7 @@ describe('Navbar + mobile nav markup per account type', () => {
     POST.forEach((p) => expect(html).toContain(p));
     expect(html).toContain('Recruiter Studio');
     expect(html).toContain('Subscriptions');
+    expect(html).toContain('Verification Hub');
     expect(html).toContain('org-switcher');
     expect(html).not.toContain('Candidate Portal');
     expect(html).not.toContain('My Career');
@@ -112,6 +114,7 @@ describe('Navbar + mobile nav markup per account type', () => {
     POST.forEach((p) => expect(html).not.toContain(p));
     expect(html).not.toContain('Recruiter Studio');
     expect(html).not.toContain('Candidate Portal');
+    expect(html).not.toContain('Verification Hub');
     expect(html).toContain('Business M&amp;A');
   });
 

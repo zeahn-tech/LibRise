@@ -601,8 +601,24 @@ export function canAccessWorkspace(
     }
 
     case 'verification': {
-      // Browsing standards and submitting an audit is open to all authenticated users
-      return { allowed: true };
+      // Verification is about organizations and business listings, so it is shown only to
+      // people who post, list, belong to an organization, or review verifications.
+      // Job seekers / freelancers / buyers have nothing to verify and do not see it.
+      if (
+        isPlatformAdmin(context) ||
+        isVerificationOfficer(context) ||
+        isModerationOfficer(context) ||
+        canPostOpportunities(context) ||
+        evaluatePermission(context, 'business.list') ||
+        context.userMemberships.some((m) => m.status === 'active')
+      ) {
+        return { allowed: true };
+      }
+      return {
+        allowed: false,
+        reason: "You don't have permission to access this workspace.",
+        actionHint: 'The verification hub is for organizations, business sellers and verification staff.'
+      };
     }
 
     case 'billing': {
