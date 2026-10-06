@@ -112,6 +112,20 @@ describe('subscriptionService', () => {
     expect(res.data).toBeDefined();
   });
 
+  it('getEntitlements(): a paid tier whose period has lapsed gets free-plan limits', async () => {
+    mockFrom.mockReturnValue(chain({ data: sampleSubRow({ current_period_end: new Date(Date.now() - 86_400_000).toISOString() }), error: null }));
+    const { subscriptionService } = await import('../services/subscriptionService');
+    const res = await subscriptionService.getEntitlements('org-1');
+    expect(res.data?.maxActiveJobs).toBe(1);
+  });
+
+  it('getEntitlements(): an unexpired paid tier keeps its paid limits', async () => {
+    mockFrom.mockReturnValue(chain({ data: sampleSubRow({ current_period_end: new Date(Date.now() + 86_400_000).toISOString() }), error: null }));
+    const { subscriptionService } = await import('../services/subscriptionService');
+    const res = await subscriptionService.getEntitlements('org-1');
+    expect(res.data?.maxActiveJobs).toBe('unlimited');
+  });
+
   it('mockFulfillSubscription(): updates an existing subscription rather than inserting a duplicate', async () => {
     const selectBuilder = chain({ data: { id: 'sub-1' }, error: null });
     const updateBuilder = chain({ data: sampleSubRow({ tier: 'enterprise' }), error: null });

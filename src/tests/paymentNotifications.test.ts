@@ -109,7 +109,7 @@ describe('payment notifications', () => {
     mockRpc.mockResolvedValue({ data: paymentRow({ status: 'payment_pending_review' }), error: null });
     const { paymentService } = await import('../services/paymentService');
 
-    await paymentService.submitPaymentReference('pay-1', 'TX123');
+    await paymentService.submitPaymentReference('pay-1', 'TXN-123456789', '0770000000');
     await flush();
 
     expect(notify.notifyPaymentSubmitted).toHaveBeenCalledWith(

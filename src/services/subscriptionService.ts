@@ -143,6 +143,11 @@ export const subscriptionService = {
       if (subRes.data.status !== 'active' && subRes.data.status !== 'trialing') {
         return getPlanById('plan_free')!.entitlements;
       }
+      // A paid tier only lasts for the period that was paid for (mirrors
+      // org_has_publish_quota() in the database).
+      if (subRes.data.tier !== 'free' && new Date(subRes.data.currentPeriodEnd).getTime() < Date.now()) {
+        return getPlanById('plan_free')!.entitlements;
+      }
 
       return plan.entitlements;
     });

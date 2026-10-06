@@ -3,6 +3,7 @@ import { X, CheckCircle2, Clock, AlertTriangle, Copy, Loader2, Smartphone } from
 import { Payment, PaymentPlan, PaymentProviderId } from '../../types';
 import { paymentService, formatMinorAmount, getMomoInstructions } from '../../services/paymentService';
 import { useToast } from '../../context/ToastContext';
+import { validateSenderPhone, validateTransactionId } from '../../services/paymentValidation';
 
 /**
  * Recruiter checkout for the MANUAL mobile money payment flow (see
@@ -154,14 +155,21 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
 
   const handleSubmitReference = async () => {
     if (!payment) return;
-    const cleaned = txnId.trim();
-    if (cleaned.length < 4) {
-      setFieldError('Enter the transaction ID from your mobile money confirmation message.');
+    // Instant feedback only -- the database re-checks every rule in
+    // submit_payment_reference(), so this can't be used to bypass anything.
+    const phone = validateSenderPhone(senderPhone);
+    if (!phone.ok) {
+      setFieldError(phone.error!);
+      return;
+    }
+    const txn = validateTransactionId(txnId, payment.providerReference, phone.value);
+    if (!txn.ok) {
+      setFieldError(txn.error!);
       return;
     }
     setFieldError(null);
     setBusy(true);
-    const res = await paymentService.submitPaymentReference(payment.id, cleaned, senderPhone.trim() || undefined);
+    const res = await paymentService.submitPaymentReference(payment.id, txn.value, phone.value);
     setBusy(false);
     if (res.data) {
       applyPaymentState(res.data);
@@ -286,7 +294,7 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
                     </div>
                   </dl>
                   <p className="text-xs text-stone-500">
-                    Put the reference in the payment note if your app has one. This payment slot is held for 48 hours.
+                    Put the reference in the payment note/message if your app has one -- it lets us match your payment faster. This payment slot is held for 48 hours.
                   </p>
                   <button onClick={() => setStep('reference')} className={`${busyBtn} w-full bg-[#4F772D] hover:bg-[#283618] text-white`}>
                     I've sent the payment
@@ -299,17 +307,18 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
           {step === 'reference' && payment && (
             <>
               <p className="text-sm text-stone-700">
-                Enter the transaction ID from the confirmation message you received after sending. We'll check it
-                against our mobile money records.
+                Enter the transaction ID from the confirmation message you received from {PROVIDER_LABEL[provider]} after
+                sending (not the reference above). We check it by hand against our mobile money records, and a payment
+                that cannot be matched to a real transaction is rejected.
               </p>
               <div className="space-y-3">
                 <div>
                   <label htmlFor="txn" className="text-xs font-bold text-stone-500 uppercase tracking-wider">Transaction ID</label>
-                  <input id="txn" value={txnId} onChange={(e) => setTxnId(e.target.value)} className="mt-1 w-full min-h-11 px-3 border border-[#E8E4D9] rounded-xl text-sm font-mono" placeholder="e.g. from your confirmation SMS" autoComplete="off" />
+                  <input id="txn" value={txnId} onChange={(e) => setTxnId(e.target.value)} className="mt-1 w-full min-h-11 px-3 border border-[#E8E4D9] rounded-xl text-sm font-mono" placeholder="Exactly as in your confirmation SMS" autoComplete="off" autoCapitalize="characters" spellCheck={false} />
                 </div>
                 <div>
-                  <label htmlFor="sender" className="text-xs font-bold text-stone-500 uppercase tracking-wider">Phone number you paid from (optional)</label>
-                  <input id="sender" value={senderPhone} onChange={(e) => setSenderPhone(e.target.value)} inputMode="tel" className="mt-1 w-full min-h-11 px-3 border border-[#E8E4D9] rounded-xl text-sm" autoComplete="off" />
+                  <label htmlFor="sender" className="text-xs font-bold text-stone-500 uppercase tracking-wider">Phone number you paid from</label>
+                  <input id="sender" value={senderPhone} onChange={(e) => setSenderPhone(e.target.value)} inputMode="tel" className="mt-1 w-full min-h-11 px-3 border border-[#E8E4D9] rounded-xl text-sm" placeholder="e.g. 0770000000" autoComplete="off" />
                 </div>
                 {fieldError && <p role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl p-3">{fieldError}</p>}
               </div>

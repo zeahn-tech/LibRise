@@ -171,7 +171,7 @@ insert into test_log(line) select * from extensions.lives_ok(
   '[payments][org B owner][INSERT] org B can create its own payment'
 );
 insert into test_log(line) select * from extensions.throws_ok(
-  $$select public.submit_payment_reference('pay-paytest-b', 'txn-abc-12345')$$,
+  $$select public.submit_payment_reference('pay-paytest-b', 'txn-abc-12345', '0770000002')$$,
   'P0001'::char(5), NULL::text,
   '[payments][reused transaction id] *** duplicate txn *** the same real transaction id (even in different letter case) cannot back a second live payment'
 );
@@ -222,7 +222,7 @@ update public.payments set expires_at = now() - interval '1 hour' where id = 'pa
 
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000002',true);
 insert into test_log(line) select * from extensions.throws_ok(
-  $$select public.submit_payment_reference('pay-paytest-b', 'TXN-LATE-1')$$,
+  $$select public.submit_payment_reference('pay-paytest-b', 'TXN-LATE-1', '0770000002')$$,
   'P0001'::char(5), NULL::text,
   '[payments][expired] a reference cannot be submitted after the payment window has passed'
 );
@@ -315,7 +315,7 @@ insert into test_log(line) select * from extensions.throws_ok(
   '[payments][subscription] *** target integrity *** a subscription-plan payment must NOT reference an opportunity'
 );
 insert into test_log(line) select * from extensions.lives_ok(
-  $$select public.submit_payment_reference('pay-paytest-sub', 'txn-sub-77777')$$,
+  $$select public.submit_payment_reference('pay-paytest-sub', 'txn-sub-77777', '0770000001')$$,
   '[payments][subscription][submit_payment_reference] recruiter submits the reference same as a vacancy payment'
 );
 reset role;
@@ -377,6 +377,119 @@ insert into test_log(line) select * from extensions.is(
   '[payments][subscription][admin approval] org A''s subscription plan_id is plan-sub-pro-annual'
 );
 reset role;
+
+-- =============================================================================
+-- 8. HARDENED REFERENCE SUBMISSION: fake / junk transaction IDs are refused
+--    server-side (a direct API call cannot bypass the UI checks)
+-- =============================================================================
+reset role;
+insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
+values ('pay-paytest-h1', 'pub-paytest-h1', 'org-paytest-b', '11111111-aaaa-4aaa-8aaa-000000000002', null, 'plan-sub-basic-monthly', 'manual_momo_mtn', 'OHL-PAYTEST-H1', 4900, 'USD', 'created');
+
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000002',true);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select public.submit_payment_reference('pay-paytest-h1', '12345', '0770000002')$$,
+  'P0001'::char(5), NULL::text,
+  '[payments][hardening] a too-short transaction ID is refused'
+);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select public.submit_payment_reference('pay-paytest-h1', '11111111', '0770000002')$$,
+  'P0001'::char(5), NULL::text,
+  '[payments][hardening] a repeated-character transaction ID is refused'
+);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select public.submit_payment_reference('pay-paytest-h1', '12345678', '0770000002')$$,
+  'P0001'::char(5), NULL::text,
+  '[payments][hardening] a sequential-digit transaction ID is refused'
+);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select public.submit_payment_reference('pay-paytest-h1', 'OHL-PAYTEST-H1', '0770000002')$$,
+  'P0001'::char(5), NULL::text,
+  '[payments][hardening] our own OHL- reference cannot be used as the transaction ID'
+);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select public.submit_payment_reference('pay-paytest-h1', 'MP240101.1234.A12345')$$,
+  'P0001'::char(5), NULL::text,
+  '[payments][hardening] the sender phone number is now required'
+);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select public.submit_payment_reference('pay-paytest-h1', 'MP240101.1234.A12345', 'not-a-phone')$$,
+  'P0001'::char(5), NULL::text,
+  '[payments][hardening] a malformed sender phone number is refused'
+);
+insert into test_log(line) select * from extensions.ok(
+  (select status from public.payments where id = 'pay-paytest-h1') = 'created',
+  '[payments][hardening] every refused submission left the payment untouched (still created)'
+);
+insert into test_log(line) select * from extensions.lives_ok(
+  $$select public.submit_payment_reference('pay-paytest-h1', 'MP240101.1234.A12345', '+231 770-000-002')$$,
+  '[payments][hardening] a well-formed ID plus phone is accepted'
+);
+insert into test_log(line) select * from extensions.ok(
+  (select sender_phone_number from public.payments where id = 'pay-paytest-h1') = '+231770000002'
+  and (select provider_transaction_id from public.payments where id = 'pay-paytest-h1') = 'MP240101.1234.A12345',
+  '[payments][hardening] phone is stored normalized and the ID upper-cased'
+);
+
+-- Repeated rejections pause new submissions (anti-guessing).
+reset role;
+do $$
+declare g int;
+begin
+  -- one at a time: only one OPEN subscription payment per org may exist
+  for g in 1..3 loop
+    insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
+    values ('pay-paytest-rej' || g, 'pub-paytest-rej' || g, 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', null, 'plan-sub-basic-monthly', 'manual_momo_mtn', 'OHL-PAYTEST-REJ' || g, 4900, 'USD', 'created');
+    update public.payments
+    set status = 'payment_failed', reviewed_at = now(), reviewed_by_user_id = '11111111-aaaa-4aaa-8aaa-000000000003'
+    where id = 'pay-paytest-rej' || g;
+  end loop;
+end $$;
+insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
+values ('pay-paytest-lock', 'pub-paytest-lock', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', null, 'plan-sub-basic-monthly', 'manual_momo_mtn', 'OHL-PAYTEST-LOCK', 4900, 'USD', 'created');
+
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select public.submit_payment_reference('pay-paytest-lock', 'MP240102.5555.B67890', '0770000001')$$,
+  'P0001'::char(5), NULL::text,
+  '[payments][hardening] *** anti-guessing *** after 3 rejections in 24h further submissions are paused'
+);
+reset role;
+
+-- =============================================================================
+-- 9. SUBSCRIPTION PERIODS ARE ENFORCED
+-- =============================================================================
+-- Org A is on an active pro plan (granted in section 7) but already has one
+-- published vacancy; pro is unlimited so quota is available.
+insert into test_log(line) select * from extensions.ok(
+  public.org_has_publish_quota('org-paytest-a'),
+  '[subscription][period] an unexpired pro plan still has publish quota'
+);
+update public.organization_subscriptions set current_period_end = now() - interval '1 day' where organization_id = 'org-paytest-a';
+insert into test_log(line) select * from extensions.ok(
+  not public.org_has_publish_quota('org-paytest-a'),
+  '[subscription][period] *** expiry *** a lapsed pro plan falls back to the free limit (1) and, with 1 live vacancy, has no quota'
+);
+
+-- Renewing the same tier before expiry extends the period instead of resetting it.
+update public.organization_subscriptions
+set current_period_start = now() - interval '10 days', current_period_end = now() + interval '20 days'
+where organization_id = 'org-paytest-a';
+reset role;
+insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
+values ('pay-paytest-renew', 'pub-paytest-renew', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', null, 'plan-sub-pro-monthly', 'manual_momo_mtn', 'OHL-PAYTEST-RENEW', 14900, 'USD', 'created');
+update public.payments set status = 'payment_pending', provider_transaction_id = 'TXN-RENEW-90210', sender_phone_number = '+231770000001' where id = 'pay-paytest-renew';
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000003',true);
+insert into test_log(line) select * from extensions.lives_ok(
+  $$select public.admin_review_payment('pay-paytest-renew', 'approve', 'verified against MoMo statement')$$,
+  '[subscription][renewal] admin approves an early renewal of the same tier'
+);
+reset role;
+insert into test_log(line) select * from extensions.ok(
+  (select current_period_end from public.organization_subscriptions where organization_id = 'org-paytest-a') > now() + interval '49 days'
+  and (select current_period_end from public.organization_subscriptions where organization_id = 'org-paytest-a') < now() + interval '51 days',
+  '[subscription][renewal] *** no days lost *** 20 days remaining + 30 paid = about 50 days'
+);
 
 -- =============================================================================
 -- FINAL: dump the log

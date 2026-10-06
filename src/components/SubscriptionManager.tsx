@@ -60,21 +60,15 @@ export const SubscriptionManager: React.FC = () => {
     setCheckoutPlanId(`plan-sub-${plan.tier}-${billingCycle}`);
   };
 
-  const handleManageBilling = async () => {
-    if (!orgId || !subscription?.stripeCustomerId) return;
-    try {
-      // Simulate Stripe Customer Portal
-      alert('In production, this opens the Stripe Customer Portal for managing invoices, upgrades, downgrades, and cancellations.');
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
   if (loading) {
     return <div className="p-8 text-center text-stone-500">Loading subscription status...</div>;
   }
 
   const currentPlan = SUBSCRIPTION_PLANS.find(p => p.id === subscription?.planId) || SUBSCRIPTION_PLANS[0];
+  const periodEnd = subscription?.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null;
+  const isPaidTier = !!subscription && subscription.tier !== 'free';
+  const isLapsed = isPaidTier && !!periodEnd && periodEnd.getTime() < Date.now();
+  const daysLeft = periodEnd ? Math.ceil((periodEnd.getTime() - Date.now()) / 86_400_000) : null;
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -105,25 +99,32 @@ export const SubscriptionManager: React.FC = () => {
           <div className="bg-[#F9F8F6] p-4 rounded-2xl border border-[#E8E4D9] min-w-[280px]">
             <div className="flex justify-between items-start mb-2">
               <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Current Plan</span>
-              {subscription?.status === 'active' || subscription?.status === 'trialing' ? (
+              {(subscription?.status === 'active' || subscription?.status === 'trialing') && !isLapsed ? (
                 <span className="px-2.5 py-0.5 bg-green-100 text-green-800 rounded-full text-[10px] font-bold uppercase tracking-wider">
                   {subscription.status}
                 </span>
               ) : (
                 <span className="px-2.5 py-0.5 bg-red-100 text-red-800 rounded-full text-[10px] font-bold uppercase tracking-wider">
-                  {subscription?.status || 'Inactive'}
+                  {isLapsed ? 'Expired' : (subscription?.status || 'Inactive')}
                 </span>
               )}
             </div>
             <div className="text-xl font-bold text-[#283618] mb-4">{currentPlan.name}</div>
             
-            {subscription?.tier !== 'free' && (
-              <button 
-                onClick={handleManageBilling}
+            {isPaidTier && periodEnd && (
+              <p className={`text-xs mb-3 ${isLapsed ? 'text-red-700 font-semibold' : 'text-stone-500'}`}>
+                {isLapsed
+                  ? `Expired on ${periodEnd.toLocaleDateString()}. You are back on free-plan limits until you renew.`
+                  : `Active until ${periodEnd.toLocaleDateString()}${daysLeft !== null && daysLeft <= 7 ? ` (${daysLeft} day${daysLeft === 1 ? '' : 's'} left)` : ''}.`}
+              </p>
+            )}
+            {isPaidTier && (
+              <button
+                onClick={() => setCheckoutPlanId(`plan-sub-${subscription!.tier}-${subscription!.billingCycle === 'annual' ? 'annual' : 'monthly'}`)}
                 className="w-full px-4 py-2 bg-white border border-[#E8E4D9] rounded-xl text-sm font-semibold text-[#283618] hover:bg-[#F9F8F6] transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
                 <CreditCard className="w-4 h-4" />
-                Manage Billing & Invoices
+                {isLapsed ? 'Renew plan' : 'Extend plan'}
               </button>
             )}
           </div>

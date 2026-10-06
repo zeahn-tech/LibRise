@@ -21,6 +21,11 @@ export const PaymentReviewQueue: React.FC = () => {
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectNotes, setRejectNotes] = useState('');
+  // Per-payment verification ticks. Approve stays disabled until all three are
+  // ticked, so approving takes a deliberate comparison against the statement.
+  const [checks, setChecks] = useState<Record<string, { amount?: boolean; txn?: boolean; sender?: boolean }>>({});
+  const toggle = (id: string, key: 'amount' | 'txn' | 'sender') =>
+    setChecks((prev) => ({ ...prev, [id]: { ...prev[id], [key]: !prev[id]?.[key] } }));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -137,14 +142,30 @@ export const PaymentReviewQueue: React.FC = () => {
                   </div>
                 </div>
               ) : (
+                <div className="space-y-2">
+                  <fieldset className="space-y-1.5 text-xs text-stone-700">
+                    <legend className="font-bold text-stone-500 uppercase tracking-wider mb-1">I confirmed in the MoMo statement that</legend>
+                    {([
+                      ['amount', `the amount received is exactly ${formatMinorAmount(item.amountMinor, item.currency)}`],
+                      ['txn', 'this transaction ID exists, on the right network account, and is not used elsewhere'],
+                      ['sender', `it came from the sender number above (${item.senderPhoneNumber || 'not provided'})`]
+                    ] as const).map(([key, label]) => (
+                      <label key={key} className="flex items-start gap-2 cursor-pointer min-h-8">
+                        <input type="checkbox" checked={!!checks[item.id]?.[key]} onChange={() => toggle(item.id, key)} className="mt-0.5 w-4 h-4 shrink-0" />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                    <p className="text-stone-500 pt-0.5">If the statement shows our reference <span className="font-mono">{item.providerReference}</span> in the note, that is extra confirmation, but it is not required.</p>
+                  </fieldset>
                 <div className="flex gap-2">
                   <button onClick={() => setRejectingId(item.id)} disabled={workingId === item.id} className={`${btn} border border-red-200 text-red-700 flex-1`}>
                     <XCircle className="w-4 h-4" /><span>Reject</span>
                   </button>
-                  <button onClick={() => approve(item)} disabled={workingId === item.id} className={`${btn} bg-[#4F772D] hover:bg-[#283618] text-white flex-1`}>
+                  <button onClick={() => approve(item)} disabled={workingId === item.id || !(checks[item.id]?.amount && checks[item.id]?.txn && checks[item.id]?.sender)} className={`${btn} bg-[#4F772D] hover:bg-[#283618] text-white flex-1`}>
                     {workingId === item.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                     <span>Verified — approve</span>
                   </button>
+                </div>
                 </div>
               )}
             </li>

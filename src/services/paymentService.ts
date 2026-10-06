@@ -445,7 +445,7 @@ export const paymentService = {
   async submitPaymentReference(
     paymentId: string,
     providerTransactionId: string,
-    senderPhoneNumber?: string
+    senderPhoneNumber: string
   ): Promise<ApiResponse<Payment>> {
     return apiClient.execute(async () => {
       const session = authService.getSession();
@@ -454,7 +454,7 @@ export const paymentService = {
       const { data, error } = await client().rpc('submit_payment_reference', {
         p_payment_id: paymentId,
         p_provider_transaction_id: providerTransactionId,
-        p_sender_phone_number: senderPhoneNumber ?? null
+        p_sender_phone_number: senderPhoneNumber
       });
       if (error) translateError(error);
       const submitted = rowToPayment(data as PaymentRow);
