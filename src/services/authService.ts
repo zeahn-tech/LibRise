@@ -55,18 +55,24 @@ const SESSION_STORAGE_KEY = 'auth_session';
  * dbClient.registerUser's own default so demo-mode and real-Supabase users
  * get the same starting capability regardless of which path created them.
  */
-function defaultCapabilityForRole(role: UserRole): UserCapability {
+function defaultCapabilitiesForRole(role: UserRole): UserCapability[] {
   switch (role) {
     case 'employer':
-      return 'hire_or_recruit';
+    case 'recruiter':
+    case 'organization_admin':
+      return ['hire_or_recruit'];
     case 'business_seller':
-      return 'sell_business';
+      return ['sell_business'];
     case 'buyer':
-      return 'find_business';
+    case 'investor_buyer':
+      return ['find_business'];
     case 'service_provider':
-      return 'offer_services';
+      return ['offer_services'];
+    case 'job_seeker':
+      return ['find_opportunities'];
     default:
-      return 'find_opportunities';
+      // platform_admin / verification_officer: staff accounts, no marketplace-side capability
+      return [];
   }
 }
 
@@ -281,8 +287,10 @@ class AuthService {
       isPhoneVerified: row ? !!row.is_phone_verified : false,
       createdAt: row?.created_at || new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
-      capabilities: localProfile?.capabilities || [defaultCapabilityForRole(primaryRole)],
-      onboardingCompleted: localProfile ? localProfile.capabilities.length > 0 : false,
+      capabilities: localProfile?.capabilities || defaultCapabilitiesForRole(primaryRole),
+      onboardingCompleted: localProfile
+        ? localProfile.capabilities.length > 0 || primaryRole === 'platform_admin' || primaryRole === 'verification_officer'
+        : false,
       preferences: defaultPreferences()
     };
 

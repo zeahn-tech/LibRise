@@ -325,6 +325,7 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          {can('business.list') && (
           <button
             onClick={() => setShowCreateModal(true)}
             className="px-6 py-3 bg-[#4F772D] hover:bg-[#283618] text-white rounded-2xl text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer border border-[#A3B18A]/30"
@@ -332,6 +333,7 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
             <Plus className="w-4 h-4" />
             <span>List Business For Sale</span>
           </button>
+          )}
         </div>
       </div>
 

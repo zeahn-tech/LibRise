@@ -183,9 +183,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const activeMembership = authService.getActiveMembership();
 
+  // Recomputed when memberships change too (e.g. right after creating or joining an
+  // organization), otherwise the Post button / recruiter tab would stay hidden until reload.
   const authContext = useMemo<AuthorizationContext>(() => {
     return authService.getAuthorizationContext();
-  }, [session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, userOrganizations]);
 
   const can = useCallback((action: RBACAction, resourceTenantId?: string, resourceOwnerUserId?: string) => {
     return authService.can(action, resourceTenantId, resourceOwnerUserId);

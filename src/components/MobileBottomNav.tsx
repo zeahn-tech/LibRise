@@ -13,6 +13,8 @@ import {
   CreditCard 
 } from 'lucide-react';
 import { useConfig } from '../context/ConfigContext';
+import { useAuth } from '../context/AuthContext';
+import { getFeatureAccess } from '../core/auth/featureAccess';
 import { PWAInstallButton } from './pwa/PWAInstallButton';
 import { CurrencySwitcher } from './common/CurrencySwitcher';
 
@@ -24,23 +26,26 @@ interface MobileBottomNavProps {
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ activeTab, setActiveTab }) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const { isLowBandwidthMode, toggleLowBandwidthMode } = useConfig();
+  const { authContext } = useAuth();
+  const access = getFeatureAccess(authContext);
 
   // Primary 4 tabs shown directly in the bottom bar
-  const primaryItems = [
+  // Only entries this person is allowed to open are shown (same policy as the desktop Navbar).
+  const primaryItems = ([
     { id: 'opportunities', label: 'Discover', icon: Briefcase },
     { id: 'candidate', label: 'My Career', icon: UserCheck },
     { id: 'messages', label: 'Messages', icon: MessageSquare },
     { id: 'businesses', label: 'M&A', icon: Building2 },
-  ] as const;
+  ] as const).filter((item) => access.tabs[item.id].allowed);
 
   // Secondary items shown in the "More" slide-up panel
-  const secondaryItems = [
+  const secondaryItems = ([
     { id: 'ai-studio', label: 'AI Copilot Studio', icon: Sparkles, color: 'text-orange-600' },
     { id: 'recruiter', label: 'Recruiter Workspace', icon: Users, color: 'text-[#4F772D]' },
     { id: 'verification', label: 'Verification Hub', icon: ShieldCheck, color: 'text-blue-600' },
     { id: 'billing', label: 'SaaS Subscriptions', icon: CreditCard, color: 'text-purple-600' },
     { id: 'admin', label: 'Trust & Safety Center', icon: ShieldCheck, color: 'text-red-600' },
-  ] as const;
+  ] as const).filter((item) => access.tabs[item.id].allowed);
 
   const handleTabSelect = (tab: 'opportunities' | 'businesses' | 'verification' | 'recruiter' | 'candidate' | 'ai-studio' | 'billing' | 'messages' | 'admin') => {
     setActiveTab(tab);
@@ -53,7 +58,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ activeTab, set
     <>
       {/* Primary Bottom Navigation Bar */}
       <div className="xl:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-stone-950 border-t border-[#E8E4D9] dark:border-stone-900 px-1 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(0,0,0,0.05)] select-none">
-        <div className="grid w-full grid-cols-5 items-stretch">
+        <div className="grid w-full grid-flow-col auto-cols-fr items-stretch">
           {primaryItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;

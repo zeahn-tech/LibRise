@@ -15,7 +15,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({ isOpen, onCl
   const [isProcessing, setIsProcessing] = useState(false);
   const [generatedResult, setGeneratedResult] = useState<string | null>(null);
   
-  const [hasAccess, setHasAccess] = useState(true);
+  const [hasAccess, setHasAccess] = useState(false);
   const [loadingAccess, setLoadingAccess] = useState(false);
 
   useEffect(() => {
@@ -28,11 +28,15 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({ isOpen, onCl
     setLoadingAccess(true);
     const session = authService.getSession();
     const orgId = session?.activeOrganization?.id;
-    if (orgId) {
+    // Default deny: only a confirmed plan entitlement (or platform admin) unlocks the AI tools.
+    const isAdmin = session?.user?.systemRole === 'platform_admin' || session?.user?.primaryRole === 'platform_admin';
+    if (isAdmin) {
+      setHasAccess(true);
+    } else if (orgId) {
       const res = await subscriptionService.getEntitlements(orgId);
-      if (res.data) {
-        setHasAccess(res.data.canUseAI);
-      }
+      setHasAccess(!!res.data?.canUseAI);
+    } else {
+      setHasAccess(false);
     }
     setLoadingAccess(false);
   };

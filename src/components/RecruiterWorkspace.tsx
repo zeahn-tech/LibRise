@@ -37,21 +37,27 @@ import { candidateService } from '../services/candidateService';
 import { CandidateProfileDrawer } from './candidate/CandidateProfileDrawer';
 import { OrganizationTeamModal } from './organization/OrganizationTeamModal';
 import { OrganizationWizardModal } from './organization/OrganizationWizardModal';
+import { useEntitlements } from '../hooks/useEntitlements';
+import { UpgradePrompt } from './common/UpgradePrompt';
 
 interface RecruiterWorkspaceProps {
   opportunities: Opportunity[];
   applications: Application[];
   onUpdateStage: (appId: string, newStage: ApplicationStage, options?: any) => void;
   onOpenCreateModal: () => void;
+  /** Present only when the viewer may open billing (org owner/admin). */
+  onOpenBilling?: () => void;
 }
 
 export const RecruiterWorkspace: React.FC<RecruiterWorkspaceProps> = ({
   opportunities,
   applications,
   onUpdateStage,
-  onOpenCreateModal
+  onOpenCreateModal,
+  onOpenBilling
 }) => {
   const { user, activeOrganization, activeMembership, userOrganizations } = useAuth();
+  const { entitlements } = useEntitlements();
   const { showToast } = useToast();
 
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
@@ -99,6 +105,8 @@ export const RecruiterWorkspace: React.FC<RecruiterWorkspaceProps> = ({
     { label: 'Withdrawn', value: 'withdrawn' }
   ];
 
+  // Plan benefit: the Free plan shows only the first N candidates; paid plans are unlimited.
+  const candidateLimit = entitlements.maxCandidatesViewable;
   const filteredApps = applications.filter((app) => {
     if (selectedStage !== 'all' && app.stage !== selectedStage) return false;
     if (selectedOppId !== 'all' && app.opportunityId !== selectedOppId) return false;
@@ -111,6 +119,8 @@ export const RecruiterWorkspace: React.FC<RecruiterWorkspaceProps> = ({
     }
     return true;
   });
+  const visibleApps = candidateLimit === 'unlimited' ? filteredApps : filteredApps.slice(0, candidateLimit);
+  const hiddenAppsCount = filteredApps.length - visibleApps.length;
 
   const handleOpenCandidateDrawer = async (app: Application) => {
     setActiveAppForDrawer(app);
@@ -384,7 +394,7 @@ export const RecruiterWorkspace: React.FC<RecruiterWorkspaceProps> = ({
             </div>
           </div>
         ) : (
-          filteredApps.map((app) => (
+          visibleApps.map((app) => (
             <div
               key={app.id}
               className="bg-white p-5 sm:p-6 rounded-3xl border border-[#E8E4D9] shadow-xs flex flex-col md:flex-row justify-between gap-4 hover:border-[#D9E3D5] transition-all"
@@ -562,6 +572,14 @@ export const RecruiterWorkspace: React.FC<RecruiterWorkspaceProps> = ({
               </div>
             </div>
           ))
+        )}
+        {hiddenAppsCount > 0 && (
+          <UpgradePrompt
+            title={`${hiddenAppsCount} more candidate${hiddenAppsCount === 1 ? '' : 's'} not shown`}
+            description="Your current plan shows a limited number of candidate profiles. Upgrade to view all applicants."
+            planName="the Starter plan and above"
+            onUpgrade={onOpenBilling}
+          />
         )}
       </div>
 

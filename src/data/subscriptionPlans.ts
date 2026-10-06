@@ -19,7 +19,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       maxCandidatesViewable: 10,
       canViewCandidateContact: false,
       canUseAI: false,
-      prioritySupport: false
+      prioritySupport: false,
+      advancedAnalytics: false
     }
   },
   {
@@ -40,7 +41,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       maxCandidatesViewable: 'unlimited',
       canViewCandidateContact: true,
       canUseAI: false,
-      prioritySupport: false
+      prioritySupport: false,
+      advancedAnalytics: false
     },
     stripePriceIdMonthly: process.env.VITE_STRIPE_BASIC_MONTHLY_PRICE_ID || 'price_basic_monthly',
     stripePriceIdAnnual: process.env.VITE_STRIPE_BASIC_ANNUAL_PRICE_ID || 'price_basic_annual'
@@ -63,7 +65,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       maxCandidatesViewable: 'unlimited',
       canViewCandidateContact: true,
       canUseAI: true,
-      prioritySupport: true
+      prioritySupport: true,
+      advancedAnalytics: true
     },
     stripePriceIdMonthly: process.env.VITE_STRIPE_PRO_MONTHLY_PRICE_ID || 'price_pro_monthly',
     stripePriceIdAnnual: process.env.VITE_STRIPE_PRO_ANNUAL_PRICE_ID || 'price_pro_annual'
@@ -72,6 +75,26 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
 
 export const getPlanById = (id: string): SubscriptionPlan | undefined => {
   return SUBSCRIPTION_PLANS.find((p) => p.id === id);
+};
+
+/**
+ * Resolve the UI plan (entitlements, features, name) for a stored subscription.
+ *
+ * Subscriptions are written under TWO id schemes: the UI plan ids ('plan_pro')
+ * and, since manual mobile money payments, the payment plan ids
+ * ('plan-sub-pro-annual'). Looking a plan up by id alone therefore returned
+ * nothing for every PAID subscriber, so they were shown Free limits and
+ * errors instead of their benefits. The `tier` column is authoritative and
+ * scheme-independent, so it is used as the fallback.
+ */
+export const getPlanForSubscription = (
+  sub: { planId?: string | null; tier?: string | null } | null | undefined
+): SubscriptionPlan => {
+  const free = SUBSCRIPTION_PLANS[0];
+  if (!sub) return free;
+  const byTier = SUBSCRIPTION_PLANS.find((p) => p.tier === sub.tier);
+  if (byTier) return byTier;
+  return (sub.planId && SUBSCRIPTION_PLANS.find((p) => p.id === sub.planId)) || free;
 };
 
 export const getPlanByStripePriceId = (priceIdOrPlanId: string): SubscriptionPlan | undefined => {

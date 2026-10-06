@@ -1,11 +1,14 @@
 import React from 'react';
+import { useAuth } from '../context/AuthContext';
+import { getFeatureAccess } from '../core/auth/featureAccess';
 import { ShieldCheck, ArrowRight, Sparkles, Building, Briefcase, FileCheck, Check } from 'lucide-react';
 
 interface RightSidebarProps {
   onOpenVerification: () => void;
   onOpenAiCopilot: () => void;
+  /** Opens the AI Studio tab (candidate-side tools). */
+  onOpenAiStudio?: () => void;
   onOpenBilling?: () => void;
-  userRole?: string;
   activeCountiesCount?: number;
   openTendersCount?: number;
 }
@@ -13,14 +16,20 @@ interface RightSidebarProps {
 export const RightSidebar: React.FC<RightSidebarProps> = ({
   onOpenVerification,
   onOpenAiCopilot,
+  onOpenAiStudio,
   onOpenBilling,
-  userRole,
   activeCountiesCount = 15,
   openTendersCount = 84
 }) => {
+  const { authContext } = useAuth();
+  const access = getFeatureAccess(authContext);
+  const showVerificationCard =
+    access.tabs.verification.allowed && (access.isEmployer || access.canListBusiness || access.tabs.admin.allowed);
+
   return (
     <aside className="flex flex-col gap-6 w-full">
-      {/* Verification Hub Card (Dark Forest Green Container) */}
+      {/* Verification Hub Card -- for organizations, sellers and staff only */}
+      {showVerificationCard && (
       <div className="bg-[#283618] p-6 rounded-[32px] text-white shadow-xl relative overflow-hidden">
         <div className="absolute -right-8 -top-8 w-28 h-28 bg-[#4F772D] opacity-20 rounded-full blur-2xl"></div>
         
@@ -63,6 +72,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
           <ArrowRight className="w-4 h-4 text-[#4F772D]" />
         </button>
       </div>
+      )}
 
       {/* Platform Statistics Card */}
       <div className="bg-white p-6 rounded-[32px] border border-[#E8E4D9] flex flex-col shadow-xs">
@@ -108,7 +118,8 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
           </span>
         </div>
 
-        {/* AI Copilot Teaser in Natural Tones style */}
+        {/* AI Copilot Teaser -- signed-in users; employers open the copilot, candidates the AI Studio */}
+        {access.tabs['ai-studio'].allowed && (
         <div className="mt-4 pt-4 border-t border-[#E8E4D9] flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-[#ECF3E9] flex items-center justify-center text-[#4F772D]">
@@ -120,15 +131,16 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
             </div>
           </div>
           <button
-            onClick={onOpenAiCopilot}
+            onClick={access.isEmployer || !onOpenAiStudio ? onOpenAiCopilot : onOpenAiStudio}
             className="text-xs font-bold text-[#BC6C25] hover:text-[#283618] px-2 py-1 rounded-lg hover:bg-[#FEFAE0] transition-colors"
           >
             Launch →
           </button>
         </div>
+        )}
 
         {/* Subscription & Billing Teaser */}
-        {(userRole === 'recruiter' || userRole === 'employer') && onOpenBilling && (
+        {access.canSeeBilling && onOpenBilling && (
           <div className="mt-4 pt-4 border-t border-[#E8E4D9] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-xl bg-[#FEFAE0] flex items-center justify-center text-[#BC6C25]">

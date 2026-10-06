@@ -13,7 +13,7 @@ import {
   FeatureEntitlement
 } from '../../types';
 import { db } from '../../db/dbClient';
-import { getPlanById } from '../../data/subscriptionPlans';
+import { getPlanForSubscription } from '../../data/subscriptionPlans';
 
 // ==========================================
 // CENTRAL AUTHORIZATION CONTEXT
@@ -164,6 +164,44 @@ export function canApply(
 }
 
 /**
+ * Role-only check: may this user post vacancies for at least one organization
+ * they belong to? Deliberately ignores the subscription quota -- a recruiter
+ * who has used up their plan still needs to SEE the Post button so they reach
+ * the pay-per-vacancy / upgrade flow. (canCreateOpportunity adds the quota
+ * pre-check on top of this.)
+ */
+export function canPostOpportunities(context: AuthorizationContext): boolean {
+  if (!context.user) return false;
+  if (context.user.accountStatus === 'suspended' || context.user.accountStatus === 'deactivated') return false;
+  if (isPlatformAdmin(context)) return true;
+  return context.userMemberships.some(
+    (m) =>
+      m.status === 'active' &&
+      (m.orgRole === 'owner' ||
+        m.orgRole === 'admin' ||
+        m.orgRole === 'recruiter' ||
+        m.orgRole === 'hiring_manager' ||
+        m.permissions.includes('all') ||
+        m.permissions.includes('opportunities.create'))
+  );
+}
+
+const CANDIDATE_CAPABILITIES: UserCapability[] = ['job_seeker', 'find_opportunities', 'offer_services', 'service_provider'];
+
+/**
+ * Is this person on the "looking for work / services" side of the platform?
+ * Drives the Candidate Portal (applications, CV, saved jobs) and the
+ * candidate-facing AI tools. Employer-only, buyer-only and officer accounts
+ * do not see them unless they also chose a candidate capability.
+ */
+export function isCandidateSide(context: AuthorizationContext): boolean {
+  if (!context.user) return false;
+  if (isPlatformAdmin(context)) return true;
+  if (context.user.primaryRole === 'job_seeker' || context.user.primaryRole === 'service_provider') return true;
+  return (context.capabilities || []).some((c) => CANDIDATE_CAPABILITIES.includes(c));
+}
+
+/**
  * 3. canCreateOpportunity
  * Requires:
  * - Authenticated user with active account
@@ -214,7 +252,7 @@ export function canCreateOpportunity(
   // renders, never whether the create actually succeeds).
   const sub = context.subscription || db.getOrganizationSubscription(targetOrgId);
   if (sub) {
-    const plan = getPlanById(sub.planId);
+    const plan = getPlanForSubscription(sub);
     if (plan && plan.entitlements && plan.entitlements.maxActiveJobs !== 'unlimited') {
       const activeJobsCount = db
         .getOpportunities()
@@ -590,8 +628,15 @@ export function canAccessWorkspace(
     }
 
     case 'candidate': {
-      // Any authenticated user can manage their personal profile and applications
-      return { allowed: true };
+      // Applications, CV and saved jobs only make sense for people seeking
+      // opportunities (job seekers / service providers, or anyone who chose
+      // that capability); employer-, buyer- and officer-only accounts do not see it.
+      if (isCandidateSide(context)) return { allowed: true };
+      return {
+        allowed: false,
+        reason: "You don't have permission to access this workspace.",
+        actionHint: 'The candidate portal is for job seekers and service providers.'
+      };
     }
 
     default:

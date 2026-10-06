@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserRole } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { getFeatureAccess } from '../core/auth/featureAccess';
 import {
   ShieldCheck,
   Plus,
@@ -52,7 +53,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenPostModal,
   notificationCount: _notificationCount
 }) => {
-  const { user, activeOrganization, switchRole, openAuthModal, logout, canAccessWorkspace } = useAuth();
+  const { user, activeOrganization, switchRole, openAuthModal, logout, authContext } = useAuth();
+  const access = getFeatureAccess(authContext);
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -194,7 +196,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               Business M&A
             </button>
-            {user && canAccessWorkspace('verification').allowed && (
+            {user && access.tabs.verification.allowed && (
               <button
                 onClick={() => setActiveTab('verification')}
                 className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
@@ -207,7 +209,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 Verification Hub
               </button>
             )}
-            {user && canAccessWorkspace('recruiter').allowed && (
+            {user && access.tabs.recruiter.allowed && (
               <button
                 onClick={() => setActiveTab('recruiter')}
                 className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap cursor-pointer ${
@@ -219,7 +221,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 Recruiter Studio
               </button>
             )}
-            {user && canAccessWorkspace('candidate').allowed && (
+            {user && access.tabs.candidate.allowed && (
               <button
                 onClick={() => setActiveTab('candidate')}
                 className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1 cursor-pointer ${
@@ -231,7 +233,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>Candidate Portal</span>
               </button>
             )}
-            {user && (
+            {user && access.tabs['ai-studio'].allowed && (
               <button
                 onClick={() => setActiveTab('ai-studio')}
                 className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1 text-[#BC6C25] font-semibold cursor-pointer ${
@@ -243,7 +245,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>✨ AI Copilot</span>
               </button>
             )}
-            {user && canAccessWorkspace('billing').allowed && (
+            {user && access.tabs.billing.allowed && (
               <button
                 onClick={() => setActiveTab('billing')}
                 className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1 cursor-pointer ${
@@ -255,7 +257,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>Subscriptions</span>
               </button>
             )}
-            {user && (
+            {user && access.tabs.messages.allowed && (
               <button
                 onClick={() => setActiveTab('messages')}
                 className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
@@ -268,7 +270,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>Messages</span>
               </button>
             )}
-            {user && canAccessWorkspace('admin').allowed && (
+            {user && access.tabs.admin.allowed && (
               <button
                 onClick={() => setActiveTab('admin')}
                 className={`px-2 2xl:px-3 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
@@ -287,7 +289,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Action Controls & Multi-Role Context */}
         <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
           {/* Organization Multi-Tenant Switcher */}
-          {user && (
+          {access.showOrgSwitcher && (
             <OrganizationSwitcher onOpenCreateWizard={() => setIsOrgWizardOpen(true)} />
           )}
 
@@ -367,6 +369,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                       Profile
                     </button>
 
+                    {access.isCandidate && (
+                      <>
                     <button
                       onClick={() => {
                         setActiveTab('candidate');
@@ -403,6 +407,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                       Saved Opportunities
                     </button>
                     
+                      </>
+                    )}
+
                     <button
                       onClick={() => {
                         setActiveTab('messages');
@@ -499,8 +506,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           )}
 
-          {/* Post Opportunity CTA (tablet/desktop) */}
-          {user && (
+          {/* Post Opportunity CTA (tablet/desktop) -- only for people allowed to post */}
+          {access.canPost && (
             <button
               onClick={onOpenPostModal}
               className="hidden sm:flex items-center gap-1.5 px-3.5 2xl:px-5 py-2.5 bg-[#283618] hover:bg-[#132A13] text-white rounded-xl text-sm font-semibold shadow-xs transition-transform active:scale-95 cursor-pointer whitespace-nowrap"
@@ -514,7 +521,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       </nav>
 
       {/* Post Opportunity: floating action button on phones, sits clear of the bottom bar */}
-      {user && (
+      {access.canPost && (
         <button
           onClick={onOpenPostModal}
           className="sm:hidden fixed right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 flex items-center gap-2 h-12 pl-4 pr-5 bg-[#283618] text-white rounded-full text-sm font-semibold shadow-lg active:scale-95 transition-transform cursor-pointer"

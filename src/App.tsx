@@ -19,6 +19,10 @@ import { OpportunityDetailModal } from './components/OpportunityDetailModal';
 import { AiSemanticSearchBar } from './components/AiSemanticSearchBar';
 import { Footer } from './components/Footer';
 import { MobileBottomNav } from './components/MobileBottomNav';
+import { AccessRestricted } from './components/common/AccessRestricted';
+import { UpgradePrompt } from './components/common/UpgradePrompt';
+import { useEntitlements } from './hooks/useEntitlements';
+import { getFeatureAccess } from './core/auth/featureAccess';
 import { LandingScreen } from './components/LandingScreen';
 import { Briefcase, Sparkles, AlertCircle, ShieldCheck, Users, LayoutDashboard, TrendingUp, BarChart3 } from 'lucide-react';
 import { OfflineIndicator } from './components/pwa/OfflineIndicator';
@@ -73,7 +77,7 @@ const TabLoadingFallback = () => (
 
 function AppContent() {
   const { currency, setCurrency } = useConfig();
-  const { activeRole, switchRole, user, verifyEmail, session } = useAuth();
+  const { activeRole, switchRole, user, verifyEmail, session, authContext, openAuthModal } = useAuth();
   const { showToast } = useToast();
   const { route, navigate } = useRouter();
 
@@ -189,6 +193,11 @@ function AppContent() {
   };
 
   const activeTab = getTabFromPath(route.path);
+  // Central visibility policy (see core/auth/featureAccess.ts): the nav hides what a role
+  // can't use; this guard also covers typed URLs and stale bookmarks.
+  const access = getFeatureAccess(authContext);
+  const { entitlements } = useEntitlements();
+  const tabAccess = access.tabs[activeTab];
   const handleTabChange = (tab: TabKey) => {
     const targetPath = tab === 'opportunities' ? '/' : `/${tab}`;
     navigate(targetPath);
@@ -560,12 +569,22 @@ function AppContent() {
               <RightSidebar
                 onOpenVerification={() => handleTabChange('verification')}
                 onOpenAiCopilot={() => setIsAiModalOpen(true)}
+                onOpenAiStudio={() => handleTabChange('ai-studio')}
                 onOpenBilling={() => handleTabChange('billing')}
-                userRole={user?.primaryRole}
                 openTendersCount={opportunities.filter((o) => o.type === 'tender' && o.status === 'published').length}
               />
             </div>
           </div>
+        )}
+
+        {!tabAccess.allowed && (
+          <AccessRestricted
+            reason={tabAccess.reason}
+            hint={tabAccess.actionHint}
+            isGuest={!user}
+            onSignIn={() => openAuthModal('login')}
+            onGoHome={() => handleTabChange('opportunities')}
+          />
         )}
 
         {/* Tab 2: Business Marketplace M&A */}
@@ -582,7 +601,7 @@ function AppContent() {
         )}
 
         {/* Tab 3: Verification Hub */}
-        {activeTab === 'verification' && (
+        {activeTab === 'verification' && tabAccess.allowed && (
           <Suspense fallback={<TabLoadingFallback />}>
             <VerificationHub
               audits={audits}
@@ -593,7 +612,7 @@ function AppContent() {
         )}
 
         {/* Tab 4: Recruiter & Employer Workspace (Jobs Dashboard + Candidate Pipeline) */}
-        {activeTab === 'recruiter' && (
+        {activeTab === 'recruiter' && tabAccess.allowed && (
           <div className="space-y-6">
             {/* Sub-view Navigation Bar */}
             <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-2xl border border-[#E8E4D9] shadow-2xs w-fit">
@@ -654,17 +673,27 @@ function AppContent() {
                   applications={applications}
                   onUpdateStage={handleUpdateStage}
                   onOpenCreateModal={handleOpenCreateModal}
+                  onOpenBilling={access.canSeeBilling ? () => handleTabChange('billing') : undefined}
                 />
               )}
               {recruiterSubView === 'analytics' && (
-                <EmployerAnalyticsDashboard />
+                entitlements.advancedAnalytics ? (
+                  <EmployerAnalyticsDashboard />
+                ) : (
+                  <UpgradePrompt
+                    title="Advanced analytics"
+                    description="Hiring funnel, source and conversion analytics for your vacancies."
+                    planName="the Professional plan"
+                    onUpgrade={access.canSeeBilling ? () => handleTabChange('billing') : undefined}
+                  />
+                )
               )}
             </Suspense>
           </div>
         )}
 
         {/* Tab 5: Candidate Applications & Profile Management Portal */}
-        {activeTab === 'candidate' && (
+        {activeTab === 'candidate' && tabAccess.allowed && (
           <Suspense fallback={<TabLoadingFallback />}>
             <CandidateDashboard
               onBrowseJobs={() => handleTabChange('opportunities')}
@@ -677,28 +706,28 @@ function AppContent() {
         )}
 
         {/* Tab 6: AI Copilot Studio View */}
-        {activeTab === 'ai-studio' && (
+        {activeTab === 'ai-studio' && tabAccess.allowed && (
           <Suspense fallback={<TabLoadingFallback />}>
-            <AiStudioHub />
+            <AiStudioHub onOpenBilling={access.canSeeBilling ? () => handleTabChange('billing') : undefined} />
           </Suspense>
         )}
 
         {/* Tab 7: Billing & Subscription */}
-        {activeTab === 'billing' && (
+        {activeTab === 'billing' && tabAccess.allowed && (
           <Suspense fallback={<TabLoadingFallback />}>
             <SubscriptionManager />
           </Suspense>
         )}
 
         {/* Tab 8: Platform Secure Messaging & Inquiry Center */}
-        {activeTab === 'messages' && (
+        {activeTab === 'messages' && tabAccess.allowed && (
           <Suspense fallback={<TabLoadingFallback />}>
             <MessagingCenter />
           </Suspense>
         )}
 
         {/* Tab 9: Trust & Safety Officer Command Center */}
-        {activeTab === 'admin' && (
+        {activeTab === 'admin' && tabAccess.allowed && (
           <Suspense fallback={<TabLoadingFallback />}>
             <TrustSafetyAdminCenter currentUserId={user?.id} />
           </Suspense>
@@ -714,7 +743,7 @@ function AppContent() {
         onEdit={handleOpenEditModal}
       />
 
-      {isPostModalOpen && (
+      {isPostModalOpen && access.canPost && (
         <Suspense fallback={null}>
           <PostOpportunityModal
             isOpen={isPostModalOpen}
@@ -740,7 +769,7 @@ function AppContent() {
         </Suspense>
       )}
 
-      {isAiModalOpen && (
+      {isAiModalOpen && access.isEmployer && (
         <Suspense fallback={null}>
           <AiAssistantModal
             isOpen={isAiModalOpen}

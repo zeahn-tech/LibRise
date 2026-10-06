@@ -36,17 +36,22 @@ export const CandidateProfileDrawer: React.FC<CandidateProfileDrawerProps> = ({
   onAdvanceStage
 }) => {
   const { showToast } = useToast();
-  const [canViewContact, setCanViewContact] = useState(true);
+  const [canViewContact, setCanViewContact] = useState(false);
   
   useEffect(() => {
     const checkEntitlement = async () => {
       const session = authService.getSession();
       const orgId = session?.activeOrganization?.id;
-      if (orgId) {
+      const isAdmin = session?.user?.systemRole === 'platform_admin' || session?.user?.primaryRole === 'platform_admin';
+      // A candidate looking at their own profile always sees their own details.
+      const isOwnProfile = !!session?.user && (profile?.userId === session.user.id || application?.candidateUserId === session.user.id);
+      if (isAdmin || isOwnProfile) {
+        setCanViewContact(true);
+      } else if (orgId) {
         const res = await subscriptionService.getEntitlements(orgId);
-        if (res.data) {
-          setCanViewContact(res.data.canViewCandidateContact);
-        }
+        setCanViewContact(!!res.data?.canViewCandidateContact);
+      } else {
+        setCanViewContact(false);
       }
     };
     checkEntitlement();

@@ -32,7 +32,7 @@
 import { OrganizationSubscription, FeatureEntitlement } from '../types';
 import { getSupabaseClient } from '../lib/supabaseClient';
 import { apiClient, ApiResponse } from './apiClient';
-import { SUBSCRIPTION_PLANS, getPlanById, getPlanByStripePriceId } from '../data/subscriptionPlans';
+import { SUBSCRIPTION_PLANS, getPlanById, getPlanByStripePriceId, getPlanForSubscription } from '../data/subscriptionPlans';
 import { authService } from './authService';
 import { notificationService } from './notificationService';
 import { fireAndForget } from '../lib/fireAndForget';
@@ -137,8 +137,7 @@ export const subscriptionService = {
       const subRes = await this.getOrganizationSubscription(organizationId);
       if (!subRes.data) throw new Error('Subscription not found');
 
-      const plan = getPlanById(subRes.data.planId);
-      if (!plan) throw new Error('Plan not found');
+      const plan = getPlanForSubscription(subRes.data);
 
       if (subRes.data.status !== 'active' && subRes.data.status !== 'trialing') {
         return getPlanById('plan_free')!.entitlements;

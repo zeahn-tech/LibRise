@@ -21,9 +21,22 @@ import { AiCvParserModal } from './candidate/AiCvParserModal';
 import { AiJobRecommendationsWidget } from './candidate/AiJobRecommendationsWidget';
 import { opportunityService } from '../services/opportunityService';
 import { ParsedCVResult } from '../services/ai/aiTypes';
+import { useAuth } from '../context/AuthContext';
+import { useEntitlements } from '../hooks/useEntitlements';
+import { AiStudioTool, canUseAiStudioTool } from '../core/auth/featureAccess';
+import { UpgradePrompt } from './common/UpgradePrompt';
 
-export const AiStudioHub: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'recommendations' | 'match' | 'cv_parser' | 'job_drafter' | 'audit_logs'>('overview');
+interface AiStudioHubProps {
+  /** Present only when the viewer may open billing (org owner/admin). */
+  onOpenBilling?: () => void;
+}
+
+export const AiStudioHub: React.FC<AiStudioHubProps> = ({ onOpenBilling }) => {
+  const { authContext } = useAuth();
+  const { entitlements } = useEntitlements();
+  // Each tool is shown only to the audience it was built for (see featureAccess.ts).
+  const allowed = (tool: AiStudioTool) => canUseAiStudioTool(authContext, tool);
+  const [activeTab, setActiveTab] = useState<AiStudioTool>('overview');
   const [previewOpportunities, setPreviewOpportunities] = useState<import('../types').Opportunity[]>([]);
 
   useEffect(() => {
@@ -157,6 +170,7 @@ export const AiStudioHub: React.FC = () => {
         >
           Intelligence Overview
         </button>
+        {allowed('recommendations') && (
         <button
           onClick={() => setActiveTab('recommendations')}
           className={`px-4 py-2.5 rounded-xl transition-all ${
@@ -165,6 +179,8 @@ export const AiStudioHub: React.FC = () => {
         >
           1. Job Recommendations
         </button>
+        )}
+        {allowed('match') && (
         <button
           onClick={() => setActiveTab('match')}
           className={`px-4 py-2.5 rounded-xl transition-all ${
@@ -173,6 +189,8 @@ export const AiStudioHub: React.FC = () => {
         >
           2. Candidate Match Rationale
         </button>
+        )}
+        {allowed('cv_parser') && (
         <button
           onClick={() => setActiveTab('cv_parser')}
           className={`px-4 py-2.5 rounded-xl transition-all ${
@@ -181,6 +199,8 @@ export const AiStudioHub: React.FC = () => {
         >
           3. CV / Resume Parser
         </button>
+        )}
+        {allowed('job_drafter') && (
         <button
           onClick={() => setActiveTab('job_drafter')}
           className={`px-4 py-2.5 rounded-xl transition-all ${
@@ -189,6 +209,8 @@ export const AiStudioHub: React.FC = () => {
         >
           4. Job Drafter Assistant
         </button>
+        )}
+        {allowed('audit_logs') && (
         <button
           onClick={() => setActiveTab('audit_logs')}
           className={`px-4 py-2.5 rounded-xl transition-all ${
@@ -197,6 +219,7 @@ export const AiStudioHub: React.FC = () => {
         >
           Audit Logs ({auditLogs.length})
         </button>
+        )}
       </div>
 
       {/* TAB CONTENT */}
@@ -286,7 +309,7 @@ export const AiStudioHub: React.FC = () => {
       )}
 
       {/* 2. Job Recommendations Demo */}
-      {activeTab === 'recommendations' && (
+      {activeTab === 'recommendations' && allowed('recommendations') && (
         <div className="space-y-4">
           <div className="p-4 bg-[#F9F8F4] rounded-2xl border border-[#E8E4D9]">
             <h3 className="text-sm font-bold text-[#132A13]">
@@ -305,7 +328,15 @@ export const AiStudioHub: React.FC = () => {
       )}
 
       {/* 3. Candidate Match Modal Demo */}
-      {activeTab === 'match' && (
+      {activeTab === 'match' && allowed('match') && !entitlements.canUseAI && (
+        <UpgradePrompt
+          title="AI-powered candidate matching"
+          description="Explainable match analysis between candidates and your vacancies."
+          planName="the Professional plan"
+          onUpgrade={onOpenBilling}
+        />
+      )}
+      {activeTab === 'match' && allowed('match') && entitlements.canUseAI && (
         <div className="p-8 bg-white rounded-3xl border border-[#E8E4D9] text-center space-y-4">
           <Award className="w-12 h-12 text-[#BC6C25] mx-auto" />
           <div className="max-w-md mx-auto space-y-1">
@@ -338,7 +369,7 @@ export const AiStudioHub: React.FC = () => {
       )}
 
       {/* 4. CV Parser Demo */}
-      {activeTab === 'cv_parser' && (
+      {activeTab === 'cv_parser' && allowed('cv_parser') && (
         <div className="p-8 bg-white rounded-3xl border border-[#E8E4D9] text-center space-y-4">
           <FileText className="w-12 h-12 text-[#4F772D] mx-auto" />
           <div className="max-w-md mx-auto space-y-1">
@@ -381,7 +412,15 @@ export const AiStudioHub: React.FC = () => {
       )}
 
       {/* 5. Job Drafter Assistant */}
-      {activeTab === 'job_drafter' && (
+      {activeTab === 'job_drafter' && allowed('job_drafter') && !entitlements.canUseAI && (
+        <UpgradePrompt
+          title="AI job description & screening assistant"
+          description="Generate structured responsibilities, requirements and screening questions."
+          planName="the Professional plan"
+          onUpgrade={onOpenBilling}
+        />
+      )}
+      {activeTab === 'job_drafter' && allowed('job_drafter') && entitlements.canUseAI && (
         <div className="bg-white p-6 rounded-3xl border border-[#E8E4D9] space-y-4">
           <div className="space-y-1">
             <h3 className="text-base font-serif font-bold text-[#132A13]">
@@ -493,7 +532,7 @@ export const AiStudioHub: React.FC = () => {
       )}
 
       {/* 6. Audit Logs */}
-      {activeTab === 'audit_logs' && (
+      {activeTab === 'audit_logs' && allowed('audit_logs') && (
         <div className="bg-white p-6 rounded-3xl border border-[#E8E4D9] space-y-4">
           <div className="flex items-center justify-between">
             <div>

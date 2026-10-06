@@ -1,7 +1,8 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { CreditCard, CheckCircle2, Zap, Calendar, AlertCircle } from 'lucide-react';
 import { SubscriptionPlan, OrganizationSubscription } from '../types';
-import { SUBSCRIPTION_PLANS } from '../data/subscriptionPlans';
+import { SUBSCRIPTION_PLANS, getPlanForSubscription } from '../data/subscriptionPlans';
+import { APP_METADATA } from '../config/constants';
 import { subscriptionService } from '../services/subscriptionService';
 import { authService } from '../services/authService';
 import { useToast } from '../context/ToastContext';
@@ -64,7 +65,7 @@ export const SubscriptionManager: React.FC = () => {
     return <div className="p-8 text-center text-stone-500">Loading subscription status...</div>;
   }
 
-  const currentPlan = SUBSCRIPTION_PLANS.find(p => p.id === subscription?.planId) || SUBSCRIPTION_PLANS[0];
+  const currentPlan = getPlanForSubscription(subscription);
   const periodEnd = subscription?.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null;
   const isPaidTier = !!subscription && subscription.tier !== 'free';
   const isLapsed = isPaidTier && !!periodEnd && periodEnd.getTime() < Date.now();
@@ -127,6 +128,30 @@ export const SubscriptionManager: React.FC = () => {
                 {isLapsed ? 'Renew plan' : 'Extend plan'}
               </button>
             )}
+            {isPaidTier && !isLapsed && (
+              <div className="mt-3 text-xs text-stone-600 bg-[#F9F8F6] border border-[#E8E4D9] rounded-xl px-3 py-2.5" data-testid="support-level">
+                {currentPlan.entitlements.prioritySupport ? (
+                  <>
+                    <span className="font-bold text-[#283618]">Priority support included.</span>{' '}
+                    <a
+                      href={`mailto:${APP_METADATA.supportEmail}?subject=${encodeURIComponent('[PRIORITY] LibRise support request')}`}
+                      className="underline text-[#4F772D] font-semibold"
+                    >
+                      Email {APP_METADATA.supportEmail}
+                    </a>
+                    . Requests marked priority are handled first.
+                  </>
+                ) : (
+                  <>
+                    <span className="font-bold text-[#283618]">Standard email support included.</span>{' '}
+                    <a href={`mailto:${APP_METADATA.supportEmail}`} className="underline text-[#4F772D] font-semibold">
+                      Email {APP_METADATA.supportEmail}
+                    </a>
+                    .
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -159,7 +184,12 @@ export const SubscriptionManager: React.FC = () => {
 
         <div className="grid md:grid-cols-3 gap-6">
           {SUBSCRIPTION_PLANS.map((plan) => {
-            const isCurrent = subscription?.planId === plan.id;
+            // Compare by tier (planId may be a UI id or a payment-plan id) and
+            // treat a lapsed paid plan as Free.
+            const TIER_RANK: Record<string, number> = { free: 0, basic: 1, pro: 2, enterprise: 3 };
+            const effectiveTier = isLapsed ? 'free' : currentPlan.tier;
+            const isCurrent = effectiveTier === plan.tier;
+            const isLowerThanCurrent = (TIER_RANK[plan.tier] ?? 0) < (TIER_RANK[effectiveTier] ?? 0);
             const price = billingCycle === 'annual' ? Math.round(plan.annualPrice / 12) : plan.monthlyPrice;
 
             return (
@@ -207,19 +237,25 @@ export const SubscriptionManager: React.FC = () => {
                   ))}
                 </ul>
 
-                <button
-                  disabled={isCurrent}
-                  onClick={() => handleSubscribe(plan)}
-                  className={`w-full py-3.5 rounded-2xl text-sm font-bold transition-all cursor-pointer ${
-                    isCurrent
-                      ? plan.tier === 'pro' ? 'bg-[#4F772D] text-white opacity-80 cursor-default' : 'bg-[#F9F8F6] text-stone-400 border border-[#E8E4D9] cursor-default'
-                      : plan.tier === 'pro'
-                        ? 'bg-white text-[#283618] hover:bg-stone-100 shadow-md'
-                        : 'bg-[#283618] text-white hover:bg-[#3A4D23]'
-                  }`}
-                >
-                  {isCurrent ? 'Current Plan' : `Upgrade to ${plan.name}`}
-                </button>
+                {plan.tier === 'free' || isLowerThanCurrent ? (
+                  <div className="w-full py-3.5 rounded-2xl text-sm font-bold text-center bg-[#F9F8F6] text-stone-400 border border-[#E8E4D9]">
+                    {isCurrent ? 'Current Plan' : 'Included in your plan'}
+                  </div>
+                ) : (
+                  <button
+                    disabled={isCurrent}
+                    onClick={() => handleSubscribe(plan)}
+                    className={`w-full py-3.5 rounded-2xl text-sm font-bold transition-all cursor-pointer ${
+                      isCurrent
+                        ? plan.tier === 'pro' ? 'bg-[#4F772D] text-white opacity-80 cursor-default' : 'bg-[#F9F8F6] text-stone-400 border border-[#E8E4D9] cursor-default'
+                        : plan.tier === 'pro'
+                          ? 'bg-white text-[#283618] hover:bg-stone-100 shadow-md'
+                          : 'bg-[#283618] text-white hover:bg-[#3A4D23]'
+                    }`}
+                  >
+                    {isCurrent ? 'Current Plan' : `Upgrade to ${plan.name}`}
+                  </button>
+                )}
               </div>
             );
           })}

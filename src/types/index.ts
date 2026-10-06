@@ -644,6 +644,8 @@ export interface FeatureEntitlement {
   canViewCandidateContact: boolean;
   canUseAI: boolean;
   prioritySupport: boolean;
+  /** Employer analytics desk (Pro). */
+  advancedAnalytics: boolean;
 }
 
 export interface SubscriptionPlan {
