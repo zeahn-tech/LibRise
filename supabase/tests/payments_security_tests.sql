@@ -471,6 +471,9 @@ insert into test_log(line) select * from extensions.ok(
   '[subscription][period] *** expiry *** a lapsed pro plan falls back to the free limit (1) and, with 1 live vacancy, has no quota'
 );
 
+-- Free the open subscription payment slot (only one open subscription payment per org).
+update public.payments set status = 'payment_expired' where id = 'pay-paytest-lock';
+
 -- Renewing the same tier before expiry extends the period instead of resetting it.
 update public.organization_subscriptions
 set current_period_start = now() - interval '10 days', current_period_end = now() + interval '20 days'
