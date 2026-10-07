@@ -194,15 +194,15 @@ describe('AI Studio tools by audience', () => {
 
 describe('plan resolution (subscriber gets the plan they paid for)', () => {
   it.each([
-    ['plan-sub-pro-annual', 'pro', 'unlimited', true],
-    ['plan-sub-basic-monthly', 'basic', 5, false],
-    ['plan_pro', 'pro', 'unlimited', true]
+    ['plan-sub-pro-annual', 'pro', 50, true],
+    ['plan-sub-basic-monthly', 'basic', 10, false],
+    ['plan_pro', 'pro', 50, true]
   ])('%s -> %s benefits', (planId, tier, jobs, ai) => {
     const plan = getPlanForSubscription({ planId, tier });
     expect(plan.tier).toBe(tier);
     expect(plan.entitlements.maxActiveJobs).toBe(jobs);
-    // business sellers get the same limit per tier as recruiters
-    expect(plan.entitlements.maxActiveListings).toBe(jobs);
+    // business listings follow the plan too (Starter 3, Pro 10)
+    expect(plan.entitlements.maxActiveListings).toBe(tier === 'pro' ? 10 : 3);
     expect(plan.entitlements.canUseAI).toBe(ai);
   });
   it('unknown / missing subscription falls back to Free', () => {

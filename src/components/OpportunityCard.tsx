@@ -86,6 +86,12 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({
               {opportunity.title}
             </h3>
 
+            {opportunity.isFeatured && (
+              <span className="px-2 py-0.5 bg-[#FEFAE0] text-[#BC6C25] border border-[#E8E4D9] rounded-md text-[10px] font-bold uppercase">
+                {opportunity.isBoosted ? 'Boosted' : 'Featured'}
+              </span>
+            )}
+
             {effectiveStatus === 'draft' && (
               <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded-md text-[10px] font-bold uppercase">
                 Draft

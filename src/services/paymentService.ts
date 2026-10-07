@@ -109,6 +109,7 @@ interface PaymentPlanRow {
   plan_type: PaymentPlanType;
   subscription_tier: string | null;
   billing_cycle: string | null;
+  promotion_level?: string | null;
 }
 
 function rowToPlan(row: PaymentPlanRow): PaymentPlan {
@@ -123,7 +124,8 @@ function rowToPlan(row: PaymentPlanRow): PaymentPlan {
     active: row.active,
     planType: row.plan_type,
     subscriptionTier: row.subscription_tier,
-    billingCycle: row.billing_cycle as 'monthly' | 'annual' | null
+    billingCycle: row.billing_cycle as 'monthly' | 'annual' | null,
+    promotionLevel: (row.promotion_level ?? null) as PaymentPlan['promotionLevel']
   };
 }
 

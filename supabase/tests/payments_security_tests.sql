@@ -94,8 +94,8 @@ insert into test_log(line) select * from extensions.lives_ok(
   '[payments][org A owner][INSERT] recruiter can create a payment (attempting amount_minor = 1)'
 );
 insert into test_log(line) select * from extensions.ok(
-  (select amount_minor from public.payments where id = 'pay-paytest-1') = 500,
-  '[payments][amount manipulation] *** server-authoritative pricing *** client-supplied amount_minor = 1 was overwritten with the plan price (500)'
+  (select amount_minor from public.payments where id = 'pay-paytest-1') = 300,
+  '[payments][amount manipulation] *** server-authoritative pricing *** client-supplied amount_minor = 1 was overwritten with the plan price (300 = $3 Basic Job Post)'
 );
 insert into test_log(line) select * from extensions.throws_ok(
   $$insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
@@ -305,12 +305,12 @@ insert into test_log(line) select * from extensions.lives_ok(
   '[payments][subscription][org A owner][INSERT] can start a subscription payment (attempting amount_minor = 1, no opportunity_id)'
 );
 insert into test_log(line) select * from extensions.ok(
-  (select amount_minor from public.payments where id = 'pay-paytest-sub') = 143000,
-  '[payments][subscription][amount manipulation] *** server-authoritative pricing *** overwritten with the real annual Pro price (143000 = $1,430.00)'
+  (select amount_minor from public.payments where id = 'pay-paytest-sub') = 25000,
+  '[payments][subscription][amount manipulation] *** server-authoritative pricing *** overwritten with the real annual Pro price (25000 = $250.00)'
 );
 insert into test_log(line) select * from extensions.throws_ok(
   $$insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
-    values ('pay-paytest-sub-badopp', 'pub-paytest-sub-badopp', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', 'opp-paytest-a-draft', 'plan-sub-pro-annual', 'manual_momo_orange', 'OHL-PAYTEST-SUB-BADOPP', 143000, 'USD', 'created')$$,
+    values ('pay-paytest-sub-badopp', 'pub-paytest-sub-badopp', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', 'opp-paytest-a-draft', 'plan-sub-pro-annual', 'manual_momo_orange', 'OHL-PAYTEST-SUB-BADOPP', 25000, 'USD', 'created')$$,
   'P0001'::char(5), NULL::text,
   '[payments][subscription] *** target integrity *** a subscription-plan payment must NOT reference an opportunity'
 );
@@ -376,6 +376,11 @@ insert into test_log(line) select * from extensions.is(
   (select plan_id from public.organization_subscriptions where organization_id = 'org-paytest-a')::text, 'plan-sub-pro-annual'::text,
   '[payments][subscription][admin approval] org A''s subscription plan_id is plan-sub-pro-annual'
 );
+insert into test_log(line) select * from extensions.ok(
+  (select current_period_end from public.organization_subscriptions where organization_id = 'org-paytest-a') > now() + interval '364 days'
+  and (select current_period_end from public.organization_subscriptions where organization_id = 'org-paytest-a') < now() + interval '366 days',
+  '[pricing][subscription][annual] *** 365 days *** an approved ANNUAL plan grants a 365-day period, decided by the database'
+);
 reset role;
 
 -- =============================================================================
@@ -384,7 +389,7 @@ reset role;
 -- =============================================================================
 reset role;
 insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
-values ('pay-paytest-h1', 'pub-paytest-h1', 'org-paytest-b', '11111111-aaaa-4aaa-8aaa-000000000002', null, 'plan-sub-basic-monthly', 'manual_momo_mtn', 'OHL-PAYTEST-H1', 4900, 'USD', 'created');
+values ('pay-paytest-h1', 'pub-paytest-h1', 'org-paytest-b', '11111111-aaaa-4aaa-8aaa-000000000002', null, 'plan-sub-basic-monthly', 'manual_momo_mtn', 'OHL-PAYTEST-H1', 1000, 'USD', 'created');
 
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000002',true);
 insert into test_log(line) select * from extensions.throws_ok(
@@ -439,14 +444,14 @@ begin
   -- one at a time: only one OPEN subscription payment per org may exist
   for g in 1..3 loop
     insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
-    values ('pay-paytest-rej' || g, 'pub-paytest-rej' || g, 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', null, 'plan-sub-basic-monthly', 'manual_momo_mtn', 'OHL-PAYTEST-REJ' || g, 4900, 'USD', 'created');
+    values ('pay-paytest-rej' || g, 'pub-paytest-rej' || g, 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', null, 'plan-sub-basic-monthly', 'manual_momo_mtn', 'OHL-PAYTEST-REJ' || g, 1000, 'USD', 'created');
     update public.payments
     set status = 'payment_failed', reviewed_at = now(), reviewed_by_user_id = '11111111-aaaa-4aaa-8aaa-000000000003'
     where id = 'pay-paytest-rej' || g;
   end loop;
 end $$;
 insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
-values ('pay-paytest-lock', 'pub-paytest-lock', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', null, 'plan-sub-basic-monthly', 'manual_momo_mtn', 'OHL-PAYTEST-LOCK', 4900, 'USD', 'created');
+values ('pay-paytest-lock', 'pub-paytest-lock', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', null, 'plan-sub-basic-monthly', 'manual_momo_mtn', 'OHL-PAYTEST-LOCK', 1000, 'USD', 'created');
 
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
 insert into test_log(line) select * from extensions.throws_ok(
@@ -480,7 +485,7 @@ set current_period_start = now() - interval '10 days', current_period_end = now(
 where organization_id = 'org-paytest-a';
 reset role;
 insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
-values ('pay-paytest-renew', 'pub-paytest-renew', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', null, 'plan-sub-pro-monthly', 'manual_momo_mtn', 'OHL-PAYTEST-RENEW', 14900, 'USD', 'created');
+values ('pay-paytest-renew', 'pub-paytest-renew', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', null, 'plan-sub-pro-monthly', 'manual_momo_mtn', 'OHL-PAYTEST-RENEW', 11000, 'USD', 'created');
 update public.payments set status = 'payment_pending', provider_transaction_id = 'TXN-RENEW-90210', sender_phone_number = '+231770000001' where id = 'pay-paytest-renew';
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000003',true);
 insert into test_log(line) select * from extensions.lives_ok(
@@ -492,6 +497,109 @@ insert into test_log(line) select * from extensions.ok(
   (select current_period_end from public.organization_subscriptions where organization_id = 'org-paytest-a') > now() + interval '49 days'
   and (select current_period_end from public.organization_subscriptions where organization_id = 'org-paytest-a') < now() + interval '51 days',
   '[subscription][renewal] *** no days lost *** 20 days remaining + 30 paid = about 50 days'
+);
+
+
+-- =============================================================================
+-- 9. PRICING REVISION: Starter $10/$100, Pro $25/$250, pay-as-you-go $3/$5/$10
+--    limits 1 / 10 / 50, promotion only via approved payment or plan slots
+-- =============================================================================
+reset role;
+insert into test_log(line) select * from extensions.is(
+  (select array_agg(amount_minor order by id) from public.payment_plans where plan_type = 'vacancy')::text,
+  '{300,500,1000}'::text,
+  '[pricing][pay-as-you-go] Basic $3, Featured $5, Premium $10 (plan-vacancy-basic/featured/premium)'
+);
+insert into test_log(line) select * from extensions.is(
+  (select amount_minor::text || '/' || duration_days::text from public.payment_plans where id = 'plan-sub-basic-monthly'), '1000/30',
+  '[pricing][starter] monthly = $10 for 30 days'
+);
+insert into test_log(line) select * from extensions.is(
+  (select amount_minor::text || '/' || duration_days::text from public.payment_plans where id = 'plan-sub-basic-annual'), '10000/365',
+  '[pricing][starter] annual = $100 for 365 days'
+);
+insert into test_log(line) select * from extensions.is(
+  (select amount_minor::text || '/' || duration_days::text from public.payment_plans where id = 'plan-sub-pro-monthly'), '2500/30',
+  '[pricing][pro] monthly = $25 for 30 days'
+);
+insert into test_log(line) select * from extensions.is(
+  (select amount_minor::text || '/' || duration_days::text from public.payment_plans where id = 'plan-sub-pro-annual'), '25000/365',
+  '[pricing][pro] annual = $250 for 365 days'
+);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$update public.payment_plans set duration_days = 30 where id = 'plan-sub-pro-annual'$$,
+  '23514'::char(5), NULL::text,
+  '[pricing][annual] *** CHECK *** an annual subscription plan can never be configured with a 30-day period'
+);
+insert into test_log(line) select * from extensions.is(
+  (select max_jobs::text || '/' || max_listings::text from public.tier_limits('free')), '1/1',
+  '[limits][free] 1 active job / 1 business listing'
+);
+insert into test_log(line) select * from extensions.is(
+  (select max_jobs from public.tier_limits('basic')), 10,
+  '[limits][starter] 10 active jobs'
+);
+insert into test_log(line) select * from extensions.is(
+  (select max_jobs from public.tier_limits('pro')), 50,
+  '[limits][pro] 50 active jobs (no longer unlimited)'
+);
+insert into test_log(line) select * from extensions.is(
+  public.org_effective_tier('org-paytest-a')::text, 'pro'::text,
+  '[limits] org A has an active Pro period => pro'
+);
+insert into test_log(line) select * from extensions.is(
+  public.org_effective_tier('org-paytest-b')::text, 'free'::text,
+  '[limits][free] an org with no paid row is on the permanent Free plan'
+);
+
+-- Promotion cannot be self-granted by a Free org
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000002',true);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$update public.opportunities set is_featured = true where id = 'opp-paytest-b-draft'$$,
+  'P0402'::char(5), NULL::text,
+  '[promotion][free org B owner] *** cannot self-feature *** featuring needs a plan slot or an approved Featured/Premium payment'
+);
+-- A Pro org can use its plan slots, but can never set a boost
+select set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
+insert into test_log(line) select * from extensions.lives_ok(
+  $$update public.opportunities set is_featured = true, boosted_until = now() + interval '30 days' where id = 'opp-paytest-a-draft'$$,
+  '[promotion][pro org A owner] can use a featured slot included in the plan'
+);
+reset role;
+insert into test_log(line) select * from extensions.ok(
+  (select boosted_until is null from public.opportunities where id = 'opp-paytest-a-draft'),
+  '[promotion][pro org A owner] *** cannot self-boost *** boosted_until set by the client is discarded'
+);
+insert into test_log(line) select * from extensions.ok(
+  (select featured_until = (select current_period_end from public.organization_subscriptions where organization_id = 'org-paytest-a')
+   from public.opportunities where id = 'opp-paytest-a-draft'),
+  '[promotion][pro org A owner] plan-granted featuring ends with the subscription period'
+);
+
+-- Premium pay-as-you-go: approval publishes + features + boosts
+insert into public.opportunities (id, organization_id, created_by_user_id, title, slug, opportunity_type, workplace_model, county, location_details, description, status)
+values ('opp-paytest-b-promo', 'org-paytest-b', '11111111-aaaa-4aaa-8aaa-000000000002', 'Org B premium job', 'paytest-b-promo', 'job', 'onsite', 'Montserrado', 'Congo Town', 'Premium pay-as-you-go', 'payment_required');
+insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
+values ('pay-paytest-promo', 'pub-paytest-promo', 'org-paytest-b', '11111111-aaaa-4aaa-8aaa-000000000002', 'opp-paytest-b-promo', 'plan-vacancy-premium', 'manual_momo_mtn', 'OHL-PAYTEST-PROMO', 1, 'USD', 'created');
+insert into test_log(line) select * from extensions.is(
+  (select amount_minor from public.payments where id = 'pay-paytest-promo'), 1000,
+  '[pricing][pay-as-you-go] a client-supplied amount of 1 is overwritten with the Premium price (1000 = $10)'
+);
+update public.payments set status = 'payment_pending', provider_transaction_id = 'TXN-PROMO-48213', sender_phone_number = '+231770000002' where id = 'pay-paytest-promo';
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000003',true);
+insert into test_log(line) select * from extensions.lives_ok(
+  $$select public.admin_review_payment('pay-paytest-promo', 'approve', 'verified against MoMo statement')$$,
+  '[promotion][premium] platform admin approves a Premium vacancy payment'
+);
+reset role;
+insert into test_log(line) select * from extensions.is(
+  (select status from public.opportunities where id = 'opp-paytest-b-promo')::text, 'published'::text,
+  '[promotion][premium] the vacancy is published'
+);
+insert into test_log(line) select * from extensions.ok(
+  (select is_featured and featured_until > now() + interval '44 days' and boosted_until > now() + interval '44 days'
+   from public.opportunities where id = 'opp-paytest-b-promo'),
+  '[promotion][premium] *** featured AND boosted for the plan duration (45 days) ***'
 );
 
 -- =============================================================================

@@ -123,7 +123,7 @@ describe('subscriptionService', () => {
     mockFrom.mockReturnValue(chain({ data: sampleSubRow({ current_period_end: new Date(Date.now() + 86_400_000).toISOString() }), error: null }));
     const { subscriptionService } = await import('../services/subscriptionService');
     const res = await subscriptionService.getEntitlements('org-1');
-    expect(res.data?.maxActiveJobs).toBe('unlimited');
+    expect(res.data?.maxActiveJobs).toBe(50);
   });
 
   it('mockFulfillSubscription(): updates an existing subscription rather than inserting a duplicate', async () => {

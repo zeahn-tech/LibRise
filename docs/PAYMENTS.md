@@ -73,7 +73,7 @@ Money is stored as **integer minor units** (`amount_minor`); the UI formats with
    `VITE_MOMO_MTN_NUMBER`, `VITE_MOMO_ORANGE_NUMBER`, `VITE_MOMO_ACCOUNT_NAME`. **Left empty, the checkout refuses to
    show payment instructions** rather than showing a blank or fake number. There are deliberately no placeholder numbers.
 3. Make sure at least one real user has `system_role = 'platform_admin'` — nobody else can approve payments.
-4. Edit prices in the `payment_plans` table (never in code). Seed rows are examples ($5 / $10 / $20).
+4. Edit prices in the `payment_plans` table (never in code). Current prices (migration `20261008100000_*`): pay-as-you-go Basic $3 / Featured $5 / Premium (boosted) $10; Starter $10/mo or $100/yr; Pro $25/mo or $250/yr. Annual plans are 365 days and monthly 30, guaranteed by a CHECK constraint, and the amount is always taken from this table server-side.
 5. If you installed via `supabase/manual/payments_setup.sql`, re-run it to pick up Part 5 (reference hardening + subscription
    expiry); with `supabase db push` the migration `20261006100000_*` applies automatically.
 6. Run `supabase/tests/payments_security_tests.sql` (CI runs it in the `rls-security-tests` job).
@@ -115,8 +115,7 @@ confirmed it. The Approve button stays disabled until the three on-screen confir
    unit test exercises it; calling it against a real database is now rejected. Subscriptions now expire (see the table above); the Subscription page shows the end date and a Renew/Extend button
    instead of the old Stripe "Manage Billing" placeholder. There is still no self-service
    downgrade/cancellation flow — `SubscriptionManager.tsx` shows a plain message instead of pretending one exists.
-3. **Tier limits are duplicated in SQL** (`org_has_publish_quota`: free 1 / basic 5 / pro unlimited) because the DB can't
-   read `src/data/subscriptionPlans.ts`. Change both together.
+3. **Tier limits live in ONE SQL function**, `tier_limits()` (jobs Free 1 / Starter 10 / Pro 50; business listings 1 / 3 / 10; featured slots 0 / 1 / 5). `org_has_publish_quota()`, `owner_listing_limit()` and the featured-slot guard all call it, and `org_effective_tier()` is the single place that turns a lapsed or missing paid plan into `free`. `src/data/subscriptionPlans.ts` only mirrors these numbers for display; `src/tests/pricing.test.ts` fails if the two drift. Free is a permanent plan (no trial, no expiry). Pay-as-you-go: approving a Featured/Premium vacancy payment also sets `is_featured` / `featured_until` / `boosted_until` (Premium); clients cannot set these columns themselves (`guard_opportunity_promotion`).
 4. **A pre-existing bug was fixed along the way:** every real org was auto-provisioned the Pro plan (any id starting with
    `org-` was treated as a seed org), so no payment gate could ever have fired. Real orgs now start on the free plan.
    Consequence: newly created orgs are limited to **1 free published vacancy** until they pay or subscribe.

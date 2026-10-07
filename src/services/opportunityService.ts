@@ -143,6 +143,8 @@ interface OpportunityRow {
   views_count: number;
   applications_count: number;
   is_featured: boolean | null;
+  featured_until?: string | null;
+  boosted_until?: string | null;
   created_at: string;
   updated_at: string;
   organizations: OrganizationRow | null;
@@ -230,7 +232,9 @@ function rowToOpportunity(row: OpportunityRow): Opportunity {
     postedDate: row.created_at.split('T')[0],
     openingsCount: row.number_of_openings ?? 1,
     screeningQuestions: row.screening_questions ?? undefined,
-    isFeatured: row.is_featured ?? false,
+    // Featuring and boosting are time-limited (paid period / subscription period).
+    isFeatured: (row.is_featured ?? false) && (!row.featured_until || new Date(row.featured_until).getTime() > Date.now()),
+    isBoosted: !!row.boosted_until && new Date(row.boosted_until).getTime() > Date.now(),
     viewsCount: row.views_count ?? 0,
     applicationsCount: row.applications_count ?? 0,
     status: computeEffectiveStatus(row),
@@ -330,7 +334,14 @@ export const opportunityService = {
         opps = opps.filter((o) => o.status === 'published');
       }
 
-      return opps;
+      // Placement: boosted (Premium) first, then featured, then everything
+      // else; newest first within each group. Array.sort is stable, so this
+      // only reorders by promotion and otherwise keeps the incoming order.
+      const rank = (o: Opportunity) => (o.isBoosted ? 2 : o.isFeatured ? 1 : 0);
+      return opps
+        .map((opp, i) => ({ opp, i }))
+        .sort((a, b) => rank(b.opp) - rank(a.opp) || a.i - b.i)
+        .map(({ opp }) => opp);
     });
   },
 

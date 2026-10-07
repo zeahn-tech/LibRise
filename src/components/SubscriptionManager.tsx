@@ -1,9 +1,10 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { CreditCard, CheckCircle2, Zap, Building2 } from 'lucide-react';
-import { SubscriptionPlan, OrganizationSubscription } from '../types';
+import { SubscriptionPlan, OrganizationSubscription, PaymentPlan } from '../types';
 import { SUBSCRIPTION_PLANS, getPlanForSubscription } from '../data/subscriptionPlans';
 import { APP_METADATA } from '../config/constants';
 import { subscriptionService } from '../services/subscriptionService';
+import { paymentService, formatMinorAmount } from '../services/paymentService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { evaluatePermission, canPostOpportunities } from '../core/auth/permissionEngine';
@@ -19,6 +20,11 @@ export const SubscriptionManager: React.FC = () => {
   const [checkoutPlanId, setCheckoutPlanId] = useState<string | null>(null);
 
   const [isOrgWizardOpen, setIsOrgWizardOpen] = useState(false);
+  // Authoritative prices (payment_plans). Falls back to the plan metadata's
+  // display prices only if this can't be loaded; the checkout always uses the
+  // database amount regardless.
+  const [subPlans, setSubPlans] = useState<PaymentPlan[]>([]);
+  const [vacancyPlans, setVacancyPlans] = useState<PaymentPlan[]>([]);
 
   const { activeOrganization, authContext } = useAuth();
   const orgId = activeOrganization?.id;
@@ -34,10 +40,29 @@ export const SubscriptionManager: React.FC = () => {
       : 'Recruiter Subscription & Billing';
   const blurb =
     audience === 'seller'
-      ? 'Manage your seller plan, feature entitlements, and billing history. Upgrade to list more businesses for sale and unlock priority support.'
+      ? 'Manage your seller plan, feature entitlements, and billing history. Upgrade to list more businesses for sale and reach more buyers.'
       : audience === 'both'
-        ? 'Manage your plan, feature entitlements, and billing history. Upgrade for more active vacancies, more business listings, and AI-powered matching.'
-        : 'Manage your employer plans, feature entitlements, and billing history. Upgrade to unlock AI-powered matching and unlimited active vacancies.';
+        ? 'Manage your plan, feature entitlements, and billing history. Find employees faster, reach more customers, and make your business more visible.'
+        : 'Manage your plan, feature entitlements, and billing history. Find employees faster and make your business more visible.';
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([paymentService.getPlans('subscription'), paymentService.getPlans('vacancy')]).then(([subs, vacs]) => {
+      if (cancelled) return;
+      if (subs.data) setSubPlans(subs.data);
+      if (vacs.data) setVacancyPlans(vacs.data);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  /** Price in whole currency units for a tier+cycle: database first, display fallback second. */
+  const priceFor = (plan: SubscriptionPlan, cycle: 'monthly' | 'annual'): number => {
+    const row = subPlans.find((p) => p.subscriptionTier === plan.tier && p.billingCycle === cycle);
+    if (row) return row.amountMinor / 100;
+    return cycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
+  };
+  const annualSavings = (plan: SubscriptionPlan): number =>
+    Math.max(0, Math.round((priceFor(plan, 'monthly') * 12 - priceFor(plan, 'annual')) * 100) / 100);
 
   useEffect(() => {
     if (orgId) {
@@ -222,7 +247,7 @@ export const SubscriptionManager: React.FC = () => {
             >
               Annual Billing
               <span className="px-2 py-0.5 bg-[#FEFAE0] text-[#BC6C25] rounded-full text-[10px] uppercase tracking-wider border border-[#E8E4D9]">
-                Save 20%
+                Save up to ${Math.max(0, ...SUBSCRIPTION_PLANS.map(annualSavings))}
               </span>
             </button>
           </div>
@@ -236,7 +261,8 @@ export const SubscriptionManager: React.FC = () => {
             const effectiveTier = isLapsed ? 'free' : currentPlan.tier;
             const isCurrent = effectiveTier === plan.tier;
             const isLowerThanCurrent = (TIER_RANK[plan.tier] ?? 0) < (TIER_RANK[effectiveTier] ?? 0);
-            const price = billingCycle === 'annual' ? Math.round(plan.annualPrice / 12) : plan.monthlyPrice;
+            const price = priceFor(plan, billingCycle);
+            const savings = plan.tier === 'free' ? 0 : annualSavings(plan);
 
             return (
               <div 
@@ -263,13 +289,20 @@ export const SubscriptionManager: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="mb-8 flex items-end gap-1">
-                  <span className={`text-4xl font-black ${plan.tier === 'pro' ? 'text-white' : 'text-[#283618]'}`}>
-                    ${price}
-                  </span>
-                  <span className={`text-sm pb-1 font-medium ${plan.tier === 'pro' ? 'text-stone-400' : 'text-stone-400'}`}>
-                    /mo
-                  </span>
+                <div className="mb-8">
+                  <div className="flex items-end gap-1">
+                    <span className={`text-4xl font-black ${plan.tier === 'pro' ? 'text-white' : 'text-[#283618]'}`}>
+                      ${price}
+                    </span>
+                    <span className={`text-sm pb-1 font-medium ${plan.tier === 'pro' ? 'text-stone-400' : 'text-stone-400'}`}>
+                      {plan.tier === 'free' ? 'forever' : billingCycle === 'annual' ? '/ year' : '/ month'}
+                    </span>
+                  </div>
+                  {billingCycle === 'annual' && savings > 0 && (
+                    <p className={`text-xs font-semibold mt-1 ${plan.tier === 'pro' ? 'text-[#A3B18A]' : 'text-[#4F772D]'}`} data-testid={`savings-${plan.tier}`}>
+                      Save ${savings} annually
+                    </p>
+                  )}
                 </div>
 
                 <ul className="space-y-4 mb-8 flex-1">
@@ -307,6 +340,31 @@ export const SubscriptionManager: React.FC = () => {
           })}
         </div>
       </div>
+
+      {/* Pay-as-you-go */}
+      {vacancyPlans.length > 0 && (
+        <div className="bg-white p-6 md:p-8 rounded-[32px] border border-[#E8E4D9]" data-testid="pay-as-you-go">
+          <h3 className="text-xl font-bold font-display text-[#283618] tracking-tight">Pay-as-you-go</h3>
+          <p className="text-sm text-stone-500 mt-1 max-w-2xl">
+            Don't need a monthly subscription? Only hiring occasionally? Pay only when you need to post. The option is offered
+            when you publish a job beyond your plan's limit.
+          </p>
+          <div className="grid sm:grid-cols-3 gap-4 mt-6">
+            {vacancyPlans.map((vp) => (
+              <div key={vp.id} className="border border-[#E8E4D9] rounded-2xl p-4 bg-[#F9F8F6]">
+                <div className="font-bold text-[#283618]">{vp.name}</div>
+                <div className="text-2xl font-black text-[#283618] mt-1">{formatMinorAmount(vp.amountMinor, vp.currency)}</div>
+                <p className="text-xs text-stone-500 mt-1">{vp.description}</p>
+                <ul className="mt-3 space-y-1">
+                  {vp.features.map((f) => (
+                    <li key={f} className="text-xs text-stone-600 flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-[#4F772D]" />{f}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

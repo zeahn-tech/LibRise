@@ -115,6 +115,29 @@ describe('opportunityService', () => {
     mockFrom.mockReset();
   });
 
+  it('list(): boosted vacancies first, then featured, then the rest; expired promotions do not count', async () => {
+    const future = new Date(Date.now() + 5 * 86_400_000).toISOString();
+    const past = new Date(Date.now() - 86_400_000).toISOString();
+    const builder = chain({
+      data: [
+        sampleOppRow({ id: 'plain-1' }),
+        sampleOppRow({ id: 'featured-1', is_featured: true, featured_until: future }),
+        sampleOppRow({ id: 'expired-feature', is_featured: true, featured_until: past }),
+        sampleOppRow({ id: 'boosted-1', is_featured: true, featured_until: future, boosted_until: future }),
+        sampleOppRow({ id: 'plain-2' })
+      ],
+      error: null
+    });
+    mockFrom.mockReturnValue(builder);
+
+    const { opportunityService } = await import('../services/opportunityService');
+    const res = await opportunityService.list();
+
+    expect(res.data?.map((o) => o.id)).toEqual(['boosted-1', 'featured-1', 'plain-1', 'expired-feature', 'plain-2']);
+    expect(res.data?.find((o) => o.id === 'expired-feature')?.isFeatured).toBe(false);
+    expect(res.data?.find((o) => o.id === 'boosted-1')?.isBoosted).toBe(true);
+  });
+
   it('list(): applies structural filters onto the query builder and joins organizations', async () => {
     const builder = chain({ data: [], error: null });
     mockFrom.mockReturnValue(builder);

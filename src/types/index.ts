@@ -158,6 +158,8 @@ export interface Opportunity {
   openingsCount: number;
   screeningQuestions?: string[];
   isFeatured?: boolean;
+  /** Paid Premium boost currently active (top placement). */
+  isBoosted?: boolean;
   viewsCount: number;
   applicationsCount: number;
   status: 'published' | 'draft' | 'closed' | 'expired' | 'archived' | 'payment_required' | 'payment_pending' | 'payment_failed' | 'payment_expired';
@@ -648,6 +650,12 @@ export interface FeatureEntitlement {
   prioritySupport: boolean;
   /** Employer analytics desk (Pro). */
   advancedAnalytics: boolean;
+  /** Job promotion/boost tools (Starter and up). */
+  jobPromotion: boolean;
+  /** Vacancies that can be featured at the same time at no extra charge (Starter 1, Pro 5). */
+  maxFeaturedVacancies: number;
+  /** Priority placement in listings (Pro). */
+  priorityVisibility: boolean;
 }
 
 export interface SubscriptionPlan {
@@ -713,6 +721,8 @@ export interface PaymentPlan {
   planType: PaymentPlanType;
   subscriptionTier?: string | null;
   billingCycle?: 'monthly' | 'annual' | null;
+  /** Pay-as-you-go tier: basic | featured | premium (vacancy plans only). */
+  promotionLevel?: 'basic' | 'featured' | 'premium' | null;
 }
 
 export interface Payment {

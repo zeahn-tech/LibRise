@@ -1,19 +1,31 @@
 import { SubscriptionPlan } from '../types';
 
+/**
+ * UI metadata for the plans: names, copy, feature lists and entitlements.
+ *
+ * What a plan COSTS is authoritative in the database (payment_plans, see
+ * supabase/migrations/20261008100000_pricing_revision.sql); checkout and the
+ * pricing page read it from there. monthlyPrice/annualPrice below are only a
+ * display fallback for when that table can't be reached, and a test fails if
+ * they drift from the migration. Job/listing/featured LIMITS are enforced in
+ * the database by tier_limits() in the same migration -- keep these in sync
+ * (a test checks that too).
+ */
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     id: 'plan_free',
     tier: 'free',
-    name: 'Free Trial',
-    description: 'Perfect for small businesses making their first hire or listing their first business for sale.',
+    name: 'Free',
+    description: 'For businesses getting started. Free, with no time limit.',
     monthlyPrice: 0,
     annualPrice: 0,
     features: [
-      'Post up to 1 active job',
-      'List up to 1 business for sale',
-      'View basic candidate profiles',
+      'Business / organization profile',
+      'Post 1 active job',
+      'List 1 business for sale',
       'Basic applicant tracking',
-      '14-day trial period'
+      'View basic candidate profiles',
+      'Standard support'
     ],
     entitlements: {
       maxActiveJobs: 1,
@@ -22,31 +34,41 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       canViewCandidateContact: false,
       canUseAI: false,
       prioritySupport: false,
-      advancedAnalytics: false
+      advancedAnalytics: false,
+      jobPromotion: false,
+      maxFeaturedVacancies: 0,
+      priorityVisibility: false
     }
   },
   {
     id: 'plan_basic',
     tier: 'basic',
     name: 'Starter',
-    description: 'For growing teams and sellers with consistent hiring or listing needs.',
-    monthlyPrice: 49,
-    annualPrice: 470, // ~20% discount
+    description: 'Everything a growing business needs to recruit and get discovered.',
+    monthlyPrice: 10,
+    annualPrice: 100,
     features: [
-      'Post up to 5 active jobs',
-      'List up to 5 businesses for sale',
-      'View unlimited candidate profiles',
-      'View candidate contact info',
-      'Standard email support'
+      'Everything in Free',
+      'Up to 10 active jobs',
+      'Up to 3 businesses for sale',
+      'Job promotion / boost',
+      '1 featured vacancy at a time',
+      'Full applicant management',
+      'Candidate contact info',
+      'Improved visibility',
+      'Standard support'
     ],
     entitlements: {
-      maxActiveJobs: 5,
-      maxActiveListings: 5,
+      maxActiveJobs: 10,
+      maxActiveListings: 3,
       maxCandidatesViewable: 'unlimited',
       canViewCandidateContact: true,
       canUseAI: false,
       prioritySupport: false,
-      advancedAnalytics: false
+      advancedAnalytics: false,
+      jobPromotion: true,
+      maxFeaturedVacancies: 1,
+      priorityVisibility: false
     },
     stripePriceIdMonthly: process.env.VITE_STRIPE_BASIC_MONTHLY_PRICE_ID || 'price_basic_monthly',
     stripePriceIdAnnual: process.env.VITE_STRIPE_BASIC_ANNUAL_PRICE_ID || 'price_basic_annual'
@@ -54,25 +76,32 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     id: 'plan_pro',
     tier: 'pro',
-    name: 'Professional',
-    description: 'Advanced recruiting tools and AI matching.',
-    monthlyPrice: 149,
-    annualPrice: 1430, // ~20% discount
+    name: 'Pro',
+    description: 'More recruiting capacity, greater visibility, and better tools for established businesses.',
+    monthlyPrice: 25,
+    annualPrice: 250,
     features: [
-      'Post unlimited active jobs',
-      'List unlimited businesses for sale',
-      'AI-powered candidate matching',
-      'Priority support',
-      'Advanced analytics'
+      'Everything in Starter',
+      'Up to 50 active jobs',
+      'Up to 10 businesses for sale',
+      'Up to 5 featured vacancies at a time',
+      'Priority visibility',
+      'Advanced analytics',
+      'Advanced applicant tools',
+      'AI candidate matching',
+      'Priority support'
     ],
     entitlements: {
-      maxActiveJobs: 'unlimited',
-      maxActiveListings: 'unlimited',
+      maxActiveJobs: 50,
+      maxActiveListings: 10,
       maxCandidatesViewable: 'unlimited',
       canViewCandidateContact: true,
       canUseAI: true,
       prioritySupport: true,
-      advancedAnalytics: true
+      advancedAnalytics: true,
+      jobPromotion: true,
+      maxFeaturedVacancies: 5,
+      priorityVisibility: true
     },
     stripePriceIdMonthly: process.env.VITE_STRIPE_PRO_MONTHLY_PRICE_ID || 'price_pro_monthly',
     stripePriceIdAnnual: process.env.VITE_STRIPE_PRO_ANNUAL_PRICE_ID || 'price_pro_annual'
