@@ -1,11 +1,13 @@
 import React, { Suspense, lazy, useEffect, useState } from 'react';
-import { CreditCard, CheckCircle2, Zap, Calendar, AlertCircle } from 'lucide-react';
+import { CreditCard, CheckCircle2, Zap, Building2 } from 'lucide-react';
 import { SubscriptionPlan, OrganizationSubscription } from '../types';
 import { SUBSCRIPTION_PLANS, getPlanForSubscription } from '../data/subscriptionPlans';
 import { APP_METADATA } from '../config/constants';
 import { subscriptionService } from '../services/subscriptionService';
-import { authService } from '../services/authService';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { evaluatePermission, canPostOpportunities } from '../core/auth/permissionEngine';
+import { OrganizationWizardModal } from './organization/OrganizationWizardModal';
 
 const PaymentCheckoutFlow = lazy(() => import('./payments/PaymentCheckoutFlow').then((m) => ({ default: m.PaymentCheckoutFlow })));
 
@@ -16,12 +18,33 @@ export const SubscriptionManager: React.FC = () => {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
   const [checkoutPlanId, setCheckoutPlanId] = useState<string | null>(null);
 
-  const session = authService.getSession();
-  const orgId = session.activeOrganization?.id;
+  const [isOrgWizardOpen, setIsOrgWizardOpen] = useState(false);
+
+  const { activeOrganization, authContext } = useAuth();
+  const orgId = activeOrganization?.id;
+
+  // Sellers and recruiters share the same plans; only the copy differs.
+  const isSeller = evaluatePermission(authContext, 'business.list');
+  const isRecruiter = canPostOpportunities(authContext);
+  const audience: 'seller' | 'recruiter' | 'both' =
+    isSeller && isRecruiter ? 'both' : isSeller ? 'seller' : 'recruiter';
+  const heading =
+    audience === 'seller' ? 'Seller Subscription & Billing'
+      : audience === 'both' ? 'Recruiter & Seller Subscription & Billing'
+      : 'Recruiter Subscription & Billing';
+  const blurb =
+    audience === 'seller'
+      ? 'Manage your seller plan, feature entitlements, and billing history. Upgrade to list more businesses for sale and unlock priority support.'
+      : audience === 'both'
+        ? 'Manage your plan, feature entitlements, and billing history. Upgrade for more active vacancies, more business listings, and AI-powered matching.'
+        : 'Manage your employer plans, feature entitlements, and billing history. Upgrade to unlock AI-powered matching and unlimited active vacancies.';
 
   useEffect(() => {
     if (orgId) {
       loadSubscription(orgId);
+    } else {
+      setSubscription(null);
+      setLoading(false);
     }
   }, [orgId]);
 
@@ -61,6 +84,29 @@ export const SubscriptionManager: React.FC = () => {
     setCheckoutPlanId(`plan-sub-${plan.tier}-${billingCycle}`);
   };
 
+  if (!orgId) {
+    // Subscriptions belong to an organization. A seller (or recruiter) who has
+    // not created theirs yet is walked through it instead of seeing a blank page.
+    return (
+      <div className="max-w-xl mx-auto bg-white p-8 rounded-[32px] border border-[#E8E4D9] text-center" data-testid="billing-needs-org">
+        <div className="w-12 h-12 mx-auto rounded-2xl bg-[#FEFAE0] text-[#BC6C25] flex items-center justify-center mb-4">
+          <Building2 className="w-6 h-6" />
+        </div>
+        <h2 className="text-xl font-bold font-display text-[#283618] tracking-tight">{heading}</h2>
+        <p className="text-sm text-stone-500 mt-2">
+          Plans are attached to your organization profile. Create yours (it takes a minute) to see plans and upgrade.
+        </p>
+        <button
+          onClick={() => setIsOrgWizardOpen(true)}
+          className="mt-6 px-5 min-h-11 rounded-xl bg-[#283618] text-white text-sm font-semibold cursor-pointer"
+        >
+          Create organization profile
+        </button>
+        <OrganizationWizardModal isOpen={isOrgWizardOpen} onClose={() => setIsOrgWizardOpen(false)} />
+      </div>
+    );
+  }
+
   if (loading) {
     return <div className="p-8 text-center text-stone-500">Loading subscription status...</div>;
   }
@@ -90,10 +136,10 @@ export const SubscriptionManager: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
             <h2 className="text-2xl font-bold font-display text-[#283618] tracking-tight">
-              Recruiter Subscription & Billing
+              {heading}
             </h2>
             <p className="text-stone-500 text-sm max-w-2xl">
-              Manage your employer plans, feature entitlements, and billing history. Upgrade to unlock AI-powered matching and unlimited active vacancies.
+              {blurb}
             </p>
           </div>
 

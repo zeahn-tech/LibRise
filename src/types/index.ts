@@ -640,6 +640,8 @@ export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled'
 
 export interface FeatureEntitlement {
   maxActiveJobs: number | 'unlimited';
+  /** Published business-for-sale listings (business sellers). Mirrors maxActiveJobs per tier. */
+  maxActiveListings: number | 'unlimited';
   maxCandidatesViewable: number | 'unlimited';
   canViewCandidateContact: boolean;
   canUseAI: boolean;

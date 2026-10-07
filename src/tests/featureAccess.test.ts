@@ -133,6 +133,20 @@ describe('role-based visibility', () => {
     expect(buyer.tabs.candidate.allowed).toBe(false);
   });
 
+  it('business seller gets Subscriptions like a recruiter (with or without an organization yet)', () => {
+    const noOrg = getFeatureAccess(ctx({ role: 'business_seller', caps: ['sell_business'] }));
+    expect(noOrg.tabs.billing.allowed).toBe(true);
+    expect(noOrg.canSeeBilling).toBe(true);
+
+    const owner = getFeatureAccess(ctx({ role: 'business_seller', caps: ['sell_business'], orgRole: 'owner' }));
+    expect(owner.tabs.billing.allowed).toBe(true);
+  });
+
+  it('seller subscription access does not leak to buyers or job seekers', () => {
+    expect(getFeatureAccess(ctx({ role: 'buyer', caps: ['find_business'] })).tabs.billing.allowed).toBe(false);
+    expect(getFeatureAccess(ctx({ role: 'job_seeker', caps: ['find_opportunities'] })).tabs.billing.allowed).toBe(false);
+  });
+
   it('verification officer: trust & safety, no posting/candidate/billing', () => {
     const c = ctx({ role: 'verification_officer', system: 'verification_officer' });
     const a = getFeatureAccess(c);
@@ -187,6 +201,8 @@ describe('plan resolution (subscriber gets the plan they paid for)', () => {
     const plan = getPlanForSubscription({ planId, tier });
     expect(plan.tier).toBe(tier);
     expect(plan.entitlements.maxActiveJobs).toBe(jobs);
+    // business sellers get the same limit per tier as recruiters
+    expect(plan.entitlements.maxActiveListings).toBe(jobs);
     expect(plan.entitlements.canUseAI).toBe(ai);
   });
   it('unknown / missing subscription falls back to Free', () => {

@@ -25,7 +25,8 @@ vi.mock('../services/authService', () => ({
       activeOrganization: null,
       isAuthenticated: true
     })),
-    can: vi.fn(() => true)
+    // platform admins are exempt from the listing quota; the seller under test is not one
+    can: vi.fn((action: string) => action !== 'platform.admin_access')
   }
 }));
 
@@ -155,6 +156,29 @@ describe('businessService', () => {
     expect(payload.seller_name).toBe('Jane Seller');
     expect(payload.seller_contact_email).toBe('jane@example.com');
     expect(payload.is_confidential).toBe(true);
+  });
+
+  it('createListing(): a seller on the Free plan (no organization) is blocked at the 1-listing limit', async () => {
+    const builder = chain({ data: null, error: null, count: 1 });
+    mockFrom.mockReturnValue(builder);
+
+    const { businessService } = await import('../services/businessService');
+    const res = await businessService.createListing({ title: 'Second shop', industry: 'Retail' } as any);
+
+    expect(res.error).toBeTruthy();
+    expect(res.status).toBe(403);
+    expect((res.error as { message: string }).message).toMatch(/Upgrade your subscription/i);
+    expect(builder.insert).not.toHaveBeenCalled();
+  });
+
+  it('createListing(): a seller below their plan limit can still list', async () => {
+    const builder = chain({ data: sampleListingRow(), error: null, count: 0 });
+    mockFrom.mockReturnValue(builder);
+
+    const { businessService } = await import('../services/businessService');
+    await businessService.createListing({ title: 'First shop', industry: 'Retail' } as any);
+
+    expect(builder.insert).toHaveBeenCalledTimes(1);
   });
 
   it('requestNdaAccess() WITH buyerData: creates a new pending request, never auto-approves', async () => {

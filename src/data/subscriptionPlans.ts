@@ -5,17 +5,19 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     id: 'plan_free',
     tier: 'free',
     name: 'Free Trial',
-    description: 'Perfect for small businesses making their first hire.',
+    description: 'Perfect for small businesses making their first hire or listing their first business for sale.',
     monthlyPrice: 0,
     annualPrice: 0,
     features: [
       'Post up to 1 active job',
+      'List up to 1 business for sale',
       'View basic candidate profiles',
       'Basic applicant tracking',
       '14-day trial period'
     ],
     entitlements: {
       maxActiveJobs: 1,
+      maxActiveListings: 1,
       maxCandidatesViewable: 10,
       canViewCandidateContact: false,
       canUseAI: false,
@@ -27,17 +29,19 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     id: 'plan_basic',
     tier: 'basic',
     name: 'Starter',
-    description: 'For growing teams with consistent hiring needs.',
+    description: 'For growing teams and sellers with consistent hiring or listing needs.',
     monthlyPrice: 49,
     annualPrice: 470, // ~20% discount
     features: [
       'Post up to 5 active jobs',
+      'List up to 5 businesses for sale',
       'View unlimited candidate profiles',
       'View candidate contact info',
       'Standard email support'
     ],
     entitlements: {
       maxActiveJobs: 5,
+      maxActiveListings: 5,
       maxCandidatesViewable: 'unlimited',
       canViewCandidateContact: true,
       canUseAI: false,
@@ -56,12 +60,14 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     annualPrice: 1430, // ~20% discount
     features: [
       'Post unlimited active jobs',
+      'List unlimited businesses for sale',
       'AI-powered candidate matching',
       'Priority support',
       'Advanced analytics'
     ],
     entitlements: {
       maxActiveJobs: 'unlimited',
+      maxActiveListings: 'unlimited',
       maxCandidatesViewable: 'unlimited',
       canViewCandidateContact: true,
       canUseAI: true,

@@ -626,6 +626,13 @@ export function canAccessWorkspace(
         return { allowed: true };
       }
       const activeOrgId = context.activeOrganization?.id;
+      // Business sellers get subscriptions exactly like recruiters. A seller
+      // who has not created their organization yet still reaches the billing
+      // workspace, which walks them through creating it (subscriptions are
+      // attached to an organization).
+      if (!activeOrgId && evaluatePermission(context, 'business.list')) {
+        return { allowed: true };
+      }
       if (!activeOrgId) {
         return {
           allowed: false,

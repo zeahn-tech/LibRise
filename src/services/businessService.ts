@@ -50,6 +50,7 @@ import { BusinessAccessRequest, BusinessInquiry, BusinessListing } from '../type
 import { getSupabaseClient } from '../lib/supabaseClient';
 import { apiClient, ApiResponse } from './apiClient';
 import { authService } from './authService';
+import { getPlanById } from '../data/subscriptionPlans';
 import { notificationService } from './notificationService';
 import { fireAndForget } from '../lib/fireAndForget';
 import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from '../core/errors/AppError';
@@ -217,6 +218,33 @@ export const businessService = {
         throw new ForbiddenError('You do not have permission to list an enterprise for sale.');
       }
       if (!listing.title?.trim()) throw new ValidationError('A listing title is required.');
+
+      // Subscription limit -- same plan table recruiters use (maxActiveListings
+      // mirrors maxActiveJobs per tier). A seller without an organization yet is
+      // on Free limits. Platform admins are exempt. Only currently-published
+      // listings count, so closing/selling one frees a slot.
+      if (!authService.can('platform.admin_access')) {
+        const orgId = session.activeOrganization?.id;
+        let limit: number | 'unlimited' = getPlanById('plan_free')!.entitlements.maxActiveListings;
+        if (orgId) {
+          const { subscriptionService } = await import('./subscriptionService');
+          const ent = await subscriptionService.getEntitlements(orgId);
+          if (ent.data) limit = ent.data.maxActiveListings;
+        }
+        if (limit !== 'unlimited') {
+          const { count, error: countError } = await client()
+            .from('business_listings')
+            .select('id', { count: 'exact', head: true })
+            .eq('owner_user_id', user.id)
+            .eq('status', 'published');
+          if (countError) throw new Error(countError.message);
+          if ((count ?? 0) >= limit) {
+            throw new ForbiddenError(
+              `Your plan allows ${limit} active business listing${limit === 1 ? '' : 's'}. Upgrade your subscription in Subscriptions to list more.`
+            );
+          }
+        }
+      }
 
       const id = `biz-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const slug = listing.title

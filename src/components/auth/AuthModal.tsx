@@ -337,10 +337,12 @@ export const AuthModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Organization name input if employer/recruiter */}
+              {/* Organization name input if employer/recruiter/business seller
+                  (subscriptions are attached to an organization) */}
               {(regRole === 'employer' ||
                 regRole === 'recruiter' ||
-                regRole === 'organization_admin') && (
+                regRole === 'organization_admin' ||
+                regRole === 'business_seller') && (
                 <div>
                   <label className="block text-xs font-bold text-[#132A13] uppercase tracking-wider mb-1.5">
                     Organization / Company Name
