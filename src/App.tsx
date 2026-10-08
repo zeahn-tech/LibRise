@@ -110,6 +110,7 @@ function AppContent() {
   // Set when publishing hits the free-quota limit and needs a manual mobile money payment.
   const [checkoutOpportunityId, setCheckoutOpportunityId] = useState<string | null>(null);
   const [checkoutPlanId, setCheckoutPlanId] = useState<string | undefined>(undefined);
+  const [initialPostingPlanId, setInitialPostingPlanId] = useState<string>('');
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
@@ -358,8 +359,6 @@ function AppContent() {
     setOpportunityToEdit(opp);
     setIsPostModalOpen(true);
   };
-
-  const [initialPostingPlanId, setInitialPostingPlanId] = useState<string>('');
 
   const handleOpenCreateModal = () => {
     setOpportunityToEdit(null);
