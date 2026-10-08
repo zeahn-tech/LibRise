@@ -8,6 +8,16 @@ export function registerServiceWorker(): void {
   }
 
   if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+    // A new service worker has taken control (autoUpdate): reload once so the
+    // page runs the new code instead of a stale cached copy (e.g. old prices).
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      window.location.reload();
+    });
+
     window.addEventListener('load', () => {
       navigator.serviceWorker
         .register('/sw.js')

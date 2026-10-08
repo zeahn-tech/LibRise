@@ -12,7 +12,12 @@ import { OrganizationWizardModal } from './organization/OrganizationWizardModal'
 
 const PaymentCheckoutFlow = lazy(() => import('./payments/PaymentCheckoutFlow').then((m) => ({ default: m.PaymentCheckoutFlow })));
 
-export const SubscriptionManager: React.FC = () => {
+interface SubscriptionManagerProps {
+  /** Present when the viewer can post jobs: starts a new job with that pay-as-you-go option selected. */
+  onPostJob?: (planId: string) => void;
+}
+
+export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPostJob }) => {
   const { showToast } = useToast();
   const [subscription, setSubscription] = useState<OrganizationSubscription | null>(null);
   const [loading, setLoading] = useState(true);
@@ -374,13 +379,17 @@ export const SubscriptionManager: React.FC = () => {
       </div>
 
       {/* Pay-as-you-go */}
-      {vacancyPlans.length > 0 && (
+      {vacancyPlans.length > 0 && audience !== 'seller' && (
         <div className="bg-white p-6 md:p-8 rounded-[32px] border border-[#E8E4D9]" data-testid="pay-as-you-go">
           <h3 className="text-xl font-bold font-display text-[#283618] tracking-tight">Pay-as-you-go</h3>
           <p className="text-sm text-stone-500 mt-1 max-w-2xl">
-            Don't need a monthly subscription? Only hiring occasionally? Pay only when you need to post. The option is offered
-            when you publish a job beyond your plan's limit.
+            Don't need a monthly subscription? Only hiring occasionally? Pay only when you need to post.
           </p>
+          <ol className="mt-3 text-xs text-stone-600 list-decimal list-inside space-y-0.5">
+            <li>Pick an option below and write your job.</li>
+            <li>Pay with MTN Mobile Money or Orange Money and enter the transaction ID.</li>
+            <li>We verify the payment and your job goes live.</li>
+          </ol>
           <div className="grid sm:grid-cols-3 gap-4 mt-6">
             {vacancyPlans.map((vp) => (
               <div key={vp.id} className="border border-[#E8E4D9] rounded-2xl p-4 bg-[#F9F8F6]">
@@ -392,6 +401,17 @@ export const SubscriptionManager: React.FC = () => {
                     <li key={f} className="text-xs text-stone-600 flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-[#4F772D]" />{f}</li>
                   ))}
                 </ul>
+                {onPostJob ? (
+                  <button
+                    onClick={() => onPostJob(vp.id)}
+                    data-testid={`payg-post-${vp.promotionLevel ?? vp.id}`}
+                    className="mt-4 w-full min-h-11 rounded-xl bg-[#283618] text-white text-sm font-semibold cursor-pointer"
+                  >
+                    Post a job — {formatMinorAmount(vp.amountMinor, vp.currency)}
+                  </button>
+                ) : (
+                  <p className="mt-4 text-[11px] text-stone-400">Choose this when you post a job.</p>
+                )}
               </div>
             ))}
           </div>

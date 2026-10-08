@@ -359,8 +359,18 @@ function AppContent() {
     setIsPostModalOpen(true);
   };
 
+  const [initialPostingPlanId, setInitialPostingPlanId] = useState<string>('');
+
   const handleOpenCreateModal = () => {
     setOpportunityToEdit(null);
+    setInitialPostingPlanId('');
+    setIsPostModalOpen(true);
+  };
+
+  /** From the pricing page: start a new job with that pay-as-you-go option already selected. */
+  const handlePostJobWithPlan = (planId: string) => {
+    setOpportunityToEdit(null);
+    setInitialPostingPlanId(planId);
     setIsPostModalOpen(true);
   };
 
@@ -720,7 +730,7 @@ function AppContent() {
         {/* Tab 7: Billing & Subscription */}
         {activeTab === 'billing' && tabAccess.allowed && (
           <Suspense fallback={<TabLoadingFallback />}>
-            <SubscriptionManager />
+            <SubscriptionManager onPostJob={access.canPost ? handlePostJobWithPlan : undefined} />
           </Suspense>
         )}
 
@@ -759,6 +769,7 @@ function AppContent() {
             onSave={handleSaveOpportunity}
             opportunityToEdit={opportunityToEdit}
             currency={currency}
+            initialPostingPlanId={initialPostingPlanId}
           />
         </Suspense>
       )}

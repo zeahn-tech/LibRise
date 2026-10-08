@@ -16,6 +16,8 @@ interface PostOpportunityModalProps {
   onSave: (data: Omit<Opportunity, 'id' | 'viewsCount' | 'applicationsCount' | 'postedDate' | 'organization'>, isDraft: boolean, editId?: string, options?: { paidPlanId?: string }) => Promise<void>;
   opportunityToEdit?: Opportunity | null;
   currency: 'USD' | 'LRD';
+  /** Pre-selects a pay-as-you-go option (e.g. when coming from the pricing page). */
+  initialPostingPlanId?: string;
 }
 
 const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
@@ -23,7 +25,8 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
   onClose,
   onSave,
   opportunityToEdit,
-  currency
+  currency,
+  initialPostingPlanId
 }) => {
   const { session, user, activeRole, userOrganizations, activeOrganization } = useAuth();
   const { showToast } = useToast();
@@ -88,7 +91,7 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
   const { entitlements } = useEntitlements();
   const hasPaidSubscription = entitlements.jobPromotion;
   const [vacancyPlans, setVacancyPlans] = useState<PaymentPlan[]>([]);
-  const [postingPlanId, setPostingPlanId] = useState<string>(''); // '' = included free post
+  const [postingPlanId, setPostingPlanId] = useState<string>(initialPostingPlanId || ''); // '' = included free post
   useEffect(() => {
     let cancelled = false;
     void paymentService.getPlans('vacancy').then((res) => {
