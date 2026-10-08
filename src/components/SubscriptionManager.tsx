@@ -341,6 +341,38 @@ export const SubscriptionManager: React.FC = () => {
         </div>
       </div>
 
+      {/* Plan comparison (generated from the same entitlements the app enforces) */}
+      <div className="bg-white p-6 md:p-8 rounded-[32px] border border-[#E8E4D9] overflow-x-auto" data-testid="plan-matrix">
+        <h3 className="text-xl font-bold font-display text-[#283618] tracking-tight mb-4">Compare plans</h3>
+        <table className="w-full text-sm min-w-[480px]">
+          <thead>
+            <tr className="text-left text-xs uppercase tracking-wider text-stone-400">
+              <th className="py-2 pr-4 font-bold">Feature</th>
+              {SUBSCRIPTION_PLANS.map((pl) => <th key={pl.id} className="py-2 px-2 font-bold">{pl.name}</th>)}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#E8E4D9] text-[#283618]">
+            {([
+              ['Business profile', () => '✓'],
+              ['Active jobs', (e: SubscriptionPlan['entitlements']) => String(e.maxActiveJobs)],
+              ['Businesses for sale', (e: SubscriptionPlan['entitlements']) => String(e.maxActiveListings)],
+              ['Applicant management', () => '✓'],
+              ['Job promotion', (e: SubscriptionPlan['entitlements']) => (e.jobPromotion ? '✓' : 'Pay-as-you-go')],
+              ['Featured vacancies at once', (e: SubscriptionPlan['entitlements']) => (e.maxFeaturedVacancies > 0 ? String(e.maxFeaturedVacancies) : 'Pay-as-you-go')],
+              ['Priority visibility', (e: SubscriptionPlan['entitlements']) => (e.priorityVisibility ? '✓' : '—')],
+              ['Advanced analytics', (e: SubscriptionPlan['entitlements']) => (e.advancedAnalytics ? '✓' : '—')],
+              ['AI candidate matching', (e: SubscriptionPlan['entitlements']) => (e.canUseAI ? '✓' : '—')],
+              ['Support', (e: SubscriptionPlan['entitlements']) => (e.prioritySupport ? 'Priority' : 'Standard')]
+            ] as Array<[string, (e: SubscriptionPlan['entitlements']) => string]>).map(([label, cell]) => (
+              <tr key={label}>
+                <td className="py-2.5 pr-4 font-medium">{label}</td>
+                {SUBSCRIPTION_PLANS.map((pl) => <td key={pl.id} className="py-2.5 px-2">{cell(pl.entitlements)}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       {/* Pay-as-you-go */}
       {vacancyPlans.length > 0 && (
         <div className="bg-white p-6 md:p-8 rounded-[32px] border border-[#E8E4D9]" data-testid="pay-as-you-go">

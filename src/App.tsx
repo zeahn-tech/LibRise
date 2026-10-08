@@ -109,6 +109,7 @@ function AppContent() {
   const [opportunityToEdit, setOpportunityToEdit] = useState<Opportunity | null>(null);
   // Set when publishing hits the free-quota limit and needs a manual mobile money payment.
   const [checkoutOpportunityId, setCheckoutOpportunityId] = useState<string | null>(null);
+  const [checkoutPlanId, setCheckoutPlanId] = useState<string | undefined>(undefined);
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
@@ -262,7 +263,8 @@ function AppContent() {
   const handleSaveOpportunity = async (
     payload: Omit<Opportunity, 'id' | 'viewsCount' | 'applicationsCount' | 'postedDate'>,
     isDraft: boolean,
-    editId?: string
+    editId?: string,
+    options?: { paidPlanId?: string }
   ) => {
     if (editId) {
       // Edit existing opportunity
@@ -284,14 +286,15 @@ function AppContent() {
           showToast(res.error.message, 'error');
         }
       } else {
-        const res = await opportunityService.publish(payload);
+        const res = await opportunityService.publish({ ...payload, paidPlanId: options?.paidPlanId });
         if (res.data) {
           await refreshOpportunities();
           showToast(`Opportunity "${res.data.title}" is now published across Liberia!`, 'success');
         } else if (res.error?.code === 'PAYMENT_REQUIRED' && typeof res.error.details?.opportunityId === 'string') {
           // Saved, but not published: open checkout instead of a dead-end error.
           await refreshOpportunities();
-          showToast('Vacancy saved. A one-time payment is needed to publish it.', 'info');
+          showToast('Vacancy saved. Complete the payment to publish it.', 'info');
+          setCheckoutPlanId(typeof res.error.details.planId === 'string' ? res.error.details.planId : undefined);
           setCheckoutOpportunityId(res.error.details.opportunityId);
         } else if (res.error) {
           showToast(res.error.message, 'error');
@@ -308,6 +311,7 @@ function AppContent() {
     } else if (res.error?.code === 'PAYMENT_REQUIRED') {
       // Not a failure: route the recruiter to checkout for this vacancy.
       await refreshOpportunities();
+      setCheckoutPlanId(undefined);
       setCheckoutOpportunityId(id);
     } else if (res.error) {
       throw new Error(res.error.message);
@@ -674,6 +678,7 @@ function AppContent() {
                   onUpdateStage={handleUpdateStage}
                   onOpenCreateModal={handleOpenCreateModal}
                   onOpenBilling={access.canSeeBilling ? () => handleTabChange('billing') : undefined}
+                  onOpportunitiesChanged={() => { void refreshOpportunities(); }}
                 />
               )}
               {recruiterSubView === 'analytics' && (
@@ -763,7 +768,8 @@ function AppContent() {
           <PaymentCheckoutFlow
             opportunityId={checkoutOpportunityId}
             opportunityTitle={opportunities.find((o) => o.id === checkoutOpportunityId)?.title}
-            onClose={() => setCheckoutOpportunityId(null)}
+            preferredPlanId={checkoutPlanId}
+            onClose={() => { setCheckoutOpportunityId(null); setCheckoutPlanId(undefined); }}
             onPublished={() => { void refreshOpportunities(); }}
           />
         </Suspense>

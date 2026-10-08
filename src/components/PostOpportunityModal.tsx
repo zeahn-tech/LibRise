@@ -6,11 +6,14 @@ import { OPPORTUNITY_TYPES } from '../config/constants';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { organizationService } from '../services/organizationService';
+import { paymentService, formatMinorAmount } from '../services/paymentService';
+import { useEntitlements } from '../hooks/useEntitlements';
+import type { PaymentPlan } from '../types';
 
 interface PostOpportunityModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: Omit<Opportunity, 'id' | 'viewsCount' | 'applicationsCount' | 'postedDate' | 'organization'>, isDraft: boolean, editId?: string) => Promise<void>;
+  onSave: (data: Omit<Opportunity, 'id' | 'viewsCount' | 'applicationsCount' | 'postedDate' | 'organization'>, isDraft: boolean, editId?: string, options?: { paidPlanId?: string }) => Promise<void>;
   opportunityToEdit?: Opportunity | null;
   currency: 'USD' | 'LRD';
 }
@@ -78,6 +81,23 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
     'Do you hold valid statutory work authorization in Liberia?'
   ]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Pay-as-you-go posting options. Shown to organizations without a paid
+  // subscription (Free plan) when creating a new vacancy. Prices come from the
+  // database; the client never decides the amount.
+  const { entitlements } = useEntitlements();
+  const hasPaidSubscription = entitlements.jobPromotion;
+  const [vacancyPlans, setVacancyPlans] = useState<PaymentPlan[]>([]);
+  const [postingPlanId, setPostingPlanId] = useState<string>(''); // '' = included free post
+  useEffect(() => {
+    let cancelled = false;
+    void paymentService.getPlans('vacancy').then((res) => {
+      if (!cancelled && res.data) setVacancyPlans(res.data);
+    });
+    return () => { cancelled = true; };
+  }, []);
+  const showPostingOptions = !opportunityToEdit && !hasPaidSubscription && vacancyPlans.length > 0;
+  const chosenPlan = vacancyPlans.find((p) => p.id === postingPlanId) || null;
 
   // Initialize from opportunityToEdit if present
   useEffect(() => {
@@ -172,7 +192,7 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
         status: isDraft ? 'draft' : 'published'
       };
 
-      await onSave(payload, isDraft, opportunityToEdit?.id);
+      await onSave(payload, isDraft, opportunityToEdit?.id, !isDraft && chosenPlan ? { paidPlanId: chosenPlan.id } : undefined);
       onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Save failed';
@@ -587,6 +607,33 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
           </div>
         </div>
 
+        {showPostingOptions && (
+          <div className="px-6 py-4 border-t border-[#E8E4D9] bg-[#F9F8F4] flex-none" data-testid="posting-options">
+            <div className="text-xs font-bold text-[#283618] uppercase tracking-wider mb-2">How do you want to post this?</div>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <label className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer ${postingPlanId === '' ? 'border-[#4F772D] bg-[#F4F8EF]' : 'border-[#E8E4D9] bg-white'}`}>
+                <input type="radio" name="posting-plan" className="mt-1" checked={postingPlanId === ''} onChange={() => setPostingPlanId('')} />
+                <span>
+                  <span className="block font-bold text-[#132A13]">Included free post</span>
+                  <span className="block text-[11px] text-stone-500">Your Free plan includes 1 active job. If it is already used, you will be asked to pay.</span>
+                </span>
+              </label>
+              {vacancyPlans.map((vp) => (
+                <label key={vp.id} className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer ${postingPlanId === vp.id ? 'border-[#4F772D] bg-[#F4F8EF]' : 'border-[#E8E4D9] bg-white'}`}>
+                  <input type="radio" name="posting-plan" className="mt-1" checked={postingPlanId === vp.id} onChange={() => setPostingPlanId(vp.id)} />
+                  <span className="flex-1">
+                    <span className="flex justify-between gap-2 font-bold text-[#132A13]">
+                      <span>{vp.name}</span><span>{formatMinorAmount(vp.amountMinor, vp.currency)}</span>
+                    </span>
+                    <span className="block text-[11px] text-stone-500">{vp.description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p className="text-[11px] text-stone-500 mt-2">Pay with MTN Mobile Money or Orange Money. Your job goes live once we verify the payment. Not hiring often? No subscription needed.</p>
+          </div>
+        )}
+
         {/* Footer Actions */}
         <div className="p-4 sm:p-6 bg-white border-t border-[#E8E4D9] flex flex-wrap items-center justify-between gap-3">
           <button
@@ -615,7 +662,7 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
               className="px-6 py-2.5 bg-[#4F772D] hover:bg-[#283618] text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>{isSubmitting ? 'Publishing...' : 'Publish Immediately'}</span>
+              <span>{isSubmitting ? 'Publishing...' : chosenPlan ? `Continue to payment (${formatMinorAmount(chosenPlan.amountMinor, chosenPlan.currency)})` : 'Publish Immediately'}</span>
             </button>
           </div>
         </div>

@@ -38,6 +38,7 @@ import { CandidateProfileDrawer } from './candidate/CandidateProfileDrawer';
 import { OrganizationTeamModal } from './organization/OrganizationTeamModal';
 import { OrganizationWizardModal } from './organization/OrganizationWizardModal';
 import { useEntitlements } from '../hooks/useEntitlements';
+import { PromotionPanel } from './employer/PromotionPanel';
 import { UpgradePrompt } from './common/UpgradePrompt';
 
 interface RecruiterWorkspaceProps {
@@ -47,6 +48,8 @@ interface RecruiterWorkspaceProps {
   onOpenCreateModal: () => void;
   /** Present only when the viewer may open billing (org owner/admin). */
   onOpenBilling?: () => void;
+  /** Called after a vacancy's promotion changed so the parent can refetch. */
+  onOpportunitiesChanged?: () => void;
 }
 
 export const RecruiterWorkspace: React.FC<RecruiterWorkspaceProps> = ({
@@ -54,7 +57,8 @@ export const RecruiterWorkspace: React.FC<RecruiterWorkspaceProps> = ({
   applications,
   onUpdateStage,
   onOpenCreateModal,
-  onOpenBilling
+  onOpenBilling,
+  onOpportunitiesChanged
 }) => {
   const { user, activeOrganization, activeMembership, userOrganizations } = useAuth();
   const { entitlements } = useEntitlements();
@@ -221,6 +225,12 @@ export const RecruiterWorkspace: React.FC<RecruiterWorkspaceProps> = ({
 
   return (
     <div className="space-y-6">
+      <PromotionPanel
+        opportunities={opportunities}
+        entitlements={entitlements}
+        onChanged={() => onOpportunitiesChanged?.()}
+        onOpenBilling={onOpenBilling}
+      />
       {/* Active Organization Tenant Bar */}
       {activeOrganization ? (
         <div className="bg-white p-4 sm:p-5 rounded-3xl border border-[#E8E4D9] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xs">

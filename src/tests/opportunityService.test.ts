@@ -236,6 +236,30 @@ describe('opportunityService', () => {
     expect(payload.title).toBe('Backend Engineer');
   });
 
+  it('create(): a pay-as-you-go choice saves the vacancy as payment_required and sends the poster to checkout for that plan', async () => {
+    const builder = chain({ data: sampleOppRow({ status: 'payment_required' }), error: null });
+    mockFrom.mockReturnValue(builder);
+
+    const { opportunityService } = await import('../services/opportunityService');
+    const res = await opportunityService.publish({ title: 'Cashier', description: 'Shop cashier', paidPlanId: 'plan-vacancy-featured' });
+
+    expect(builder.insert.mock.calls[0][0].status).toBe('payment_required');
+    // the client only names a plan; it never sends an amount
+    expect(JSON.stringify(builder.insert.mock.calls[0][0])).not.toMatch(/amount/i);
+    expect(res.error?.code).toBe('PAYMENT_REQUIRED');
+    expect(res.error?.details).toMatchObject({ planId: 'plan-vacancy-featured' });
+  });
+
+  it('create(): a draft ignores the pay-as-you-go choice (nothing to pay until it is published)', async () => {
+    const builder = chain({ data: sampleOppRow({ status: 'draft' }), error: null });
+    mockFrom.mockReturnValue(builder);
+
+    const { opportunityService } = await import('../services/opportunityService');
+    await opportunityService.createDraft({ title: 'Cashier', description: 'Shop cashier', paidPlanId: 'plan-vacancy-basic' });
+
+    expect(builder.insert.mock.calls[0][0].status).toBe('draft');
+  });
+
   it('surfaces a 42501 RLS denial as ForbiddenError, not a raw driver error', async () => {
     mockFrom.mockReturnValue(chain({ data: null, error: { code: '42501', message: 'denied' } }));
 

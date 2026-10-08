@@ -137,3 +137,20 @@ carry over unchanged; manual review can remain as a fallback/reconciliation path
 Provider facts researched so far (MTN Liberia available via `momodeveloper.mtn.com`; Orange developer-API coverage of
 Liberia **unresolved / needs direct confirmation**; aggregators such as XDAfrica/MoneyMatrix/pawaPay unverified for
 Liberia) are in the project conversation history, not repeated here as verified fact.
+
+## Pay-as-you-go flow and promotion (pricing revision)
+
+- **Posting a job without a subscription:** on a new vacancy, organizations without a paid plan pick *Included free post*
+  or Basic ($3) / Featured ($5) / Premium ($10) (`PostOpportunityModal`). A paid choice saves the vacancy as
+  `payment_required` and opens the existing `PaymentCheckoutFlow` with that plan pre-selected (MTN or Orange, transaction
+  ID, admin approval). The client only names a plan id; the amount always comes from `payment_plans`. Going over a plan's
+  job limit uses the same checkout (all three options offered).
+- **After approval** `admin_review_payment()` publishes the job; Featured also sets `is_featured`/`featured_until`, and
+  Premium also sets `boosted_until`, for the plan's `duration_days`. Lists show boosted first, then featured, then the rest,
+  with a badge.
+- **Featured slots in a subscription** (Starter 1, Pro 5 at a time) are used from *Recruiter workspace -> Promote your
+  vacancies* (`PromotionPanel`). The database enforces the slot count (`guard_opportunity_promotion`); a plan-granted
+  feature ends with the subscription period.
+- **Not built:** a separate "priority visibility" ranking beyond featured/boosted placement, and self-service
+  downgrade/cancellation (the page says to contact support).
+

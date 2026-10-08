@@ -83,6 +83,13 @@ export type CreateOpportunityInput = Partial<
   title: string;
   description: string;
   organizationId?: string;
+  /**
+   * Pay-as-you-go: the vacancy plan id the poster chose (Basic / Featured /
+   * Premium). It only ever makes publishing MORE restrictive -- the vacancy is
+   * saved as payment_required and sent to checkout. The amount is always
+   * decided by the database from this plan, never by the client.
+   */
+  paidPlanId?: string;
 };
 
 interface OrganizationRow {
@@ -393,7 +400,10 @@ export const opportunityService = {
       // saved as 'payment_required' (not published, not hard-rejected) so
       // the recruiter keeps their work and is routed to checkout.
       let requiresPayment = false;
-      if (!isDraft) {
+      if (!isDraft && data.paidPlanId) {
+        requiresPayment = true;
+      }
+      if (!isDraft && !requiresPayment) {
         const { subscriptionService } = await import('./subscriptionService');
         const entitlementRes = await subscriptionService.getEntitlements(targetOrgId);
         if (entitlementRes.data && entitlementRes.data.maxActiveJobs !== 'unlimited') {
@@ -446,7 +456,7 @@ export const opportunityService = {
       if (requiresPayment) {
         throw new PaymentRequiredError(
           'Your plan\'s free publishing limit is reached. This vacancy was saved and needs a one-time payment to go live.',
-          { opportunityId: id }
+          { opportunityId: id, planId: data.paidPlanId }
         );
       }
       return rowToOpportunity(created as OpportunityRow);
