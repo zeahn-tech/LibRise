@@ -671,28 +671,28 @@ insert into test_log(line) select * from extensions.is(
 
 -- a live free Basic post
 insert into public.opportunities (id, organization_id, created_by_user_id, title, slug, opportunity_type, workplace_model, county, location_details, description, status)
-values ('opp-paytest-b-basic', 'org-paytest-b', '11111111-aaaa-4aaa-8aaa-000000000002', 'Org B free basic job', 'paytest-b-basic', 'job', 'onsite', 'Montserrado', 'Congo Town', 'Free basic post', 'published');
+values ('opp-paytest-a-basic', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', 'Org A free basic job', 'paytest-a-basic', 'job', 'onsite', 'Montserrado', 'Congo Town', 'Free basic post', 'published');
 insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
-values ('pay-paytest-boost', 'pub-paytest-boost', 'org-paytest-b', '11111111-aaaa-4aaa-8aaa-000000000002', 'opp-paytest-b-basic', 'plan-vacancy-basic', 'manual_momo_mtn', 'OHL-PAYTEST-BOOST', 1, 'USD', 'created');
+values ('pay-paytest-boost', 'pub-paytest-boost', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', 'opp-paytest-a-basic', 'plan-vacancy-basic', 'manual_momo_mtn', 'OHL-PAYTEST-BOOST', 1, 'USD', 'created');
 insert into test_log(line) select * from extensions.is(
   (select amount_minor from public.payments where id = 'pay-paytest-boost'), 300,
   '[boost] a client-supplied amount of 1 is overwritten with the Boost price (300 = $3)'
 );
 update public.payments set status = 'payment_pending', provider_transaction_id = 'TXN-BOOST-55102', sender_phone_number = '+231770000002' where id = 'pay-paytest-boost';
 insert into test_log(line) select * from extensions.is(
-  (select promotion_level is null from public.opportunities where id = 'opp-paytest-b-basic')::text, 'true'::text,
+  (select promotion_level is null from public.opportunities where id = 'opp-paytest-a-basic')::text, 'true'::text,
   '[boost] *** no promotion before approval *** a pending Boost payment changes nothing on the vacancy'
 );
 
 -- the owner cannot grant themselves a promotion
-select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000002',true);
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
 insert into test_log(line) select * from extensions.lives_ok(
-  $$update public.opportunities set promotion_level = 'premium', promotion_until = now() + interval '90 days' where id = 'opp-paytest-b-basic'$$,
+  $$update public.opportunities set promotion_level = 'premium', promotion_until = now() + interval '90 days' where id = 'opp-paytest-a-basic'$$,
   '[promotion][owner] the update is accepted but the promotion columns are protected'
 );
 reset role;
 insert into test_log(line) select * from extensions.ok(
-  (select promotion_level is null and promotion_until is null from public.opportunities where id = 'opp-paytest-b-basic'),
+  (select promotion_level is null and promotion_until is null from public.opportunities where id = 'opp-paytest-a-basic'),
   '[promotion][owner] *** cannot activate Premium without payment *** promotion_level / promotion_until set by the client are discarded'
 );
 
@@ -706,7 +706,7 @@ reset role;
 insert into test_log(line) select * from extensions.ok(
   (select status = 'published' and promotion_level = 'boost' and not is_featured
           and promotion_until > now() + interval '29 days' and promotion_until < now() + interval '31 days'
-   from public.opportunities where id = 'opp-paytest-b-basic'),
+   from public.opportunities where id = 'opp-paytest-a-basic'),
   '[boost] the live vacancy stays published and gets Boost for 30 days (not featured)'
 );
 
@@ -724,13 +724,13 @@ insert into test_log(line) select * from extensions.ok(
 
 -- rejecting a promotion payment must not take a live free job offline
 insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
-values ('pay-paytest-rejpromo', 'pub-paytest-rejpromo', 'org-paytest-b', '11111111-aaaa-4aaa-8aaa-000000000002', 'opp-paytest-b-basic', 'plan-vacancy-featured', 'manual_momo_mtn', 'OHL-PAYTEST-REJPROMO', 1, 'USD', 'created');
+values ('pay-paytest-rejpromo', 'pub-paytest-rejpromo', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', 'opp-paytest-a-basic', 'plan-vacancy-featured', 'manual_momo_mtn', 'OHL-PAYTEST-REJPROMO', 1, 'USD', 'created');
 update public.payments set status = 'payment_pending', provider_transaction_id = 'TXN-REJPROMO-33218', sender_phone_number = '+231770000002' where id = 'pay-paytest-rejpromo';
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000003',true);
 select public.admin_review_payment('pay-paytest-rejpromo', 'reject', 'transaction not found');
 reset role;
 insert into test_log(line) select * from extensions.is(
-  (select status from public.opportunities where id = 'opp-paytest-b-basic')::text, 'published'::text,
+  (select status from public.opportunities where id = 'opp-paytest-a-basic')::text, 'published'::text,
   '[promotion][reject] *** a rejected promotion payment never unpublishes a live free vacancy ***'
 );
 
