@@ -33,6 +33,8 @@ interface Props {
   title?: string;
   /** Pre-select this plan id in the plan-picker step, if it's among the loaded plans. */
   preferredPlanId?: string;
+  /** The vacancy is already live as a free Basic post; this payment only buys a promotion. */
+  alreadyPublished?: boolean;
   onClose: () => void;
   /** Called once the backend reports the payment approved (vacancy published / subscription active). */
   onPublished?: () => void;
@@ -53,7 +55,8 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
   title,
   preferredPlanId,
   onClose,
-  onPublished
+  onPublished,
+  alreadyPublished = false
 }) => {
   const isSubscription = !opportunityId;
   const effectivePlanType = planType ?? (isSubscription ? 'subscription' : 'vacancy');
@@ -194,7 +197,7 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
       <div className="bg-white w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl shadow-2xl">
         <div className="flex items-start justify-between gap-3 p-5 border-b border-[#E8E4D9]">
           <div className="min-w-0 flex-1">
-            <h2 className="font-serif font-bold text-xl text-[#132A13] break-words">{title || (isSubscription ? 'Upgrade your subscription' : 'Publish your vacancy')}</h2>
+            <h2 className="font-serif font-bold text-xl text-[#132A13] break-words">{title || (isSubscription ? 'Upgrade your subscription' : alreadyPublished ? 'Promote your vacancy' : 'Publish your vacancy')}</h2>
             {opportunityTitle && <p className="text-xs text-stone-500 mt-0.5 break-words">{opportunityTitle}</p>}
           </div>
           <button onClick={onClose} aria-label="Close" className="w-11 h-11 shrink-0 rounded-full bg-[#F9F8F4] flex items-center justify-center text-[#283618] cursor-pointer">
@@ -215,7 +218,9 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
               <p className="text-sm text-stone-600">
                 {isSubscription
                   ? 'Choose a plan below. Your subscription activates once payment is confirmed.'
-                  : "Your plan's free publishing limit is reached, so this vacancy needs a one-time payment to go live."}
+                  : alreadyPublished
+                    ? 'Your vacancy is already live. Pick a promotion for more visibility; it switches on once payment is confirmed.'
+                    : "Your plan's free vacancy is already in use, so this vacancy needs one of the options below to go live."}
               </p>
               {plans.length === 0 ? (
                 <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">

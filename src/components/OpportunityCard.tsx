@@ -86,9 +86,18 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({
               {opportunity.title}
             </h3>
 
-            {opportunity.isFeatured && (
-              <span className="px-2 py-0.5 bg-[#FEFAE0] text-[#BC6C25] border border-[#E8E4D9] rounded-md text-[10px] font-bold uppercase">
-                {opportunity.isBoosted ? 'Boosted' : 'Featured'}
+            {opportunity.promotionLevel && (
+              <span
+                data-testid={`promo-badge-${opportunity.promotionLevel}`}
+                className={`px-2 py-0.5 border rounded-md text-[10px] font-bold uppercase ${
+                  opportunity.promotionLevel === 'premium'
+                    ? 'bg-[#283618] text-white border-[#283618]'
+                    : opportunity.promotionLevel === 'featured'
+                      ? 'bg-[#FEFAE0] text-[#BC6C25] border-[#E8E4D9]'
+                      : 'bg-[#F4F8EF] text-[#4F772D] border-[#D9E3D5]'
+                }`}
+              >
+                {opportunity.promotionLevel === 'boost' ? 'Boosted' : opportunity.promotionLevel === 'featured' ? 'Featured' : 'Premium'}
               </span>
             )}
 

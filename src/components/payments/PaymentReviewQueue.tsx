@@ -14,6 +14,26 @@ import { useToast } from '../../context/ToastContext';
  * the way: the reviewer should have the business MoMo app / statement
  * open and compare, not click through.
  */
+const PROMO_LABEL: Record<string, string> = { boost: 'Boost', featured: 'Featured', premium: 'Premium' };
+
+/** What kind of payment this is, at a glance. */
+export function paymentKindLabel(item: PaymentWithContext): string {
+  if (item.planType === 'subscription') {
+    const tier = item.subscriptionTier === 'pro' ? 'Pro' : item.subscriptionTier === 'basic' ? 'Starter' : item.planName || 'plan';
+    return `Subscription · ${tier}${item.billingCycle ? ` ${item.billingCycle}` : ''}`;
+  }
+  return `Vacancy ${item.promotionLevel ? PROMO_LABEL[item.promotionLevel] : item.planName || 'payment'}`;
+}
+
+/** What approving it will do, so the reviewer is never guessing. */
+export function paymentEffectLabel(item: PaymentWithContext): string {
+  if (item.planType === 'subscription') return 'Approval activates the subscription for the plan period.';
+  if (item.opportunityStatus === 'published') {
+    return `Vacancy is already live; approval switches on the ${item.promotionLevel ? PROMO_LABEL[item.promotionLevel] : ''} promotion.`;
+  }
+  return `Vacancy is not live yet; approval publishes it${item.promotionLevel ? ` with the ${PROMO_LABEL[item.promotionLevel]} promotion` : ''}.`;
+}
+
 export const PaymentReviewQueue: React.FC = () => {
   const { showToast } = useToast();
   const [items, setItems] = useState<PaymentWithContext[]>([]);
@@ -121,11 +141,20 @@ export const PaymentReviewQueue: React.FC = () => {
                 <p className="font-bold text-lg text-[#132A13] shrink-0">{formatMinorAmount(item.amountMinor, item.currency)}</p>
               </div>
 
+              <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="payment-kind">
+                <span className={`px-2 py-0.5 rounded-md font-bold uppercase text-[10px] border ${item.planType === 'subscription' ? 'bg-[#EEF2FF] text-[#3730A3] border-[#C7D2FE]' : 'bg-[#FEFAE0] text-[#BC6C25] border-[#E8E4D9]'}`}>
+                  {paymentKindLabel(item)}
+                </span>
+                <span className="text-stone-500">{paymentEffectLabel(item)}</span>
+              </div>
+
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
                 <div className="flex justify-between gap-2"><dt className="text-stone-500 shrink-0">Network</dt><dd className="font-semibold min-w-0 break-words text-right">{item.paymentProvider === 'manual_momo_mtn' ? 'MTN Mobile Money' : 'Orange Money'}</dd></div>
                 <div className="flex justify-between gap-2"><dt className="text-stone-500 shrink-0">Transaction ID</dt><dd className="font-mono font-bold break-all text-right min-w-0">{item.providerTransactionId}</dd></div>
                 <div className="flex justify-between gap-2"><dt className="text-stone-500 shrink-0">Sender number</dt><dd className="font-semibold min-w-0 break-words text-right">{item.senderPhoneNumber || 'Not provided'}</dd></div>
                 <div className="flex justify-between gap-2"><dt className="text-stone-500 shrink-0">Our reference</dt><dd className="font-mono min-w-0 break-all text-right">{item.providerReference}</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-stone-500 shrink-0">Requested by</dt><dd className="min-w-0 break-words text-right">{item.requesterName || item.requesterEmail || item.createdByUserId}{item.requesterName && item.requesterEmail ? ` (${item.requesterEmail})` : ''}</dd></div>
+                <div className="flex justify-between gap-2"><dt className="text-stone-500 shrink-0">Created</dt><dd className="min-w-0 text-right">{new Date(item.createdAt).toLocaleString()}</dd></div>
                 <div className="flex justify-between gap-2"><dt className="text-stone-500 shrink-0">Submitted</dt><dd className="min-w-0 text-right">{new Date(item.updatedAt).toLocaleString()}</dd></div>
               </dl>
 

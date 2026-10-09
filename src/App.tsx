@@ -78,7 +78,7 @@ const TabLoadingFallback = () => (
 
 function AppContent() {
   const { currency, setCurrency } = useConfig();
-  const { activeRole, switchRole, user, verifyEmail, session, authContext, openAuthModal } = useAuth();
+  const { activeRole, switchRole, user, verifyEmail, session, authContext, openAuthModal, activeOrganization } = useAuth();
   const { showToast } = useToast();
   const { route, navigate } = useRouter();
 
@@ -111,6 +111,7 @@ function AppContent() {
   // Set when publishing hits the free-quota limit and needs a manual mobile money payment.
   const [checkoutOpportunityId, setCheckoutOpportunityId] = useState<string | null>(null);
   const [checkoutPlanId, setCheckoutPlanId] = useState<string | undefined>(undefined);
+  const [checkoutAlreadyPublished, setCheckoutAlreadyPublished] = useState(false);
   const [initialPostingPlanId, setInitialPostingPlanId] = useState<string>('');
   const [isPostModalOpen, setIsPostModalOpen] = useState(false);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -295,8 +296,14 @@ function AppContent() {
         } else if (res.error?.code === 'PAYMENT_REQUIRED' && typeof res.error.details?.opportunityId === 'string') {
           // Saved, but not published: open checkout instead of a dead-end error.
           await refreshOpportunities();
-          showToast('Vacancy saved. Complete the payment to publish it.', 'info');
+          showToast(
+            res.error.details.alreadyPublished === true
+              ? 'Your vacancy is live. Complete the payment to activate your promotion.'
+              : 'Vacancy saved. Complete the payment to publish it.',
+            'info'
+          );
           setCheckoutPlanId(typeof res.error.details.planId === 'string' ? res.error.details.planId : undefined);
+          setCheckoutAlreadyPublished(res.error.details.alreadyPublished === true);
           setCheckoutOpportunityId(res.error.details.opportunityId);
         } else if (res.error) {
           showToast(res.error.message, 'error');
@@ -314,6 +321,7 @@ function AppContent() {
       // Not a failure: route the recruiter to checkout for this vacancy.
       await refreshOpportunities();
       setCheckoutPlanId(undefined);
+      setCheckoutAlreadyPublished(false);
       setCheckoutOpportunityId(id);
     } else if (res.error) {
       throw new Error(res.error.message);
@@ -730,7 +738,7 @@ function AppContent() {
         {/* Tab 7: Billing & Subscription */}
         {activeTab === 'billing' && tabAccess.allowed && (
           <Suspense fallback={<TabLoadingFallback />}>
-            <SubscriptionManager onPostJob={access.canPost ? handlePostJobWithPlan : undefined} />
+            <SubscriptionManager onPostJob={access.canPost ? handlePostJobWithPlan : undefined} onPostFree={access.canPost ? handleOpenCreateModal : undefined} />
           </Suspense>
         )}
 
@@ -770,6 +778,7 @@ function AppContent() {
             opportunityToEdit={opportunityToEdit}
             currency={currency}
             initialPostingPlanId={initialPostingPlanId}
+            activeJobCount={opportunities.filter((o) => o.status === 'published' && o.organizationId === activeOrganization?.id).length}
           />
         </Suspense>
       )}
@@ -780,7 +789,8 @@ function AppContent() {
             opportunityId={checkoutOpportunityId}
             opportunityTitle={opportunities.find((o) => o.id === checkoutOpportunityId)?.title}
             preferredPlanId={checkoutPlanId}
-            onClose={() => { setCheckoutOpportunityId(null); setCheckoutPlanId(undefined); }}
+            alreadyPublished={checkoutAlreadyPublished}
+            onClose={() => { setCheckoutOpportunityId(null); setCheckoutPlanId(undefined); setCheckoutAlreadyPublished(false); }}
             onPublished={() => { void refreshOpportunities(); }}
           />
         </Suspense>

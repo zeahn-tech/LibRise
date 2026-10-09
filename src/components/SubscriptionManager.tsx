@@ -15,9 +15,11 @@ const PaymentCheckoutFlow = lazy(() => import('./payments/PaymentCheckoutFlow').
 interface SubscriptionManagerProps {
   /** Present when the viewer can post jobs: starts a new job with that pay-as-you-go option selected. */
   onPostJob?: (planId: string) => void;
+  /** Present when the viewer can post jobs: opens the new-job form (the free Basic post). */
+  onPostFree?: () => void;
 }
 
-export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPostJob }) => {
+export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPostJob, onPostFree }) => {
   const { showToast } = useToast();
   const [subscription, setSubscription] = useState<OrganizationSubscription | null>(null);
   const [loading, setLoading] = useState(true);
@@ -362,8 +364,8 @@ export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPost
               ['Active jobs', (e: SubscriptionPlan['entitlements']) => String(e.maxActiveJobs)],
               ['Businesses for sale', (e: SubscriptionPlan['entitlements']) => String(e.maxActiveListings)],
               ['Applicant management', () => '✓'],
-              ['Job promotion', (e: SubscriptionPlan['entitlements']) => (e.jobPromotion ? '✓' : 'Pay-as-you-go')],
-              ['Featured vacancies at once', (e: SubscriptionPlan['entitlements']) => (e.maxFeaturedVacancies > 0 ? String(e.maxFeaturedVacancies) : 'Pay-as-you-go')],
+              ['Job promotion', (e: SubscriptionPlan['entitlements']) => (e.jobPromotion ? '✓' : 'Optional ($3–$10)')],
+              ['Featured vacancies at once', (e: SubscriptionPlan['entitlements']) => (e.maxFeaturedVacancies > 0 ? String(e.maxFeaturedVacancies) : 'Optional ($5)')],
               ['Priority visibility', (e: SubscriptionPlan['entitlements']) => (e.priorityVisibility ? '✓' : '—')],
               ['Advanced analytics', (e: SubscriptionPlan['entitlements']) => (e.advancedAnalytics ? '✓' : '—')],
               ['AI candidate matching', (e: SubscriptionPlan['entitlements']) => (e.canUseAI ? '✓' : '—')],
@@ -378,19 +380,33 @@ export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPost
         </table>
       </div>
 
-      {/* Pay-as-you-go */}
+      {/* Free post + optional promotions */}
       {vacancyPlans.length > 0 && audience !== 'seller' && (
         <div className="bg-white p-6 md:p-8 rounded-[32px] border border-[#E8E4D9]" data-testid="pay-as-you-go">
-          <h3 className="text-xl font-bold font-display text-[#283618] tracking-tight">Pay-as-you-go</h3>
+          <h3 className="text-xl font-bold font-display text-[#283618] tracking-tight">Post free. Promote only if you want to.</h3>
           <p className="text-sm text-stone-500 mt-1 max-w-2xl">
-            Don't need a monthly subscription? Only hiring occasionally? Pay only when you need to post.
+            If you only need one basic vacancy, LibRise is free. Promotions are optional and only add visibility. Recruit often?
+            Upgrade to Starter or Pro above.
           </p>
-          <ol className="mt-3 text-xs text-stone-600 list-decimal list-inside space-y-0.5">
-            <li>Pick an option below and write your job.</li>
-            <li>Pay with MTN Mobile Money or Orange Money and enter the transaction ID.</li>
-            <li>We verify the payment and your job goes live.</li>
-          </ol>
-          <div className="grid sm:grid-cols-3 gap-4 mt-6">
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+            <div className="border-2 border-[#4F772D] rounded-2xl p-4 bg-[#F4F8EF]" data-testid="payg-basic-free">
+              <div className="font-bold text-[#283618]">Basic — Free</div>
+              <div className="text-2xl font-black text-[#283618] mt-1">$0</div>
+              <ul className="mt-3 space-y-1">
+                {['1 active vacancy', 'Standard visibility', 'Normal application management'].map((f) => (
+                  <li key={f} className="text-xs text-stone-600 flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 text-[#4F772D]" />{f}</li>
+                ))}
+              </ul>
+              {onPostFree ? (
+                <button onClick={onPostFree} data-testid="payg-post-free" className="mt-4 w-full min-h-11 rounded-xl bg-[#4F772D] text-white text-sm font-semibold cursor-pointer">
+                  Post Free
+                </button>
+              ) : (
+                <p className="mt-4 text-[11px] text-stone-400">Available when you post a job.</p>
+              )}
+            </div>
+
             {vacancyPlans.map((vp) => (
               <div key={vp.id} className="border border-[#E8E4D9] rounded-2xl p-4 bg-[#F9F8F6]">
                 <div className="font-bold text-[#283618]">{vp.name}</div>
@@ -407,7 +423,7 @@ export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPost
                     data-testid={`payg-post-${vp.promotionLevel ?? vp.id}`}
                     className="mt-4 w-full min-h-11 rounded-xl bg-[#283618] text-white text-sm font-semibold cursor-pointer"
                   >
-                    Post a job — {formatMinorAmount(vp.amountMinor, vp.currency)}
+                    {vp.promotionLevel === 'boost' ? 'Boost' : vp.promotionLevel === 'featured' ? 'Feature' : 'Go Premium'} — {formatMinorAmount(vp.amountMinor, vp.currency)}
                   </button>
                 ) : (
                   <p className="mt-4 text-[11px] text-stone-400">Choose this when you post a job.</p>
@@ -415,6 +431,10 @@ export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPost
               </div>
             ))}
           </div>
+          <p className="mt-4 text-xs text-stone-500">
+            Promotions are paid with MTN Mobile Money or Orange Money. After you send the payment and enter the transaction ID,
+            we verify it and the promotion switches on. A promotion ends on its own; your vacancy stays live as a normal listing.
+          </p>
         </div>
       )}
     </div>

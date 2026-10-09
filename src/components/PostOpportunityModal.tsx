@@ -18,6 +18,8 @@ interface PostOpportunityModalProps {
   currency: 'USD' | 'LRD';
   /** Pre-selects a pay-as-you-go option (e.g. when coming from the pricing page). */
   initialPostingPlanId?: string;
+  /** Live vacancies the active organization already has (to know whether its free post is used). */
+  activeJobCount?: number;
 }
 
 const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
@@ -26,7 +28,8 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
   onSave,
   opportunityToEdit,
   currency,
-  initialPostingPlanId
+  initialPostingPlanId,
+  activeJobCount = 0
 }) => {
   const { session, user, activeRole, userOrganizations, activeOrganization } = useAuth();
   const { showToast } = useToast();
@@ -101,6 +104,16 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
   }, []);
   const showPostingOptions = !opportunityToEdit && !hasPaidSubscription && vacancyPlans.length > 0;
   const chosenPlan = vacancyPlans.find((p) => p.id === postingPlanId) || null;
+  const freeLimit = typeof entitlements.maxActiveJobs === 'number' ? entitlements.maxActiveJobs : Infinity;
+  const freePostAvailable = activeJobCount < freeLimit;
+  // The free post is already live: the free option is unavailable, so start on the first paid option.
+  useEffect(() => {
+    if (showPostingOptions && !freePostAvailable && !postingPlanId && vacancyPlans[0]) {
+      setPostingPlanId(vacancyPlans[0].id);
+    }
+  }, [showPostingOptions, freePostAvailable, postingPlanId, vacancyPlans]);
+  const actionLabel = (plan: PaymentPlan) =>
+    `${plan.promotionLevel === 'boost' ? 'Boost' : plan.promotionLevel === 'featured' ? 'Feature' : 'Go Premium'} — ${formatMinorAmount(plan.amountMinor, plan.currency)}`;
 
   // Initialize from opportunityToEdit if present
   useEffect(() => {
@@ -233,29 +246,29 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
         {/* Form Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-5 text-xs sm:text-sm">
         {showPostingOptions && (
-          <div className="rounded-2xl border border-[#E8E4D9] bg-[#F9F8F4] p-4" data-testid="posting-options">
-            <div className="text-xs font-bold text-[#283618] uppercase tracking-wider mb-2">How do you want to post this?</div>
-            <div className="grid sm:grid-cols-2 gap-2">
-              <label className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer ${postingPlanId === '' ? 'border-[#4F772D] bg-[#F4F8EF]' : 'border-[#E8E4D9] bg-white'}`}>
-                <input type="radio" name="posting-plan" className="mt-1" checked={postingPlanId === ''} onChange={() => setPostingPlanId('')} />
-                <span>
-                  <span className="block font-bold text-[#132A13]">Included free post</span>
-                  <span className="block text-[11px] text-stone-500">Your Free plan includes 1 active job. If it is already used, you will be asked to pay.</span>
-                </span>
-              </label>
+          <div className="rounded-2xl border border-[#E8E4D9] bg-[#F9F8F4] p-4 space-y-3" data-testid="posting-options">
+            <div className="text-xs font-bold text-[#283618] uppercase tracking-wider">Post your vacancy</div>
+            <label className={`flex items-start gap-3 p-3 rounded-2xl border ${freePostAvailable ? 'cursor-pointer' : 'opacity-60'} ${postingPlanId === '' ? 'border-[#4F772D] bg-[#F4F8EF]' : 'border-[#E8E4D9] bg-white'}`}>
+              <input type="radio" name="posting-plan" className="mt-1" disabled={!freePostAvailable} checked={postingPlanId === ''} onChange={() => setPostingPlanId('')} />
+              <span className="flex-1">
+                <span className="flex justify-between gap-2 font-bold text-[#132A13]"><span>Basic — Free</span><span>$0</span></span>
+                <span className="block text-[11px] text-stone-500">1 active vacancy · Standard visibility · Normal application management</span>
+                {!freePostAvailable && <span className="block text-[11px] text-[#BC6C25] mt-1">Your free vacancy is already live. Choose an option below to post another, or upgrade your plan.</span>}
+              </span>
+            </label>
+            <div className="text-xs font-bold text-[#283618] uppercase tracking-wider pt-1">Get more visibility <span className="font-normal normal-case text-stone-500">(optional)</span></div>
+            <div className="grid sm:grid-cols-3 gap-2">
               {vacancyPlans.map((vp) => (
                 <label key={vp.id} className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer ${postingPlanId === vp.id ? 'border-[#4F772D] bg-[#F4F8EF]' : 'border-[#E8E4D9] bg-white'}`}>
                   <input type="radio" name="posting-plan" className="mt-1" checked={postingPlanId === vp.id} onChange={() => setPostingPlanId(vp.id)} />
                   <span className="flex-1">
-                    <span className="flex justify-between gap-2 font-bold text-[#132A13]">
-                      <span>{vp.name}</span><span>{formatMinorAmount(vp.amountMinor, vp.currency)}</span>
-                    </span>
+                    <span className="flex justify-between gap-2 font-bold text-[#132A13]"><span>{vp.name}</span><span>{formatMinorAmount(vp.amountMinor, vp.currency)}</span></span>
                     <span className="block text-[11px] text-stone-500">{vp.description}</span>
                   </span>
                 </label>
               ))}
             </div>
-            <p className="text-[11px] text-stone-500 mt-2">Pay with MTN Mobile Money or Orange Money. Your job goes live once we verify the payment. Not hiring often? No subscription needed.</p>
+            <p className="text-[11px] text-stone-500">You never have to pay to post your free vacancy. Promotions are paid with MTN Mobile Money or Orange Money and switch on once we verify the payment.</p>
           </div>
         )}
 
@@ -665,7 +678,7 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
               className="px-6 py-2.5 bg-[#4F772D] hover:bg-[#283618] text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>{isSubmitting ? 'Publishing...' : chosenPlan ? `Continue to payment (${formatMinorAmount(chosenPlan.amountMinor, chosenPlan.currency)})` : 'Publish Immediately'}</span>
+              <span>{isSubmitting ? 'Publishing...' : chosenPlan ? actionLabel(chosenPlan) : showPostingOptions ? 'Post Free' : 'Publish Immediately'}</span>
             </button>
           </div>
         </div>

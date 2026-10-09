@@ -152,6 +152,8 @@ interface OpportunityRow {
   is_featured: boolean | null;
   featured_until?: string | null;
   boosted_until?: string | null;
+  promotion_level?: string | null;
+  promotion_until?: string | null;
   created_at: string;
   updated_at: string;
   organizations: OrganizationRow | null;
@@ -197,6 +199,21 @@ function computeEffectiveStatus(row: Pick<OpportunityRow, 'status' | 'applicatio
   return row.status as Opportunity['status'];
 }
 
+/** Effective promotion of a row right now: the paid level while it is in date, else a subscription featured slot, else none. */
+function promotionFields(row: OpportunityRow): Pick<Opportunity, 'isFeatured' | 'promotionLevel' | 'promotionUntil'> {
+  const now = Date.now();
+  const paid = row.promotion_level && row.promotion_until && new Date(row.promotion_until).getTime() > now
+    ? (row.promotion_level as 'boost' | 'featured' | 'premium')
+    : null;
+  const slotFeatured = !!row.is_featured && (!row.featured_until || new Date(row.featured_until).getTime() > now);
+  const level = paid ?? (slotFeatured ? 'featured' : null);
+  return {
+    promotionLevel: level,
+    promotionUntil: paid ? row.promotion_until ?? null : slotFeatured ? row.featured_until ?? null : null,
+    isFeatured: level === 'featured' || level === 'premium'
+  };
+}
+
 function rowToOpportunity(row: OpportunityRow): Opportunity {
   const fallbackOrg: Organization = row.organizations
     ? rowToOrganization(row.organizations)
@@ -239,9 +256,9 @@ function rowToOpportunity(row: OpportunityRow): Opportunity {
     postedDate: row.created_at.split('T')[0],
     openingsCount: row.number_of_openings ?? 1,
     screeningQuestions: row.screening_questions ?? undefined,
-    // Featuring and boosting are time-limited (paid period / subscription period).
-    isFeatured: (row.is_featured ?? false) && (!row.featured_until || new Date(row.featured_until).getTime() > Date.now()),
-    isBoosted: !!row.boosted_until && new Date(row.boosted_until).getTime() > Date.now(),
+    // Promotion is time-limited and evaluated here, at read time, so it lapses on
+    // its own back to a normal listing (the vacancy is never touched).
+    ...promotionFields(row),
     viewsCount: row.views_count ?? 0,
     applicationsCount: row.applications_count ?? 0,
     status: computeEffectiveStatus(row),
@@ -341,10 +358,10 @@ export const opportunityService = {
         opps = opps.filter((o) => o.status === 'published');
       }
 
-      // Placement: boosted (Premium) first, then featured, then everything
-      // else; newest first within each group. Array.sort is stable, so this
+      // Placement: Premium, then Featured, then Boost, then everything else;
+      // newest first within each group. Array.sort is stable, so this
       // only reorders by promotion and otherwise keeps the incoming order.
-      const rank = (o: Opportunity) => (o.isBoosted ? 2 : o.isFeatured ? 1 : 0);
+      const rank = (o: Opportunity) => ({ premium: 3, featured: 2, boost: 1 }[o.promotionLevel ?? ''] ?? 0);
       return opps
         .map((opp, i) => ({ opp, i }))
         .sort((a, b) => rank(b.opp) - rank(a.opp) || a.i - b.i)
@@ -396,14 +413,12 @@ export const opportunityService = {
         throw new ForbiddenError('You do not have permission to create opportunities for this organization.');
       }
 
-      // When the plan's free publish quota is exhausted the vacancy is
-      // saved as 'payment_required' (not published, not hard-rejected) so
-      // the recruiter keeps their work and is routed to checkout.
-      let requiresPayment = false;
-      if (!isDraft && data.paidPlanId) {
-        requiresPayment = true;
-      }
-      if (!isDraft && !requiresPayment) {
+      // Free Basic: a vacancy within the plan's limit goes live immediately with
+      // no payment. Over the limit, it is saved as 'payment_required' (not
+      // published, not hard-rejected) so the recruiter keeps their work and is
+      // routed to checkout; Boost/Featured/Premium then also publish it.
+      let overFreeLimit = false;
+      if (!isDraft) {
         const { subscriptionService } = await import('./subscriptionService');
         const entitlementRes = await subscriptionService.getEntitlements(targetOrgId);
         if (entitlementRes.data && entitlementRes.data.maxActiveJobs !== 'unlimited') {
@@ -413,10 +428,14 @@ export const opportunityService = {
             .eq('organization_id', targetOrgId)
             .eq('status', 'published');
           if ((count ?? 0) >= entitlementRes.data.maxActiveJobs) {
-            requiresPayment = true;
+            overFreeLimit = true;
           }
         }
       }
+      const requiresPayment = overFreeLimit;
+      // Within the limit AND a promotion was chosen: the vacancy is live now as a
+      // Basic post; the promotion switches on only after the payment is approved.
+      const promotionPending = !isDraft && !overFreeLimit && !!data.paidPlanId;
 
       const id = `opp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const insertRow = {
@@ -453,10 +472,12 @@ export const opportunityService = {
         .select(SELECT_WITH_ORG)
         .maybeSingle();
       if (error) translateError(error);
-      if (requiresPayment) {
+      if (requiresPayment || promotionPending) {
         throw new PaymentRequiredError(
-          'Your plan\'s free publishing limit is reached. This vacancy was saved and needs a one-time payment to go live.',
-          { opportunityId: id, planId: data.paidPlanId }
+          promotionPending
+            ? 'Your vacancy is live. Complete the payment to activate your promotion.'
+            : 'Your plan\'s free publishing limit is reached. This vacancy was saved and needs a payment to go live.',
+          { opportunityId: id, planId: data.paidPlanId, alreadyPublished: promotionPending }
         );
       }
       return rowToOpportunity(created as OpportunityRow);
@@ -639,3 +660,6 @@ export const opportunityService = {
     });
   }
 };
+
+/** Exposed for tests only. */
+export const promotionFieldsForTest = promotionFields;

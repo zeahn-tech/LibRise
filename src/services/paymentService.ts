@@ -232,6 +232,14 @@ export interface PaymentWithContext extends Payment {
   opportunityTitle?: string | null;
   organizationName?: string | null;
   planName?: string | null;
+  planType?: 'vacancy' | 'subscription' | null;
+  promotionLevel?: 'boost' | 'featured' | 'premium' | null;
+  subscriptionTier?: string | null;
+  billingCycle?: 'monthly' | 'annual' | null;
+  /** Status of the related vacancy, so the admin can see whether it is already live. */
+  opportunityStatus?: string | null;
+  requesterName?: string | null;
+  requesterEmail?: string | null;
 }
 
 /** If an unsubmitted payment's window has passed, expire it server-side
@@ -630,19 +638,42 @@ export const paymentService = {
     return apiClient.execute(async () => {
       const { data, error } = await client()
         .from('payments')
-        .select('*, opportunities(title), organizations(name), payment_plans(name)')
+        .select('*, opportunities(title, status), organizations(name), payment_plans(name, plan_type, subscription_tier, billing_cycle, promotion_level)')
         .eq('status', 'payment_pending')
         .order('created_at', { ascending: true });
       if (error) translateError(error);
-      return (data as Array<PaymentRow & {
-        opportunities?: { title?: string } | null;
+      const rows = data as Array<PaymentRow & {
+        opportunities?: { title?: string; status?: string } | null;
         organizations?: { name?: string } | null;
-        payment_plans?: { name?: string } | null;
-      }>).map((row) => ({
+        payment_plans?: {
+          name?: string; plan_type?: string; subscription_tier?: string | null;
+          billing_cycle?: string | null; promotion_level?: string | null;
+        } | null;
+      }>;
+
+      // Who asked for it. Separate, best-effort lookup: if the admin's RLS does
+      // not allow reading users, the queue still works and shows the id.
+      const requesters = new Map<string, { name: string | null; email: string | null }>();
+      const ids = Array.from(new Set(rows.map((r) => r.created_by_user_id)));
+      if (ids.length > 0) {
+        const { data: users } = await client().from('users').select('id, full_name, email').in('id', ids);
+        for (const u of (users ?? []) as Array<{ id: string; full_name?: string | null; email?: string | null }>) {
+          requesters.set(u.id, { name: u.full_name ?? null, email: u.email ?? null });
+        }
+      }
+
+      return rows.map((row) => ({
         ...rowToPayment(row),
         opportunityTitle: row.opportunities?.title ?? null,
+        opportunityStatus: row.opportunities?.status ?? null,
         organizationName: row.organizations?.name ?? null,
-        planName: row.payment_plans?.name ?? null
+        planName: row.payment_plans?.name ?? null,
+        planType: (row.payment_plans?.plan_type ?? null) as PaymentWithContext['planType'],
+        promotionLevel: (row.payment_plans?.promotion_level ?? null) as PaymentWithContext['promotionLevel'],
+        subscriptionTier: row.payment_plans?.subscription_tier ?? null,
+        billingCycle: (row.payment_plans?.billing_cycle ?? null) as PaymentWithContext['billingCycle'],
+        requesterName: requesters.get(row.created_by_user_id)?.name ?? null,
+        requesterEmail: requesters.get(row.created_by_user_id)?.email ?? null
       }));
     });
   },

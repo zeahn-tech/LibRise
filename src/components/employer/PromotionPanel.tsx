@@ -32,7 +32,7 @@ export const PromotionPanel: React.FC<Props> = ({ opportunities, entitlements, o
       <div className="bg-[#FEFAE0] border border-[#E8E4D9] rounded-2xl p-4 text-xs text-[#283618] flex flex-wrap items-center justify-between gap-3" data-testid="promotion-teaser">
         <span className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-[#BC6C25]" />
-          Want more people to see a job? Post it as Featured ($5) or Premium ($10) when you publish, or get a featured slot included with Starter.
+          Want more people to see a job? Promote it: Boost ($3), Featured ($5) or Premium ($10). Or get a featured slot included with Starter.
         </span>
         {onOpenBilling && (
           <button onClick={onOpenBilling} className="px-3 py-1.5 rounded-xl bg-[#283618] text-white font-semibold cursor-pointer">See plans</button>
@@ -70,12 +70,18 @@ export const PromotionPanel: React.FC<Props> = ({ opportunities, entitlements, o
             <li key={opp.id} className="py-2 flex items-center justify-between gap-3 text-xs">
               <span className="min-w-0 truncate text-[#283618] font-medium">
                 {opp.title}
-                {opp.isBoosted && <span className="ml-2 text-[10px] font-bold uppercase text-[#BC6C25]">Boosted</span>}
+                {opp.promotionLevel && (
+                  <span className="ml-2 text-[10px] font-bold uppercase text-[#BC6C25]" data-testid="promo-status">
+                    {opp.promotionLevel === 'boost' ? 'Boosted' : opp.promotionLevel === 'featured' ? 'Featured' : 'Premium'}
+                    {opp.promotionUntil ? ` until ${new Date(opp.promotionUntil).toLocaleDateString()}` : ''}
+                    {` · ${opp.viewsCount ?? 0} views · ${opp.applicationsCount ?? 0} applications`}
+                  </span>
+                )}
               </span>
               <button
-                disabled={busyId === opp.id || full || !!opp.isBoosted}
+                disabled={busyId === opp.id || full || opp.promotionLevel === 'premium'}
                 onClick={() => void toggle(opp)}
-                title={opp.isBoosted ? 'Boosted vacancies stay featured for the period you paid for.' : full ? 'All featured slots in your plan are in use.' : undefined}
+                title={opp.promotionLevel === 'premium' ? 'Premium vacancies stay featured for the period you paid for.' : full ? 'All featured slots in your plan are in use.' : undefined}
                 className="shrink-0 px-3 py-1.5 rounded-xl border border-[#E8E4D9] font-semibold text-[#283618] bg-[#F9F8F6] disabled:opacity-50 cursor-pointer"
               >
                 {opp.isFeatured ? 'Remove featured' : 'Feature this job'}

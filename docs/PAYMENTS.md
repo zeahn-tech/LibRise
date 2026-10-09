@@ -138,21 +138,39 @@ Provider facts researched so far (MTN Liberia available via `momodeveloper.mtn.c
 Liberia **unresolved / needs direct confirmation**; aggregators such as XDAfrica/MoneyMatrix/pawaPay unverified for
 Liberia) are in the project conversation history, not repeated here as verified fact.
 
-## Pay-as-you-go flow and promotion (pricing revision)
+## Free Basic job, optional promotions, subscriptions
 
-- **Posting a job without a subscription:** on a new vacancy, organizations without a paid plan pick *Included free post*
-  or Basic ($3) / Featured ($5) / Premium ($10) (`PostOpportunityModal`). A paid choice saves the vacancy as
-  `payment_required` and opens the existing `PaymentCheckoutFlow` with that plan pre-selected (MTN or Orange, transaction
-  ID, admin approval). The client only names a plan id; the amount always comes from `payment_plans`. Going over a plan's
-  job limit uses the same checkout (all three options offered).
-- **After approval** `admin_review_payment()` publishes the job; Featured also sets `is_featured`/`featured_until`, and
-  Premium also sets `boosted_until`, for the plan's `duration_days`. Lists show boosted first, then featured, then the rest,
-  with a badge.
-- **Featured slots in a subscription** (Starter 1, Pro 5 at a time) are used from *Recruiter workspace -> Promote your
-  vacancies* (`PromotionPanel`). The database enforces the slot count (`guard_opportunity_promotion`); a plan-granted
-  feature ends with the subscription period.
-- **Not built:** a separate "priority visibility" ranking beyond featured/boosted placement, and self-service
-  downgrade/cancellation (the page says to contact support).
+LibRise is free to start: **free -> promote -> subscribe.**
+
+- **Basic - Free ($0):** the first active job on the Free plan publishes immediately, with no payment. Free is permanent
+  (no trial, no expiry); a lapsed paid plan falls back to it (`org_effective_tier()`), and nothing is deleted.
+- **Promotions (optional, one vacancy):** Boost $3 (Boosted badge, ranks above basic), Featured $5 (Featured badge, ranks
+  above Boost), Premium $10 (Premium badge, top placement). They are the existing `vacancy` payment plans (ids unchanged;
+  `plan-vacancy-basic` is the Boost plan). Ranking is applied in `opportunityService.list()` for every list and search:
+  Premium > Featured > Boost > basic, newest first within a level. Only these benefits exist; nothing else is promised.
+- **Subscriptions:** Starter $10/mo or $100/yr (10 active jobs), Pro $25/mo or $250/yr (50 active jobs). Starter includes 1
+  featured slot and Pro 5 (used from *Recruiter workspace -> Promote your vacancies*).
+- **Posting flow** (`PostOpportunityModal`): "Basic - Free" is the first option and "Post Free" publishes at once. Choosing
+  a promotion publishes the Basic post immediately (if the free limit allows) and opens the existing `PaymentCheckoutFlow`
+  for that promotion (MTN or Orange, transaction ID, admin approval). If the free limit is already used, the vacancy is
+  saved as `payment_required` and one of the paid options is needed to take it live. The client only names a plan id; the
+  amount always comes from `payment_plans`.
+- **Approval** (`admin_review_payment()`): publishes a vacancy that was waiting on payment, and applies the promotion
+  (`promotion_level`, `promotion_until`; Featured/Premium also `is_featured`/`featured_until`, Premium also `boosted_until`)
+  for the plan's `duration_days` (Boost 30, Featured 30, Premium 45). Buying a weaker promotion never downgrades a stronger
+  active one (it just adds time). **Rejecting** a promotion payment never unpublishes a live vacancy.
+- **Expiry:** promotions are checked when listings are read (`promotionFields()`), so they lapse by themselves back to a
+  normal listing; the vacancy is never deleted or unpublished. Clients cannot set any promotion column
+  (`guard_opportunity_promotion`).
+- **Admin queue** (Revenue Payments -> Awaiting review) shows the payment type (Subscription Starter/Pro, or Vacancy
+  Boost/Featured/Premium), what approval will do (publish, or switch on a promotion for an already-live vacancy), the
+  vacancy or organization, who requested it, amount, network, transaction ID, sender number, reference and dates.
+- **Seller / Business for Sale listings:** basic presence stays free (Free plan: 1 listing; Starter 3; Pro 10, enforced by
+  `tier_limits()`). There is no paid seller promotion yet. A future one would need: a promotion level/expiry on
+  `business_listings` (like `opportunities.promotion_level/promotion_until`), a `business_listing` payment plan type
+  and approval branch in `admin_review_payment()`, a ranking rule in `businessService`, and the same client-write guard.
+- **Not built:** a separate "priority visibility" ranking for Pro beyond featured placement, per-vacancy performance
+  analytics beyond the existing views/applications counts, and self-service downgrade/cancellation (contact support).
 
 ## Stale checkout prices
 

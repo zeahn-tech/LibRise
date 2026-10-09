@@ -27,6 +27,7 @@ describe('PromotionPanel', () => {
     const html = render('free', [opp('a')]);
     expect(html).toContain('promotion-teaser');
     expect(html).not.toContain('Feature this job');
+    expect(html).toContain('$3');
     expect(html).toContain('$5');
     expect(html).toContain('$10');
   });
@@ -50,8 +51,8 @@ describe('PromotionPanel', () => {
   });
 
   it('a boosted (paid Premium) job cannot be un-featured early', () => {
-    const html = render('pro', [opp('a', { isFeatured: true, isBoosted: true })]);
-    expect(html).toContain('Boosted');
+    const html = render('pro', [opp('a', { isFeatured: true, promotionLevel: 'premium' })]);
+    expect(html).toContain('Premium');
     expect(html).toMatch(/disabled=""/);
   });
 

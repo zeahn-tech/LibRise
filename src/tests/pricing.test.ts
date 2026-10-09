@@ -87,3 +87,31 @@ describe('pricing revision (database is authoritative)', () => {
     expect(getPlanForSubscription(null).tier).toBe('free');
   });
 });
+
+describe('free Basic job + optional promotions (migration 20261009100000)', () => {
+  const PROMO_SQL = readFileSync('supabase/migrations/20261009100000_free_basic_promotions.sql', 'utf8');
+
+  it('the $3/$5/$10 vacancy plans are named and levelled Boost / Featured / Premium', () => {
+    expect(PROMO_SQL).toMatch(/name = 'Boost'[\s\S]*promotion_level = 'boost'[\s\S]*where id = 'plan-vacancy-basic'/);
+    expect(PROMO_SQL).toMatch(/name = 'Featured'[\s\S]*promotion_level = 'featured'[\s\S]*where id = 'plan-vacancy-featured'/);
+    expect(PROMO_SQL).toMatch(/name = 'Premium'[\s\S]*promotion_level = 'premium'[\s\S]*where id = 'plan-vacancy-premium'/);
+  });
+
+  it('prices are NOT changed by the promotion migration (the database keeps $3 / $5 / $10)', () => {
+    expect(PROMO_SQL).not.toMatch(/amount_minor\s*=/);
+  });
+
+  it('promotion columns are protected from the client and rejection never unpublishes a live job', () => {
+    expect(PROMO_SQL).toMatch(/new\.promotion_level := old\.promotion_level/);
+    expect(PROMO_SQL).toMatch(/and status = 'payment_required';/);
+  });
+
+  it('promotions expire on their own: the paid level is only used while promotion_until is in the future', async () => {
+    const { promotionFieldsForTest } = await import('../services/opportunityService');
+    const future = new Date(Date.now() + 86_400_000).toISOString();
+    const past = new Date(Date.now() - 86_400_000).toISOString();
+    expect(promotionFieldsForTest({ promotion_level: 'premium', promotion_until: future } as never).promotionLevel).toBe('premium');
+    expect(promotionFieldsForTest({ promotion_level: 'premium', promotion_until: past } as never).promotionLevel).toBeNull();
+    expect(promotionFieldsForTest({ promotion_level: 'boost', promotion_until: past } as never).isFeatured).toBe(false);
+  });
+});

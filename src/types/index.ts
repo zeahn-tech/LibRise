@@ -158,8 +158,9 @@ export interface Opportunity {
   openingsCount: number;
   screeningQuestions?: string[];
   isFeatured?: boolean;
-  /** Paid Premium boost currently active (top placement). */
-  isBoosted?: boolean;
+  /** Active paid promotion (Boost < Featured < Premium); expires on its own. */
+  promotionLevel?: 'boost' | 'featured' | 'premium' | null;
+  promotionUntil?: string | null;
   viewsCount: number;
   applicationsCount: number;
   status: 'published' | 'draft' | 'closed' | 'expired' | 'archived' | 'payment_required' | 'payment_pending' | 'payment_failed' | 'payment_expired';
@@ -721,8 +722,8 @@ export interface PaymentPlan {
   planType: PaymentPlanType;
   subscriptionTier?: string | null;
   billingCycle?: 'monthly' | 'annual' | null;
-  /** Pay-as-you-go tier: basic | featured | premium (vacancy plans only). */
-  promotionLevel?: 'basic' | 'featured' | 'premium' | null;
+  /** Optional vacancy promotion: boost | featured | premium (vacancy plans only). */
+  promotionLevel?: 'boost' | 'featured' | 'premium' | null;
 }
 
 export interface Payment {

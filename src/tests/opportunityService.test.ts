@@ -115,7 +115,7 @@ describe('opportunityService', () => {
     mockFrom.mockReset();
   });
 
-  it('list(): boosted vacancies first, then featured, then the rest; expired promotions do not count', async () => {
+  it('list(): Premium, then Featured, then Boost, then basic; expired promotions fall back to a normal listing', async () => {
     const future = new Date(Date.now() + 5 * 86_400_000).toISOString();
     const past = new Date(Date.now() - 86_400_000).toISOString();
     const builder = chain({
@@ -123,7 +123,9 @@ describe('opportunityService', () => {
         sampleOppRow({ id: 'plain-1' }),
         sampleOppRow({ id: 'featured-1', is_featured: true, featured_until: future }),
         sampleOppRow({ id: 'expired-feature', is_featured: true, featured_until: past }),
-        sampleOppRow({ id: 'boosted-1', is_featured: true, featured_until: future, boosted_until: future }),
+        sampleOppRow({ id: 'premium-1', promotion_level: 'premium', promotion_until: future }),
+        sampleOppRow({ id: 'boost-1', promotion_level: 'boost', promotion_until: future }),
+        sampleOppRow({ id: 'lapsed-premium', promotion_level: 'premium', promotion_until: past }),
         sampleOppRow({ id: 'plain-2' })
       ],
       error: null
@@ -133,9 +135,11 @@ describe('opportunityService', () => {
     const { opportunityService } = await import('../services/opportunityService');
     const res = await opportunityService.list();
 
-    expect(res.data?.map((o) => o.id)).toEqual(['boosted-1', 'featured-1', 'plain-1', 'expired-feature', 'plain-2']);
+    expect(res.data?.map((o) => o.id)).toEqual(['premium-1', 'featured-1', 'boost-1', 'plain-1', 'expired-feature', 'lapsed-premium', 'plain-2']);
     expect(res.data?.find((o) => o.id === 'expired-feature')?.isFeatured).toBe(false);
-    expect(res.data?.find((o) => o.id === 'boosted-1')?.isBoosted).toBe(true);
+    expect(res.data?.find((o) => o.id === 'premium-1')?.promotionLevel).toBe('premium');
+    expect(res.data?.find((o) => o.id === 'boost-1')?.promotionLevel).toBe('boost');
+    expect(res.data?.find((o) => o.id === 'lapsed-premium')?.promotionLevel).toBeNull();
   });
 
   it('list(): applies structural filters onto the query builder and joins organizations', async () => {
@@ -236,18 +240,42 @@ describe('opportunityService', () => {
     expect(payload.title).toBe('Backend Engineer');
   });
 
-  it('create(): a pay-as-you-go choice saves the vacancy as payment_required and sends the poster to checkout for that plan', async () => {
-    const builder = chain({ data: sampleOppRow({ status: 'payment_required' }), error: null });
+  it('create(): a Free org within its limit posts Basic for free -- published at once, no payment', async () => {
+    const builder = chain({ data: sampleOppRow({ status: 'published' }), error: null, count: 0 });
+    mockFrom.mockReturnValue(builder);
+
+    const { opportunityService } = await import('../services/opportunityService');
+    const res = await opportunityService.publish({ title: 'Cashier', description: 'Shop cashier' });
+
+    expect(builder.insert.mock.calls[0][0].status).toBe('published');
+    expect(res.error).toBeNull();
+    expect(res.data).toBeTruthy();
+  });
+
+  it('create(): choosing a promotion within the free limit publishes the Basic post now and sends the promotion to checkout', async () => {
+    const builder = chain({ data: sampleOppRow({ status: 'published' }), error: null, count: 0 });
     mockFrom.mockReturnValue(builder);
 
     const { opportunityService } = await import('../services/opportunityService');
     const res = await opportunityService.publish({ title: 'Cashier', description: 'Shop cashier', paidPlanId: 'plan-vacancy-featured' });
 
-    expect(builder.insert.mock.calls[0][0].status).toBe('payment_required');
-    // the client only names a plan; it never sends an amount
-    expect(JSON.stringify(builder.insert.mock.calls[0][0])).not.toMatch(/amount/i);
+    expect(builder.insert.mock.calls[0][0].status).toBe('published');
+    // the client only names a plan; it never sends an amount or a promotion level
+    expect(JSON.stringify(builder.insert.mock.calls[0][0])).not.toMatch(/amount|promotion_/i);
     expect(res.error?.code).toBe('PAYMENT_REQUIRED');
-    expect(res.error?.details).toMatchObject({ planId: 'plan-vacancy-featured' });
+    expect(res.error?.details).toMatchObject({ planId: 'plan-vacancy-featured', alreadyPublished: true });
+  });
+
+  it('create(): over the free limit, the vacancy is saved as payment_required and needs a paid option to go live', async () => {
+    const builder = chain({ data: sampleOppRow({ status: 'payment_required' }), error: null, count: 1 });
+    mockFrom.mockReturnValue(builder);
+
+    const { opportunityService } = await import('../services/opportunityService');
+    const res = await opportunityService.publish({ title: 'Second job', description: 'Another vacancy', paidPlanId: 'plan-vacancy-basic' });
+
+    expect(builder.insert.mock.calls[0][0].status).toBe('payment_required');
+    expect(res.error?.code).toBe('PAYMENT_REQUIRED');
+    expect(res.error?.details).toMatchObject({ planId: 'plan-vacancy-basic', alreadyPublished: false });
   });
 
   it('create(): a draft ignores the pay-as-you-go choice (nothing to pay until it is published)', async () => {
