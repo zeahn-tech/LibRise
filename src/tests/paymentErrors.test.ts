@@ -94,7 +94,10 @@ describe('paymentService.initiate(): MTN vs Orange', () => {
 
   it('tapping Orange on an unpaid MTN payment switches it, so the number shown matches the provider recorded', async () => {
     openMtnPayment();
-    mockRpc.mockResolvedValue({ data: paymentRow({ payment_provider: 'manual_momo_orange' }), error: null });
+    mockRpc.mockImplementation((fn: string) =>
+      Promise.resolve(fn === 'switch_payment_provider'
+        ? { data: paymentRow({ payment_provider: 'manual_momo_orange' }), error: null }
+        : { data: paymentRow(), error: null }));
     const { paymentService } = await import('../services/paymentService');
 
     const res = await paymentService.initiate({ opportunityId: 'opp-1', planId: 'plan-vacancy-basic', provider: 'manual_momo_orange' });
@@ -107,7 +110,30 @@ describe('paymentService.initiate(): MTN vs Orange', () => {
     openMtnPayment();
     const { paymentService } = await import('../services/paymentService');
     const res = await paymentService.initiate({ opportunityId: 'opp-1', planId: 'plan-vacancy-basic', provider: 'manual_momo_mtn' });
-    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalledWith('switch_payment_provider', expect.anything());
+    expect(res.data?.paymentProvider).toBe('manual_momo_mtn');
+  });
+
+  it('resuming an unpaid payment re-quotes it to the plan picked, at the CURRENT price (no stale $470)', async () => {
+    mockFrom
+      .mockReturnValueOnce(builder({ data: { id: 'opp-1', organization_id: 'org-1', status: 'payment_required' }, error: null }))
+      .mockReturnValueOnce(builder({ data: paymentRow({ plan_id: 'plan-sub-basic-annual', amount_minor: 47000 }), error: null }));
+    mockRpc.mockResolvedValue({ data: paymentRow({ plan_id: 'plan-vacancy-featured', amount_minor: 500 }), error: null });
+    const { paymentService } = await import('../services/paymentService');
+
+    const res = await paymentService.initiate({ opportunityId: 'opp-1', planId: 'plan-vacancy-featured', provider: 'manual_momo_mtn' });
+
+    expect(mockRpc).toHaveBeenCalledWith('refresh_open_payment', { p_payment_id: 'pay-1', p_plan_id: 'plan-vacancy-featured' });
+    expect(res.data?.amountMinor).toBe(500);
+    expect(res.data?.planId).toBe('plan-vacancy-featured');
+  });
+
+  it('if the refresh function is not installed yet, the existing payment is still returned (no error)', async () => {
+    openMtnPayment();
+    mockRpc.mockResolvedValue({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } });
+    const { paymentService } = await import('../services/paymentService');
+    const res = await paymentService.initiate({ opportunityId: 'opp-1', planId: 'plan-vacancy-basic', provider: 'manual_momo_mtn' });
+    expect(res.error).toBeNull();
     expect(res.data?.paymentProvider).toBe('manual_momo_mtn');
   });
 
@@ -130,7 +156,7 @@ describe('paymentService.initiate(): MTN vs Orange', () => {
 
     const res = await paymentService.initiate({ opportunityId: 'opp-1', planId: 'plan-vacancy-basic', provider: 'manual_momo_orange' });
 
-    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled(); // quote is frozen once a reference is submitted
     expect(res.data?.paymentProvider).toBe('manual_momo_mtn');
     expect(res.data?.status).toBe('payment_pending');
   });

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../design-system/Button';
 import { BrandLogo } from '../common/BrandLogo';
+import { recoveryLinkError, clearRecoveryParamsFromUrl } from '../../lib/recoveryLink';
 
 export const AuthModal: React.FC = () => {
   const {
@@ -57,7 +58,9 @@ export const AuthModal: React.FC = () => {
 
   // UI state
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // An expired/used reset link shows its reason once, on the request-a-new-link form.
+  const [errorMessage, setErrorMessage] = useState<string | null>(recoveryLinkError);
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   if (!isAuthModalOpen) return null;
@@ -110,7 +113,11 @@ export const AuthModal: React.FC = () => {
         setGeneratedResetToken(res.resetToken);
         setResetToken(res.resetToken);
       }
-      setSuccessMessage('A secure recovery code has been generated. Use it below to reset your password.');
+      setSuccessMessage(
+        res.resetToken
+          ? 'A secure recovery code has been generated. Use it below to reset your password.'
+          : 'If that email has an account, we have sent a password reset link. Open it on this device to choose a new password.'
+      );
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to request password reset.');
     } finally {
@@ -137,6 +144,41 @@ export const AuthModal: React.FC = () => {
     }
   };
 
+  /** Reached from the emailed reset link: a recovery session already exists, so only the new password is needed. */
+  const handleNewPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    if (newPassword.length < 8) {
+      setErrorMessage('Use at least 8 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setErrorMessage('The two passwords do not match.');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await resetPassword('recovery-session', newPassword);
+      clearRecoveryParamsFromUrl();
+      setSuccessMessage('Your password has been changed. You are signed in.');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => {
+        closeAuthModal();
+        setSuccessMessage(null);
+      }, 1500);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '';
+      setErrorMessage(
+        /session|expired|invalid|missing|not authenticated/i.test(msg) || !msg
+          ? 'This reset link is invalid or has expired. Request a new one.'
+          : msg
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#132A13]/60 backdrop-blur-xs overflow-y-auto">
       <div className="relative w-full max-w-lg bg-white rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden my-8">
@@ -148,6 +190,7 @@ export const AuthModal: React.FC = () => {
               {authModalView === 'login' && 'Sign in to your account'}
               {authModalView === 'register' && 'Create an opportunity account'}
               {authModalView === 'forgot_password' && 'Account Recovery'}
+              {authModalView === 'reset_password' && 'Set a new password'}
             </h2>
           </div>
           <button
@@ -399,6 +442,55 @@ export const AuthModal: React.FC = () => {
             </form>
           )}
 
+          {/* VIEW: SET NEW PASSWORD (opened from the emailed reset link) */}
+          {authModalView === 'reset_password' && (
+            <form onSubmit={handleNewPasswordSubmit} className="space-y-4" data-testid="reset-password-form">
+              <p className="text-sm text-[#606C38]">Choose a new password for your LibRise account.</p>
+              <div>
+                <label className="block text-xs font-bold text-[#132A13] uppercase tracking-wider mb-1.5">New password</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-[#606C38] absolute left-3.5 top-3" />
+                  <input
+                    type="password"
+                    required
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="At least 8 characters"
+                    className="w-full pl-10 pr-4 py-2.5 bg-[#F9F8F6] border border-[#E8E4D9] rounded-xl text-sm focus:outline-none focus:border-[#283618]"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-[#132A13] uppercase tracking-wider mb-1.5">Confirm new password</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-[#606C38] absolute left-3.5 top-3" />
+                  <input
+                    type="password"
+                    required
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Type it again"
+                    className="w-full pl-10 pr-4 py-2.5 bg-[#F9F8F6] border border-[#E8E4D9] rounded-xl text-sm focus:outline-none focus:border-[#283618]"
+                  />
+                </div>
+              </div>
+              <Button type="submit" variant="primary" size="md" className="w-full" isLoading={isLoading}>
+                Change password
+              </Button>
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => { setErrorMessage(null); setAuthModalView('forgot_password'); }}
+                  className="text-xs text-[#606C38] hover:text-[#283618] hover:underline cursor-pointer"
+                >
+                  Link not working? Request a new one
+                </button>
+              </div>
+            </form>
+          )}
+
           {/* VIEW: FORGOT & RESET PASSWORD */}
           {authModalView === 'forgot_password' && (
             <div className="space-y-4">
@@ -434,6 +526,7 @@ export const AuthModal: React.FC = () => {
                 </div>
               )}
 
+              {generatedResetToken && (<>
               <hr className="border-[#E8E4D9] my-4" />
 
               <form onSubmit={handleResetSubmit} className="space-y-3">
@@ -475,6 +568,7 @@ export const AuthModal: React.FC = () => {
                   Reset Password & Sign In
                 </Button>
               </form>
+              </>)}
 
               <div className="text-center pt-2">
                 <button

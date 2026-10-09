@@ -154,3 +154,10 @@ Liberia) are in the project conversation history, not repeated here as verified 
 - **Not built:** a separate "priority visibility" ranking beyond featured/boosted placement, and self-service
   downgrade/cancellation (the page says to contact support).
 
+## Stale checkout prices
+
+An organization has at most one open payment per target, and checkout resumes it. A payment still in `created` (no
+transaction reference) is re-quoted: `refresh_open_payment()` moves it to the plan just picked at that plan's current
+price, and a trigger on `payment_plans` re-quotes unpaid payments whenever a plan price changes. Once a reference is
+submitted (`payment_pending` and later) the quoted amount is frozen so what the customer was told to send never changes.
+

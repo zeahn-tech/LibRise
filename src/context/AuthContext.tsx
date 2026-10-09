@@ -1,3 +1,4 @@
+import { openedFromRecoveryLink, recoveryLinkError } from '../lib/recoveryLink';
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import {
   Opportunity,
@@ -13,7 +14,7 @@ import { authService, AuthSession } from '../services/authService';
 import { logger } from '../core/logging/logger';
 import { AuthorizationContext, WorkspaceAccessResult } from '../core/auth/permissionEngine';
 
-export type AuthModalView = 'login' | 'register' | 'forgot_password';
+export type AuthModalView = 'login' | 'register' | 'forgot_password' | 'reset_password';
 
 interface AuthContextType {
   session: AuthSession;
@@ -74,8 +75,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<AuthSession>(authService.getSession());
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authModalView, setAuthModalView] = useState<AuthModalView>('login');
+  // Arriving from a password-reset email opens the set-new-password form (or,
+  // for an expired link, the request-a-new-link form) straight away.
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(openedFromRecoveryLink || !!recoveryLinkError);
+  const [authModalView, setAuthModalView] = useState<AuthModalView>(
+    openedFromRecoveryLink ? 'reset_password' : recoveryLinkError ? 'forgot_password' : 'login'
+  );
 
   useEffect(() => {
     logger.debug('AuthContext', `AuthProvider active for user ${session.user?.fullName || 'Guest'} (${session.activeRole})`);

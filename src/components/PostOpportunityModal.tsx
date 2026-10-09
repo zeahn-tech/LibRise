@@ -209,10 +209,10 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
     <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 overflow-y-auto">
       <div className="bg-white w-full max-w-3xl rounded-[32px] sm:rounded-[40px] border border-[#E8E4D9] shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="p-6 bg-[#ECF3E9] border-b border-[#D9E3D5] relative flex-none">
+        <div className="p-4 sm:p-6 bg-[#ECF3E9] border-b border-[#D9E3D5] relative flex-none">
           <button
             onClick={onClose}
-            className="absolute top-6 right-6 w-11 h-11 bg-white/80 hover:bg-white rounded-full flex items-center justify-center text-[#283618] border border-[#D9E3D5] cursor-pointer"
+            className="absolute top-3 right-3 sm:top-6 sm:right-6 w-11 h-11 bg-white/80 hover:bg-white rounded-full flex items-center justify-center text-[#283618] border border-[#D9E3D5] cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -225,13 +225,40 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
           <h2 className="text-xl sm:text-2xl font-serif font-bold text-[#132A13]">
             {opportunityToEdit ? `Edit: ${opportunityToEdit.title}` : 'Author & Publish Opportunity'}
           </h2>
-          <p className="text-xs text-[#606C38] mt-1">
+          <p className="hidden sm:block text-xs text-[#606C38] mt-1">
             Configure recruitment parameters, salary ranges, and eligibility criteria for candidates across Liberia.
           </p>
         </div>
 
         {/* Form Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-5 text-xs sm:text-sm">
+        {showPostingOptions && (
+          <div className="rounded-2xl border border-[#E8E4D9] bg-[#F9F8F4] p-4" data-testid="posting-options">
+            <div className="text-xs font-bold text-[#283618] uppercase tracking-wider mb-2">How do you want to post this?</div>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <label className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer ${postingPlanId === '' ? 'border-[#4F772D] bg-[#F4F8EF]' : 'border-[#E8E4D9] bg-white'}`}>
+                <input type="radio" name="posting-plan" className="mt-1" checked={postingPlanId === ''} onChange={() => setPostingPlanId('')} />
+                <span>
+                  <span className="block font-bold text-[#132A13]">Included free post</span>
+                  <span className="block text-[11px] text-stone-500">Your Free plan includes 1 active job. If it is already used, you will be asked to pay.</span>
+                </span>
+              </label>
+              {vacancyPlans.map((vp) => (
+                <label key={vp.id} className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer ${postingPlanId === vp.id ? 'border-[#4F772D] bg-[#F4F8EF]' : 'border-[#E8E4D9] bg-white'}`}>
+                  <input type="radio" name="posting-plan" className="mt-1" checked={postingPlanId === vp.id} onChange={() => setPostingPlanId(vp.id)} />
+                  <span className="flex-1">
+                    <span className="flex justify-between gap-2 font-bold text-[#132A13]">
+                      <span>{vp.name}</span><span>{formatMinorAmount(vp.amountMinor, vp.currency)}</span>
+                    </span>
+                    <span className="block text-[11px] text-stone-500">{vp.description}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p className="text-[11px] text-stone-500 mt-2">Pay with MTN Mobile Money or Orange Money. Your job goes live once we verify the payment. Not hiring often? No subscription needed.</p>
+          </div>
+        )}
+
           {/* Organization Selection (Admins only, or multi-org member, else locked to active tenant) */}
           <div>
             <label className="block text-xs font-semibold text-[#283618] mb-1">Authorizing Organization *</label>
@@ -609,33 +636,6 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
             </div>
           </div>
         </div>
-
-        {showPostingOptions && (
-          <div className="px-6 py-4 border-t border-[#E8E4D9] bg-[#F9F8F4] flex-none" data-testid="posting-options">
-            <div className="text-xs font-bold text-[#283618] uppercase tracking-wider mb-2">How do you want to post this?</div>
-            <div className="grid sm:grid-cols-2 gap-2">
-              <label className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer ${postingPlanId === '' ? 'border-[#4F772D] bg-[#F4F8EF]' : 'border-[#E8E4D9] bg-white'}`}>
-                <input type="radio" name="posting-plan" className="mt-1" checked={postingPlanId === ''} onChange={() => setPostingPlanId('')} />
-                <span>
-                  <span className="block font-bold text-[#132A13]">Included free post</span>
-                  <span className="block text-[11px] text-stone-500">Your Free plan includes 1 active job. If it is already used, you will be asked to pay.</span>
-                </span>
-              </label>
-              {vacancyPlans.map((vp) => (
-                <label key={vp.id} className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer ${postingPlanId === vp.id ? 'border-[#4F772D] bg-[#F4F8EF]' : 'border-[#E8E4D9] bg-white'}`}>
-                  <input type="radio" name="posting-plan" className="mt-1" checked={postingPlanId === vp.id} onChange={() => setPostingPlanId(vp.id)} />
-                  <span className="flex-1">
-                    <span className="flex justify-between gap-2 font-bold text-[#132A13]">
-                      <span>{vp.name}</span><span>{formatMinorAmount(vp.amountMinor, vp.currency)}</span>
-                    </span>
-                    <span className="block text-[11px] text-stone-500">{vp.description}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
-            <p className="text-[11px] text-stone-500 mt-2">Pay with MTN Mobile Money or Orange Money. Your job goes live once we verify the payment. Not hiring often? No subscription needed.</p>
-          </div>
-        )}
 
         {/* Footer Actions */}
         <div className="p-4 sm:p-6 bg-white border-t border-[#E8E4D9] flex flex-wrap items-center justify-between gap-3">

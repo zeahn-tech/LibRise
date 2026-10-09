@@ -602,6 +602,62 @@ insert into test_log(line) select * from extensions.ok(
   '[promotion][premium] *** featured AND boosted for the plan duration (45 days) ***'
 );
 
+
+-- =============================================================================
+-- 10. UNPAID CHECKOUTS NEVER SHOW A STALE PRICE
+-- =============================================================================
+reset role;
+insert into public.opportunities (id, organization_id, created_by_user_id, title, slug, opportunity_type, workplace_model, county, location_details, description, status)
+values ('opp-paytest-b-refresh', 'org-paytest-b', '11111111-aaaa-4aaa-8aaa-000000000002', 'Org B refresh job', 'paytest-b-refresh', 'job', 'onsite', 'Montserrado', 'Congo Town', 'Re-quote test', 'payment_required');
+insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
+values ('pay-paytest-refresh', 'pub-paytest-refresh', 'org-paytest-b', '11111111-aaaa-4aaa-8aaa-000000000002', 'opp-paytest-b-refresh', 'plan-vacancy-basic', 'manual_momo_mtn', 'OHL-PAYTEST-REFRESH', 1, 'USD', 'created');
+-- simulate a quote made before a price change
+update public.payments set amount_minor = 47000 where id = 'pay-paytest-refresh';
+
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select public.refresh_open_payment('pay-paytest-refresh', 'plan-vacancy-featured')$$,
+  '42501'::char(5), NULL::text,
+  '[refresh][cross-tenant] org A owner cannot re-quote org B''s payment'
+);
+select set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000002',true);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select public.refresh_open_payment('pay-paytest-refresh', 'plan-sub-pro-monthly')$$,
+  'P0001'::char(5), NULL::text,
+  '[refresh] a vacancy payment cannot be switched to a subscription plan'
+);
+insert into test_log(line) select * from extensions.is(
+  (select amount_minor from public.refresh_open_payment('pay-paytest-refresh', 'plan-vacancy-basic')), 300,
+  '[refresh] *** stale quote repaired *** a payment quoted at 47000 is re-quoted to the current Basic price (300)'
+);
+insert into test_log(line) select * from extensions.is(
+  (select plan_id || '/' || amount_minor::text from public.refresh_open_payment('pay-paytest-refresh', 'plan-vacancy-featured')), 'plan-vacancy-featured/500',
+  '[refresh] picking a different plan moves the open payment to that plan at its database price'
+);
+reset role;
+
+-- a plan price change re-quotes unpaid checkouts automatically
+update public.payment_plans set amount_minor = 700 where id = 'plan-vacancy-featured';
+insert into test_log(line) select * from extensions.is(
+  (select amount_minor from public.payments where id = 'pay-paytest-refresh'), 700,
+  '[refresh][trigger] changing a plan price re-quotes its unpaid, unreferenced payments'
+);
+
+-- once a transaction reference is submitted the quote is frozen
+update public.payments set status = 'payment_pending', provider_transaction_id = 'TXN-REFRESH-77123', sender_phone_number = '+231770000002' where id = 'pay-paytest-refresh';
+update public.payment_plans set amount_minor = 900 where id = 'plan-vacancy-featured';
+insert into test_log(line) select * from extensions.is(
+  (select amount_minor from public.payments where id = 'pay-paytest-refresh'), 700,
+  '[refresh][frozen] *** a payment awaiting review keeps the amount it was quoted, even if the plan price changes ***'
+);
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000002',true);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select public.refresh_open_payment('pay-paytest-refresh', 'plan-vacancy-basic')$$,
+  'P0001'::char(5), NULL::text,
+  '[refresh][frozen] a payment with a submitted reference can no longer be re-quoted or moved to another plan'
+);
+reset role;
+
 -- =============================================================================
 -- FINAL: dump the log
 -- =============================================================================

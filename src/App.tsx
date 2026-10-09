@@ -1,3 +1,4 @@
+import { openedFromRecoveryLink, recoveryLinkError } from './lib/recoveryLink';
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import {
   Application,
@@ -82,7 +83,7 @@ function AppContent() {
   const { route, navigate } = useRouter();
 
   // All useState hooks at the top in strict consistent order
-  const [hasEnteredApp, setHasEnteredApp] = useState(false);
+  const [hasEnteredApp, setHasEnteredApp] = useState(openedFromRecoveryLink || !!recoveryLinkError);
   const [recruiterSubView, setRecruiterSubView] = useState<'jobs' | 'pipeline' | 'analytics'>('jobs');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCounty, setSelectedCounty] = useState<County | 'all'>('all');

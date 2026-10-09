@@ -1,3 +1,4 @@
+import { appBaseUrl } from '../lib/recoveryLink';
 import {
   AccountStatus,
   Organization,
@@ -598,7 +599,13 @@ class AuthService {
   public async requestPasswordReset(email: string): Promise<{ success: boolean; resetToken?: string }> {
     const supabase = getSupabaseClient();
     if (supabase) {
-      const redirectTo = typeof window !== 'undefined' ? window.location.origin + '/#reset-password' : undefined;
+      // Must be this app's real address, including the sub-path it is served
+      // from (e.g. https://user.github.io/LibRise/). Using only the origin sent
+      // people to a page that does not exist (404). No '#fragment': Supabase
+      // appends the recovery tokens as the fragment itself. This exact URL
+      // must also be listed in Supabase -> Authentication -> URL Configuration
+      // -> Redirect URLs.
+      const redirectTo = typeof window !== 'undefined' ? appBaseUrl() : undefined;
       const { error } = await supabase.auth.resetPasswordForEmail(email, redirectTo ? { redirectTo } : undefined);
       if (error) {
         throw new Error(error.message || 'Unable to send password reset email.');

@@ -362,6 +362,19 @@ export const paymentService = {
       if (existing) {
         const stillOpen = await dropIfExpired(existing as PaymentRow);
         if (stillOpen) {
+          // Re-quote an unpaid checkout to the plan just picked, at that plan's
+          // CURRENT price. Without this a payment started before a price change
+          // (or for a different plan) is resumed at its old amount. Once a
+          // reference has been submitted the quote is frozen, so only
+          // 'created' payments are refreshed. If the function isn't installed
+          // yet (older database) this quietly falls back to the old behavior.
+          if (stillOpen.status === 'created') {
+            const { data: refreshed, error: refreshError } = await client().rpc('refresh_open_payment', {
+              p_payment_id: stillOpen.id,
+              p_plan_id: planId
+            });
+            if (!refreshError && refreshed) Object.assign(stillOpen, refreshed as PaymentRow);
+          }
           // The user may have tapped the OTHER mobile-money provider since the
           // open payment was created. If no reference has been submitted yet,
           // switch the payment to the provider they picked, so the number we
