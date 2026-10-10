@@ -111,6 +111,25 @@ describe('businessService', () => {
     expect(res.data![0].title).toBe('Bakery Chain');
   });
 
+  it('list(): maps an in-date promotion and treats an expired one as a normal listing', async () => {
+    const future = new Date(Date.now() + 5 * 86_400_000).toISOString();
+    const past = new Date(Date.now() - 86_400_000).toISOString();
+    mockRpc.mockResolvedValue({
+      data: [
+        sampleListingRow({ id: 'promo', promotion_level: 'premium', promotion_until: future }),
+        sampleListingRow({ id: 'lapsed', promotion_level: 'premium', promotion_until: past }),
+        sampleListingRow({ id: 'plain' })
+      ],
+      error: null
+    });
+    const { businessService } = await import('../services/businessService');
+    const res = await businessService.list();
+    const byId = Object.fromEntries((res.data ?? []).map((b) => [b.id, b]));
+    expect(byId.promo.promotionLevel).toBe('premium');
+    expect(byId.lapsed.promotionLevel).toBeNull();
+    expect(byId.plain.promotionLevel).toBeNull();
+  });
+
   it('getById(): calls get_business_listing_public RPC and maps a redacted (financials-absent) row correctly', async () => {
     mockRpc.mockResolvedValue({ data: sampleListingRow(), error: null });
 

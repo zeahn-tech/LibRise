@@ -170,6 +170,9 @@ export interface Opportunity {
 
 export interface BusinessListing {
   id: string;
+  /** Active paid promotion (Boost < Featured < Premium); expires on its own. */
+  promotionLevel?: 'boost' | 'featured' | 'premium' | null;
+  promotionUntil?: string | null;
   title: string;
   industry: string;
   county: County;
@@ -708,7 +711,7 @@ export type PaymentStatus =
  *  or another provider later adds new values here, nothing else changes. */
 export type PaymentProviderId = 'manual_momo_mtn' | 'manual_momo_orange';
 
-export type PaymentPlanType = 'vacancy' | 'subscription';
+export type PaymentPlanType = 'vacancy' | 'subscription' | 'listing';
 
 export interface PaymentPlan {
   id: string;
@@ -732,6 +735,8 @@ export interface Payment {
   organizationId: string;
   createdByUserId: string;
   opportunityId: string | null;
+  /** Set when the payment promotes a Business-for-Sale listing. */
+  businessListingId?: string | null;
   planId: string;
   paymentProvider: PaymentProviderId;
   paymentMethod?: string | null;

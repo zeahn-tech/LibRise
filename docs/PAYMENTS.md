@@ -165,12 +165,28 @@ LibRise is free to start: **free -> promote -> subscribe.**
 - **Admin queue** (Revenue Payments -> Awaiting review) shows the payment type (Subscription Starter/Pro, or Vacancy
   Boost/Featured/Premium), what approval will do (publish, or switch on a promotion for an already-live vacancy), the
   vacancy or organization, who requested it, amount, network, transaction ID, sender number, reference and dates.
-- **Seller / Business for Sale listings:** basic presence stays free (Free plan: 1 listing; Starter 3; Pro 10, enforced by
-  `tier_limits()`). There is no paid seller promotion yet. A future one would need: a promotion level/expiry on
-  `business_listings` (like `opportunities.promotion_level/promotion_until`), a `business_listing` payment plan type
-  and approval branch in `admin_review_payment()`, a ranking rule in `businessService`, and the same client-write guard.
-- **Not built:** a separate "priority visibility" ranking for Pro beyond featured placement, per-vacancy performance
-  analytics beyond the existing views/applications counts, and self-service downgrade/cancellation (contact support).
+- **Business-for-Sale listing promotion:** basic presence stays free (Free plan: 1 listing; Starter 3; Pro 10, enforced by
+  `tier_limits()`). A seller can optionally promote ONE live listing with Boost $3 / Featured $5 / Premium $10 (30 / 30 / 45
+  days) through the same Mobile Money checkout and admin approval (`plan_type = 'listing'`, `payments.business_listing_id`,
+  migration `20261011100000_*`). Only the listing's own seller can pay for it (checked in the pricing trigger); the seller
+  needs an organization profile because payments belong to one. Approval sets `business_listings.promotion_level/until`
+  (never downgrading a stronger active promotion); sellers cannot write those columns; the browse RPC orders promoted
+  listings first, server-side, so it holds across pages; promotions lapse on their own. Seller side: **My Listings ->
+  Promote**.
+- **Pro priority visibility:** organizations on an active Pro plan rank above ordinary vacancies (below any paid
+  Boost/Featured/Premium) via `priority_organization_ids()`; it ends with the plan.
+- **Analytics (views and applications):** `views_count` is now counted by `record_opportunity_view()` (once per vacancy per
+  browser session; the employer's own organization and unpublished vacancies are not counted) and `applications_count` is
+  maintained by a trigger on `applications` (backfilled). Before this, views were written by a client UPDATE that row-level
+  security refused for almost every viewer and applications were never counted. Views are therefore approximate (a
+  per-session count, not unique people). No other metrics are claimed.
+- **Cancellation:** *Subscriptions -> Current plan -> Cancel plan*: "End my plan on <date>" (access continues until the
+  paid period ends; can be undone with "Keep my plan") or "Switch to Free now (no refund)". Nothing renews automatically
+  (payments are manual and prepaid) and no data is deleted; renewing restores the plan. Enforced by
+  `cancel_subscription()` / `resume_subscription()` for organization billing admins. Pro -> Starter mid-period is not
+  offered: cancel, then pick Starter when you pay again.
+- **Admin:** Revenue Payments shows *Awaiting review* and a read-only *Review history* (approved/rejected, who decided, when,
+  note, network, transaction ID).
 
 ## Stale checkout prices
 

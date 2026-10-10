@@ -11,9 +11,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
  */
 
 const mockFrom = vi.fn();
+const mockRpc = vi.fn();
 
 vi.mock('../lib/supabaseClient', () => ({
-  getSupabaseClient: () => ({ from: mockFrom })
+  getSupabaseClient: () => ({ from: mockFrom, rpc: mockRpc })
 }));
 
 vi.mock('../services/authService', () => ({
@@ -117,6 +118,34 @@ describe('subscriptionService', () => {
     const { subscriptionService } = await import('../services/subscriptionService');
     const res = await subscriptionService.getEntitlements('org-1');
     expect(res.data?.maxActiveJobs).toBe(1);
+  });
+
+  it('cancel(): asks the database to end the plan at period end by default, immediately only when told to', async () => {
+    mockRpc.mockResolvedValue({ data: sampleSubRow({ cancel_at_period_end: true }), error: null });
+    const { subscriptionService } = await import('../services/subscriptionService');
+
+    const res = await subscriptionService.cancel('org-1');
+    expect(mockRpc).toHaveBeenCalledWith('cancel_subscription', { p_organization_id: 'org-1', p_immediate: false });
+    expect(res.data?.cancelAtPeriodEnd).toBe(true);
+
+    await subscriptionService.cancel('org-1', true);
+    expect(mockRpc).toHaveBeenLastCalledWith('cancel_subscription', { p_organization_id: 'org-1', p_immediate: true });
+  });
+
+  it('cancel(): a database refusal comes back as an error, not a silent success', async () => {
+    mockRpc.mockResolvedValue({ data: null, error: { code: '42501', message: 'You do not have permission to change this subscription.' } });
+    const { subscriptionService } = await import('../services/subscriptionService');
+    const res = await subscriptionService.cancel('org-other');
+    expect(res.data).toBeNull();
+    expect(res.error?.message).toMatch(/permission/i);
+  });
+
+  it('resume(): undoes a scheduled cancellation', async () => {
+    mockRpc.mockResolvedValue({ data: sampleSubRow({ cancel_at_period_end: false }), error: null });
+    const { subscriptionService } = await import('../services/subscriptionService');
+    const res = await subscriptionService.resume('org-1');
+    expect(mockRpc).toHaveBeenCalledWith('resume_subscription', { p_organization_id: 'org-1' });
+    expect(res.data?.cancelAtPeriodEnd).toBe(false);
   });
 
   it('getEntitlements(): an unexpired paid tier keeps its paid limits', async () => {

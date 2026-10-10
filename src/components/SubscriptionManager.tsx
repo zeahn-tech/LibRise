@@ -27,6 +27,8 @@ export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPost
   const [checkoutPlanId, setCheckoutPlanId] = useState<string | null>(null);
 
   const [isOrgWizardOpen, setIsOrgWizardOpen] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
   // Authoritative prices (payment_plans). Falls back to the plan metadata's
   // display prices only if this can't be loaded; the checkout always uses the
   // database amount regardless.
@@ -102,15 +104,44 @@ export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPost
    * subscription becomes active now is a platform admin approving a real
    * payment, same as publishing a paid vacancy. See docs/PAYMENTS.md.
    */
+  const handleCancel = async (immediate: boolean) => {
+    if (!orgId) return;
+    setCancelBusy(true);
+    const res = await subscriptionService.cancel(orgId, immediate);
+    setCancelBusy(false);
+    if (res.error) {
+      showToast(res.error.message, 'error');
+      return;
+    }
+    setShowCancel(false);
+    showToast(
+      immediate
+        ? 'Your plan was cancelled. You are on the Free plan now; your data is kept.'
+        : 'Your plan will not continue after the paid period. You keep everything until then.',
+      'success'
+    );
+    void loadSubscription(orgId);
+  };
+
+  const handleResume = async () => {
+    if (!orgId) return;
+    setCancelBusy(true);
+    const res = await subscriptionService.resume(orgId);
+    setCancelBusy(false);
+    if (res.error) {
+      showToast(res.error.message, 'error');
+      return;
+    }
+    showToast('Your plan is no longer set to end.', 'success');
+    void loadSubscription(orgId);
+  };
+
   const handleSubscribe = (plan: SubscriptionPlan) => {
     if (!orgId) return;
     if (plan.tier === 'free') {
-      // Free has no payment_plans row (nothing to pay for) and there is
-      // no self-service downgrade/cancellation flow yet -- see
-      // docs/PAYMENTS.md. Say so plainly rather than opening a paid
-      // checkout for a free plan, which initiate() would reject anyway
-      // (no matching plan) after a confusing silent fallback.
-      showToast('Downgrading to the free plan isn\'t self-service yet -- contact support.', 'info');
+      // Free has no payment_plans row (nothing to pay for), so it never opens
+      // a checkout. Going back to Free is a cancellation (see handleCancel).
+      setShowCancel(true);
       return;
     }
     setCheckoutPlanId(`plan-sub-${plan.tier}-${billingCycle}`);
@@ -205,6 +236,37 @@ export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPost
                 <CreditCard className="w-4 h-4" />
                 {isLapsed ? 'Renew plan' : 'Extend plan'}
               </button>
+            )}
+            {isPaidTier && !isLapsed && subscription?.status === 'active' && subscription.cancelAtPeriodEnd && (
+              <div className="mt-3 text-xs bg-[#FEFAE0] border border-[#E8E4D9] rounded-xl px-3 py-2.5 text-[#283618]" data-testid="cancel-scheduled">
+                <p>Cancelled: your plan ends on {periodEnd?.toLocaleDateString()} and will not continue. You keep your paid features until then.</p>
+                <button disabled={cancelBusy} onClick={() => void handleResume()} className="mt-2 font-semibold underline text-[#4F772D] cursor-pointer disabled:opacity-50">
+                  Keep my plan
+                </button>
+              </div>
+            )}
+            {isPaidTier && subscription?.status === 'canceled' && (
+              <p className="mt-3 text-xs text-stone-600" data-testid="cancelled-note">
+                This plan was cancelled. You are on Free limits and your data is kept. Renew above to get your plan back.
+              </p>
+            )}
+            {isPaidTier && !isLapsed && subscription?.status === 'active' && !subscription.cancelAtPeriodEnd && !showCancel && (
+              <button onClick={() => setShowCancel(true)} data-testid="cancel-plan" className="mt-3 text-xs font-semibold text-stone-500 underline cursor-pointer">
+                Cancel plan
+              </button>
+            )}
+            {isPaidTier && !isLapsed && subscription?.status === 'active' && showCancel && (
+              <div className="mt-3 text-xs bg-[#F9F8F6] border border-[#E8E4D9] rounded-xl p-3 space-y-2" data-testid="cancel-panel">
+                <p className="font-bold text-[#283618]">Cancel {currentPlan.name}?</p>
+                <p className="text-stone-600">Nothing renews automatically, and your jobs, applicants and business data are never deleted.</p>
+                <button disabled={cancelBusy} onClick={() => void handleCancel(false)} className="w-full py-2 rounded-lg bg-[#283618] text-white font-semibold disabled:opacity-50 cursor-pointer">
+                  End my plan on {periodEnd?.toLocaleDateString()}
+                </button>
+                <button disabled={cancelBusy} onClick={() => void handleCancel(true)} className="w-full py-2 rounded-lg border border-[#E8E4D9] bg-white text-[#283618] font-semibold disabled:opacity-50 cursor-pointer">
+                  Switch to Free now (no refund)
+                </button>
+                <button onClick={() => setShowCancel(false)} className="w-full text-stone-500 underline cursor-pointer">Never mind</button>
+              </div>
             )}
             {isPaidTier && !isLapsed && (
               <div className="mt-3 text-xs text-stone-600 bg-[#F9F8F6] border border-[#E8E4D9] rounded-xl px-3 py-2.5" data-testid="support-level">
@@ -323,7 +385,15 @@ export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPost
                   ))}
                 </ul>
 
-                {plan.tier === 'free' || isLowerThanCurrent ? (
+                {plan.tier === 'free' && effectiveTier !== 'free' && subscription?.status === 'active' && !subscription.cancelAtPeriodEnd ? (
+                  <button
+                    onClick={() => handleSubscribe(plan)}
+                    data-testid="switch-to-free"
+                    className="w-full py-3.5 rounded-2xl text-sm font-bold text-center bg-white text-[#283618] border border-[#E8E4D9] hover:bg-[#F9F8F6] cursor-pointer"
+                  >
+                    Switch to Free
+                  </button>
+                ) : plan.tier === 'free' || isLowerThanCurrent ? (
                   <div className="w-full py-3.5 rounded-2xl text-sm font-bold text-center bg-[#F9F8F6] text-stone-400 border border-[#E8E4D9]">
                     {isCurrent ? 'Current Plan' : 'Included in your plan'}
                   </div>

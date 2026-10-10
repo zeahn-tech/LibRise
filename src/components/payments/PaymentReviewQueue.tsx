@@ -18,6 +18,9 @@ const PROMO_LABEL: Record<string, string> = { boost: 'Boost', featured: 'Feature
 
 /** What kind of payment this is, at a glance. */
 export function paymentKindLabel(item: PaymentWithContext): string {
+  if (item.planType === 'listing') {
+    return `Listing ${item.promotionLevel ? PROMO_LABEL[item.promotionLevel] : item.planName || 'promotion'}`;
+  }
   if (item.planType === 'subscription') {
     const tier = item.subscriptionTier === 'pro' ? 'Pro' : item.subscriptionTier === 'basic' ? 'Starter' : item.planName || 'plan';
     return `Subscription · ${tier}${item.billingCycle ? ` ${item.billingCycle}` : ''}`;
@@ -27,6 +30,9 @@ export function paymentKindLabel(item: PaymentWithContext): string {
 
 /** What approving it will do, so the reviewer is never guessing. */
 export function paymentEffectLabel(item: PaymentWithContext): string {
+  if (item.planType === 'listing') {
+    return `Business listing is live; approval switches on the ${item.promotionLevel ? PROMO_LABEL[item.promotionLevel] : ''} promotion.`;
+  }
   if (item.planType === 'subscription') return 'Approval activates the subscription for the plan period.';
   if (item.opportunityStatus === 'published') {
     return `Vacancy is already live; approval switches on the ${item.promotionLevel ? PROMO_LABEL[item.promotionLevel] : ''} promotion.`;
@@ -134,7 +140,7 @@ export const PaymentReviewQueue: React.FC = () => {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="font-bold text-[#132A13] text-sm break-words">
-                    {item.opportunityTitle || (item.opportunityId ? item.opportunityId : `Subscription: ${item.planName || 'plan upgrade'}`)}
+                    {item.opportunityTitle || item.listingTitle || (item.opportunityId ? item.opportunityId : item.businessListingId ? item.businessListingId : `Subscription: ${item.planName || 'plan upgrade'}`)}
                   </p>
                   <p className="text-xs text-stone-500 break-words">{item.organizationName || item.organizationId}</p>
                 </div>

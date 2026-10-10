@@ -114,6 +114,32 @@ describe('paymentService.initiate(): MTN vs Orange', () => {
     expect(res.data?.paymentProvider).toBe('manual_momo_mtn');
   });
 
+  it('a listing promotion: looks for an open payment by business_listing_id and inserts the listing target without any client amount', async () => {
+    const lookup = builder({ data: null, error: null });
+    const planQuery = builder({ data: planRow({ id: 'plan-listing-boost', plan_type: 'listing', amount_minor: 300 }), error: null });
+    const insertQuery = builder({ data: paymentRow({ opportunity_id: null, business_listing_id: 'biz-1', plan_id: 'plan-listing-boost', amount_minor: 300 }), error: null });
+    mockFrom.mockReturnValueOnce(lookup).mockReturnValueOnce(planQuery).mockReturnValueOnce(insertQuery);
+    const { paymentService } = await import('../services/paymentService');
+
+    const res = await paymentService.initiate({ businessListingId: 'biz-1', organizationId: 'org-1', planId: 'plan-listing-boost', provider: 'manual_momo_mtn' });
+
+    expect(lookup.eq as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('business_listing_id', 'biz-1');
+    const inserted = (insertQuery.insert as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(inserted.business_listing_id).toBe('biz-1');
+    expect(inserted.opportunity_id).toBeNull();
+    expect(inserted.amount_minor).toBe(300); // read from the plan row, not supplied by the caller
+    expect(inserted.description).toMatch(/business listing promotion/);
+    expect(res.data?.businessListingId).toBe('biz-1');
+  });
+
+  it('a subscription payment lookup excludes listing promotions (they share organization_id with a null opportunity)', async () => {
+    const lookup = builder({ data: null, error: null });
+    mockFrom.mockReturnValueOnce(lookup).mockReturnValue(builder({ data: null, error: null }));
+    const { paymentService } = await import('../services/paymentService');
+    await paymentService.initiate({ organizationId: 'org-1', planId: 'plan-sub-basic-monthly', provider: 'manual_momo_mtn' });
+    expect(lookup.is as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('business_listing_id', null);
+  });
+
   it('resuming an unpaid payment re-quotes it to the plan picked, at the CURRENT price (no stale $470)', async () => {
     mockFrom
       .mockReturnValueOnce(builder({ data: { id: 'opp-1', organization_id: 'org-1', status: 'payment_required' }, error: null }))

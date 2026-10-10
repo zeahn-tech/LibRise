@@ -86,6 +86,8 @@ interface BusinessListingRow {
   seller_contact_email: string | null;
   seller_contact_phone: string | null;
   views_count: number | null;
+  promotion_level?: string | null;
+  promotion_until?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -125,7 +127,11 @@ function rowToListing(row: BusinessListingRow): BusinessListing {
     sellerContactEmail: row.seller_contact_email ?? undefined,
     sellerContactPhone: row.seller_contact_phone ?? undefined,
     sellerName: row.seller_name ?? undefined,
-    viewsCount: row.views_count ?? 0
+    viewsCount: row.views_count ?? 0,
+    // Paid promotion only counts while it is in date; it then lapses on its own.
+    ...(row.promotion_level && row.promotion_until && new Date(row.promotion_until).getTime() > Date.now()
+      ? { promotionLevel: row.promotion_level as 'boost' | 'featured' | 'premium', promotionUntil: row.promotion_until }
+      : { promotionLevel: null, promotionUntil: null })
   };
 }
 

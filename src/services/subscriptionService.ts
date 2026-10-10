@@ -37,7 +37,7 @@ import { authService } from './authService';
 import { notificationService } from './notificationService';
 import { fireAndForget } from '../lib/fireAndForget';
 import { envConfig } from '../config/env';
-import { ForbiddenError, UnauthorizedError } from '../core/errors/AppError';
+import { ForbiddenError, UnauthorizedError, ValidationError } from '../core/errors/AppError';
 
 interface SubscriptionRow {
   id: string;
@@ -82,6 +82,8 @@ function rowToSubscription(row: SubscriptionRow): OrganizationSubscription {
 }
 
 function translateError(error: { code?: string; message: string }): never {
+  // P0001: plain-language `raise exception` text from cancel/resume_subscription() -- readable as is.
+  if (error.code === 'P0001') throw new ValidationError(error.message);
   if (error.code === '42501') {
     throw new ForbiddenError('You do not have permission to manage this organization\'s subscription.');
   }
@@ -129,6 +131,33 @@ export const subscriptionService = {
         .maybeSingle();
       if (insertError) translateError(insertError);
       return rowToSubscription(created as SubscriptionRow);
+    });
+  },
+
+  /**
+   * Cancel a paid plan. Payments are manual and prepaid, so nothing renews by
+   * itself: by default the plan is flagged to end with the paid period (access
+   * continues until then); with `immediate` the organization drops to Free
+   * limits now (no refund). Data is never deleted. Enforced by the
+   * cancel_subscription() database function (org billing admins / platform admin).
+   */
+  async cancel(organizationId: string, immediate = false): Promise<ApiResponse<OrganizationSubscription>> {
+    return apiClient.execute(async () => {
+      const { data, error } = await client().rpc('cancel_subscription', {
+        p_organization_id: organizationId,
+        p_immediate: immediate
+      });
+      if (error) translateError(error);
+      return rowToSubscription(data as SubscriptionRow);
+    });
+  },
+
+  /** Undo a scheduled cancellation while the paid period is still running. */
+  async resume(organizationId: string): Promise<ApiResponse<OrganizationSubscription>> {
+    return apiClient.execute(async () => {
+      const { data, error } = await client().rpc('resume_subscription', { p_organization_id: organizationId });
+      if (error) translateError(error);
+      return rowToSubscription(data as SubscriptionRow);
     });
   },
 

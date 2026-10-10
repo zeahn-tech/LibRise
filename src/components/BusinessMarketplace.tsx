@@ -36,6 +36,7 @@ import { formatConverted } from '../lib/currency';
 import { ImageLightbox } from './common/ImageLightbox';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { PaymentCheckoutFlow } from './payments/PaymentCheckoutFlow';
 
 /** Best-effort human-readable message from a thrown value -- AppError
  *  subclasses (ForbiddenError/ValidationError/etc.) carry a real .message
@@ -78,7 +79,8 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
   currentUserId: propCurrentUserId,
   onRefresh
 }) => {
-  const { user, can } = useAuth();
+  const { user, can, activeOrganization } = useAuth();
+  const [promoteListing, setPromoteListing] = useState<BusinessListing | null>(null);
   const { showToast } = useToast();
   const currentUserId = propCurrentUserId || user?.id || '';
   const canModerate = can('business.moderate') || user?.systemRole === 'moderation_officer' || user?.systemRole === 'moderator' || user?.systemRole === 'platform_admin' || user?.primaryRole === 'platform_admin';
@@ -549,6 +551,20 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
                           }`}>
                             {biz.isConfidential ? 'CONFIDENTIAL M&A' : 'PUBLIC SALE'}
                           </span>
+                          {biz.promotionLevel && (
+                            <span
+                              data-testid={`listing-promo-${biz.promotionLevel}`}
+                              className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase border ${
+                                biz.promotionLevel === 'premium'
+                                  ? 'bg-[#283618] text-white border-[#283618]'
+                                  : biz.promotionLevel === 'featured'
+                                    ? 'bg-[#FEFAE0] text-[#BC6C25] border-[#E8E4D9]'
+                                    : 'bg-[#F4F8EF] text-[#4F772D] border-[#D9E3D5]'
+                              }`}
+                            >
+                              {biz.promotionLevel === 'boost' ? 'Boosted' : biz.promotionLevel === 'featured' ? 'Featured' : 'Premium'}
+                            </span>
+                          )}
                           {biz.isVerified && (
                             <span className="px-2.5 py-0.5 bg-[#ECF3E9] text-[#4F772D] text-[10px] font-bold rounded-full uppercase flex items-center gap-1">
                               <ShieldCheck className="w-3 h-3" />
@@ -605,6 +621,21 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
                         </span>
 
                         <div className="flex items-center gap-2">
+                          {activeTab === 'my_listings' && biz.ownerUserId === currentUserId && biz.status === 'published' && (
+                            <button
+                              onClick={() => {
+                                if (!activeOrganization) {
+                                  showToast('Create your organization profile first (Subscriptions tab) to promote a listing.', 'info');
+                                  return;
+                                }
+                                setPromoteListing(biz);
+                              }}
+                              data-testid="promote-listing"
+                              className="px-3.5 py-2 bg-[#FEFAE0] hover:bg-[#F5EFC4] text-[#BC6C25] rounded-xl text-xs font-bold border border-[#E8E4D9] cursor-pointer"
+                            >
+                              {biz.promotionLevel ? 'Extend promotion' : 'Promote'}
+                            </button>
+                          )}
                           <button
                             onClick={() => handleViewListing(biz)}
                             className="px-3.5 py-2 bg-[#F9F8F4] hover:bg-[#ECF3E9] text-[#283618] rounded-xl text-xs font-bold border border-[#E8E4D9] flex items-center gap-1.5 cursor-pointer"
@@ -673,6 +704,17 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
             )}
           </div>
         </>
+      )}
+
+      {/* PROMOTE LISTING (same Mobile Money checkout + admin approval as vacancies) */}
+      {promoteListing && activeOrganization && (
+        <PaymentCheckoutFlow
+          businessListingId={promoteListing.id}
+          opportunityTitle={promoteListing.title}
+          organizationId={activeOrganization.id}
+          onClose={() => setPromoteListing(null)}
+          onPublished={() => { void businessService.list().then((r) => r.data && setBusinesses(r.data)); }}
+        />
       )}
 
       {/* CREATE BUSINESS MODAL */}

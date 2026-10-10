@@ -115,3 +115,30 @@ describe('free Basic job + optional promotions (migration 20261009100000)', () =
     expect(promotionFieldsForTest({ promotion_level: 'boost', promotion_until: past } as never).isFeatured).toBe(false);
   });
 });
+
+describe('listing promotions and priority (migrations 20261010100000 / 20261011100000)', () => {
+  const LISTING_SQL = readFileSync('supabase/migrations/20261011100000_listing_promotions.sql', 'utf8');
+  const TRACK_SQL = readFileSync('supabase/migrations/20261010100000_tracking_priority_cancellation.sql', 'utf8');
+
+  it('listing promotion plans are $3 / $5 / $10 for 30 / 30 / 45 days', () => {
+    expect(LISTING_SQL).toMatch(/'plan-listing-boost'[^)]*?, 300, 'USD', 30,/);
+    expect(LISTING_SQL).toMatch(/'plan-listing-featured'[^)]*?, 500, 'USD', 30,/);
+    expect(LISTING_SQL).toMatch(/'plan-listing-premium'[^)]*?, 1000, 'USD', 45,/);
+  });
+
+  it('a listing payment cannot be started by anyone but the listing owner, and cannot collide with subscription payments', () => {
+    expect(LISTING_SQL).toMatch(/v_listing_owner <> new\.created_by_user_id/);
+    expect(LISTING_SQL).toMatch(/business_listing_id is null and status in \('created', 'payment_pending'\)/);
+  });
+
+  it('sellers cannot write promotion columns; the browse order is server-side', () => {
+    expect(LISTING_SQL).toMatch(/new\.promotion_level := old\.promotion_level/);
+    expect(LISTING_SQL).toMatch(/order by case when b\.promotion_until > now\(\)/);
+  });
+
+  it('cancellation never deletes data and views/applications are counted by the database', () => {
+    expect(TRACK_SQL).not.toMatch(/delete from/i);
+    expect(TRACK_SQL).toMatch(/record_opportunity_view/);
+    expect(TRACK_SQL).toMatch(/trg_applications_count/);
+  });
+});

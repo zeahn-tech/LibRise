@@ -135,6 +135,7 @@ interface PaymentRow {
   organization_id: string;
   created_by_user_id: string;
   opportunity_id: string | null;
+  business_listing_id?: string | null;
   plan_id: string;
   payment_provider: PaymentProviderId;
   payment_method: string | null;
@@ -162,6 +163,7 @@ function rowToPayment(row: PaymentRow): Payment {
     organizationId: row.organization_id,
     createdByUserId: row.created_by_user_id,
     opportunityId: row.opportunity_id,
+    businessListingId: row.business_listing_id ?? null,
     planId: row.plan_id,
     paymentProvider: row.payment_provider,
     paymentMethod: row.payment_method,
@@ -232,7 +234,7 @@ export interface PaymentWithContext extends Payment {
   opportunityTitle?: string | null;
   organizationName?: string | null;
   planName?: string | null;
-  planType?: 'vacancy' | 'subscription' | null;
+  planType?: 'vacancy' | 'subscription' | 'listing' | null;
   promotionLevel?: 'boost' | 'featured' | 'premium' | null;
   subscriptionTier?: string | null;
   billingCycle?: 'monthly' | 'annual' | null;
@@ -240,6 +242,9 @@ export interface PaymentWithContext extends Payment {
   opportunityStatus?: string | null;
   requesterName?: string | null;
   requesterEmail?: string | null;
+  reviewerName?: string | null;
+  /** Title of the Business-for-Sale listing, for listing promotion payments. */
+  listingTitle?: string | null;
 }
 
 /** If an unsubmitted payment's window has passed, expire it server-side
@@ -276,6 +281,62 @@ export function getMomoInstructions(provider: PaymentProviderId): MomoInstructio
     phoneNumber: phoneNumber || null,
     accountName: accountName || null
   };
+}
+
+/** Payments in the given statuses with plan, vacancy/organization and people context (admin screens). */
+async function loadPaymentsWithContext(statuses: string[], ascending: boolean, limit: number): Promise<PaymentWithContext[]> {
+  const orderColumn = ascending ? 'created_at' : 'reviewed_at';
+  const { data, error } = await client()
+    .from('payments')
+    .select('*, opportunities(title, status), organizations(name), payment_plans(name, plan_type, subscription_tier, billing_cycle, promotion_level)')
+    .in('status', statuses)
+    .order(orderColumn, { ascending, nullsFirst: false })
+    .limit(limit);
+  if (error) translateError(error);
+  const rows = data as Array<PaymentRow & {
+    opportunities?: { title?: string; status?: string } | null;
+    organizations?: { name?: string } | null;
+    payment_plans?: {
+      name?: string; plan_type?: string; subscription_tier?: string | null;
+      billing_cycle?: string | null; promotion_level?: string | null;
+    } | null;
+  }>;
+
+  // Who asked for it / who decided it. Separate, best-effort lookup: if the
+  // admin's RLS does not allow reading users, the screens still work and show the id.
+  const people = new Map<string, { name: string | null; email: string | null }>();
+  const ids = Array.from(new Set(rows.flatMap((r) => [r.created_by_user_id, r.reviewed_by_user_id].filter(Boolean) as string[])));
+  if (ids.length > 0) {
+    const { data: users } = await client().from('users').select('id, full_name, email').in('id', ids);
+    for (const u of (users ?? []) as Array<{ id: string; full_name?: string | null; email?: string | null }>) {
+      people.set(u.id, { name: u.full_name ?? null, email: u.email ?? null });
+    }
+  }
+
+  // Listing titles: best-effort and separate, so the screens keep working on a
+  // database that predates listing promotions (no business_listing_id column yet).
+  const listingTitles = new Map<string, string>();
+  const listingIds = Array.from(new Set(rows.map((r) => r.business_listing_id).filter(Boolean) as string[]));
+  if (listingIds.length > 0) {
+    const { data: listings } = await client().from('business_listings').select('id, title').in('id', listingIds);
+    for (const l of (listings ?? []) as Array<{ id: string; title: string }>) listingTitles.set(l.id, l.title);
+  }
+
+  return rows.map((row) => ({
+    ...rowToPayment(row),
+    listingTitle: row.business_listing_id ? listingTitles.get(row.business_listing_id) ?? null : null,
+    opportunityTitle: row.opportunities?.title ?? null,
+    opportunityStatus: row.opportunities?.status ?? null,
+    organizationName: row.organizations?.name ?? null,
+    planName: row.payment_plans?.name ?? null,
+    planType: (row.payment_plans?.plan_type ?? null) as PaymentWithContext['planType'],
+    promotionLevel: (row.payment_plans?.promotion_level ?? null) as PaymentWithContext['promotionLevel'],
+    subscriptionTier: row.payment_plans?.subscription_tier ?? null,
+    billingCycle: (row.payment_plans?.billing_cycle ?? null) as PaymentWithContext['billingCycle'],
+    requesterName: people.get(row.created_by_user_id)?.name ?? null,
+    requesterEmail: people.get(row.created_by_user_id)?.email ?? null,
+    reviewerName: row.reviewed_by_user_id ? people.get(row.reviewed_by_user_id)?.name ?? people.get(row.reviewed_by_user_id)?.email ?? row.reviewed_by_user_id : null
+  }));
 }
 
 export const paymentService = {
@@ -336,11 +397,13 @@ export const paymentService = {
    */
   async initiate(params: {
     opportunityId?: string;
+    /** Promote a Business-for-Sale listing (the seller's own); organizationId is then required. */
+    businessListingId?: string;
     organizationId?: string;
     planId: string;
     provider: PaymentProviderId;
   }): Promise<ApiResponse<Payment>> {
-    const { opportunityId, planId, provider } = params;
+    const { opportunityId, businessListingId, planId, provider } = params;
     return apiClient.execute(async () => {
       const session = authService.getSession();
       if (!session.user) throw new UnauthorizedError('Sign-in required.');
@@ -361,7 +424,9 @@ export const paymentService = {
       let existingQuery = client().from('payments').select('*').in('status', ['created', 'payment_pending']);
       existingQuery = opportunityId
         ? existingQuery.eq('opportunity_id', opportunityId)
-        : existingQuery.eq('organization_id', organizationId).is('opportunity_id', null);
+        : businessListingId
+          ? existingQuery.eq('business_listing_id', businessListingId)
+          : existingQuery.eq('organization_id', organizationId).is('opportunity_id', null).is('business_listing_id', null);
       const { data: existing, error: existingError } = await existingQuery
         .order('created_at', { ascending: false })
         .limit(1)
@@ -417,6 +482,7 @@ export const paymentService = {
         organization_id: organizationId,
         created_by_user_id: session.user.id,
         opportunity_id: opportunityId ?? null,
+        business_listing_id: businessListingId ?? null,
         plan_id: planRow.id,
         payment_provider: provider,
         provider_reference: generatePaymentReference(),
@@ -426,7 +492,7 @@ export const paymentService = {
         // directly from the client."
         amount_minor: planRow.amount_minor,
         currency: planRow.currency,
-        description: `${planRow.name} -- ${planRow.plan_type === 'subscription' ? 'subscription upgrade' : 'vacancy publishing'}`,
+        description: `${planRow.name} -- ${planRow.plan_type === 'subscription' ? 'subscription upgrade' : planRow.plan_type === 'listing' ? 'business listing promotion' : 'vacancy publishing'}`,
         status: 'created'
       };
 
@@ -446,7 +512,9 @@ export const paymentService = {
           let winnerQuery = client().from('payments').select('*').in('status', ['created', 'payment_pending']);
           winnerQuery = opportunityId
             ? winnerQuery.eq('opportunity_id', opportunityId)
-            : winnerQuery.eq('organization_id', organizationId).is('opportunity_id', null);
+            : businessListingId
+              ? winnerQuery.eq('business_listing_id', businessListingId)
+              : winnerQuery.eq('organization_id', organizationId).is('opportunity_id', null).is('business_listing_id', null);
           const { data: winner } = await winnerQuery.order('created_at', { ascending: false }).limit(1).maybeSingle();
           if (winner) return rowToPayment(winner as PaymentRow);
         }
@@ -594,6 +662,23 @@ export const paymentService = {
   /** The recruiter's in-progress payment for a vacancy, if any -- lets
    *  the checkout flow resume where they left off instead of starting a
    *  second payment (which the DB would reject anyway). */
+  async getOpenPaymentForListing(businessListingId: string): Promise<ApiResponse<Payment | null>> {
+    return apiClient.execute(async () => {
+      const { data, error } = await client()
+        .from('payments')
+        .select('*')
+        .eq('business_listing_id', businessListingId)
+        .in('status', ['created', 'payment_pending'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) translateError(error);
+      if (!data) return null;
+      const stillOpen = await dropIfExpired(data as PaymentRow);
+      return stillOpen ? rowToPayment(stillOpen) : null;
+    });
+  },
+
   async getOpenPaymentForOpportunity(opportunityId: string): Promise<ApiResponse<Payment | null>> {
     return apiClient.execute(async () => {
       const { data, error } = await client()
@@ -621,6 +706,7 @@ export const paymentService = {
         .select('*')
         .eq('organization_id', organizationId)
         .is('opportunity_id', null)
+        .is('business_listing_id', null)
         .in('status', ['created', 'payment_pending'])
         .order('created_at', { ascending: false })
         .limit(1)
@@ -635,47 +721,12 @@ export const paymentService = {
   /** Admin review queue with vacancy title / organization name where the
    *  caller's RLS allows reading them (falls back to ids otherwise). */
   async listPendingReviewWithContext(): Promise<ApiResponse<PaymentWithContext[]>> {
-    return apiClient.execute(async () => {
-      const { data, error } = await client()
-        .from('payments')
-        .select('*, opportunities(title, status), organizations(name), payment_plans(name, plan_type, subscription_tier, billing_cycle, promotion_level)')
-        .eq('status', 'payment_pending')
-        .order('created_at', { ascending: true });
-      if (error) translateError(error);
-      const rows = data as Array<PaymentRow & {
-        opportunities?: { title?: string; status?: string } | null;
-        organizations?: { name?: string } | null;
-        payment_plans?: {
-          name?: string; plan_type?: string; subscription_tier?: string | null;
-          billing_cycle?: string | null; promotion_level?: string | null;
-        } | null;
-      }>;
+    return apiClient.execute(() => loadPaymentsWithContext(['payment_pending'], true, 200));
+  },
 
-      // Who asked for it. Separate, best-effort lookup: if the admin's RLS does
-      // not allow reading users, the queue still works and shows the id.
-      const requesters = new Map<string, { name: string | null; email: string | null }>();
-      const ids = Array.from(new Set(rows.map((r) => r.created_by_user_id)));
-      if (ids.length > 0) {
-        const { data: users } = await client().from('users').select('id, full_name, email').in('id', ids);
-        for (const u of (users ?? []) as Array<{ id: string; full_name?: string | null; email?: string | null }>) {
-          requesters.set(u.id, { name: u.full_name ?? null, email: u.email ?? null });
-        }
-      }
-
-      return rows.map((row) => ({
-        ...rowToPayment(row),
-        opportunityTitle: row.opportunities?.title ?? null,
-        opportunityStatus: row.opportunities?.status ?? null,
-        organizationName: row.organizations?.name ?? null,
-        planName: row.payment_plans?.name ?? null,
-        planType: (row.payment_plans?.plan_type ?? null) as PaymentWithContext['planType'],
-        promotionLevel: (row.payment_plans?.promotion_level ?? null) as PaymentWithContext['promotionLevel'],
-        subscriptionTier: row.payment_plans?.subscription_tier ?? null,
-        billingCycle: (row.payment_plans?.billing_cycle ?? null) as PaymentWithContext['billingCycle'],
-        requesterName: requesters.get(row.created_by_user_id)?.name ?? null,
-        requesterEmail: requesters.get(row.created_by_user_id)?.email ?? null
-      }));
-    });
+  /** Decided payments (approved or rejected), newest first: who reviewed them, when, and any note. */
+  async listReviewHistoryWithContext(limit = 50): Promise<ApiResponse<PaymentWithContext[]>> {
+    return apiClient.execute(() => loadPaymentsWithContext(['payment_success', 'payment_failed'], false, limit));
   },
 
   getMomoInstructions

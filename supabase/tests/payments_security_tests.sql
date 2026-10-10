@@ -734,6 +734,196 @@ insert into test_log(line) select * from extensions.is(
   '[promotion][reject] *** a rejected promotion payment never unpublishes a live free vacancy ***'
 );
 
+
+-- =============================================================================
+-- 12. REAL ANALYTICS, PRO PRIORITY VISIBILITY, CANCELLATION
+-- =============================================================================
+reset role;
+-- views: counted for outsiders, not for the employer's own org
+create temp table _views_before as select views_count as n from public.opportunities where id = 'opp-paytest-a-basic';
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000002',true);
+select public.record_opportunity_view('opp-paytest-a-basic');
+reset role;
+insert into test_log(line) select * from extensions.is(
+  (select views_count from public.opportunities where id = 'opp-paytest-a-basic') - (select n from _views_before), 1,
+  '[analytics][views] a view from outside the organization is counted (through the database function)'
+);
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
+select public.record_opportunity_view('opp-paytest-a-basic');
+reset role;
+insert into test_log(line) select * from extensions.is(
+  (select views_count from public.opportunities where id = 'opp-paytest-a-basic') - (select n from _views_before), 1,
+  '[analytics][views] the employer viewing their own vacancy is not counted'
+);
+select public.record_opportunity_view('opp-paytest-b-refresh');
+insert into test_log(line) select * from extensions.is(
+  (select views_count from public.opportunities where id = 'opp-paytest-b-refresh'), 0,
+  '[analytics][views] a vacancy that is not published is never counted'
+);
+
+-- applications_count follows real applications
+insert into public.applications (id, opportunity_id, applicant_user_id, organization_id, applicant_full_name, applicant_email)
+values ('app-paytest-count', 'opp-paytest-a-basic', '11111111-aaaa-4aaa-8aaa-000000000002', 'org-paytest-a', 'Count Test', 'count@example.com');
+insert into test_log(line) select * from extensions.is(
+  (select applications_count from public.opportunities where id = 'opp-paytest-a-basic'), 1,
+  '[analytics][applications] applications_count goes up when an application is received'
+);
+delete from public.applications where id = 'app-paytest-count';
+insert into test_log(line) select * from extensions.is(
+  (select applications_count from public.opportunities where id = 'opp-paytest-a-basic'), 0,
+  '[analytics][applications] and back down when it is removed'
+);
+
+-- Pro priority visibility
+insert into test_log(line) select * from extensions.ok(
+  'org-paytest-a' in (select public.priority_organization_ids()),
+  '[priority] an organization on an active Pro plan is in the priority list'
+);
+insert into test_log(line) select * from extensions.ok(
+  'org-paytest-b' not in (select public.priority_organization_ids()),
+  '[priority] a Free organization is not'
+);
+
+-- cancellation
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000002',true);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select public.cancel_subscription('org-paytest-a', true)$$, '42501'::char(5), NULL::text,
+  '[cancel][cross-tenant] another organization cannot cancel org A''s plan'
+);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select public.cancel_subscription('org-paytest-b', false)$$, 'P0001'::char(5), NULL::text,
+  '[cancel] a Free organization has no paid plan to cancel'
+);
+select set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
+select public.cancel_subscription('org-paytest-a', false);
+reset role;
+insert into test_log(line) select * from extensions.ok(
+  (select cancel_at_period_end and status = 'active' from public.organization_subscriptions where organization_id = 'org-paytest-a')
+  and public.org_effective_tier('org-paytest-a') = 'pro',
+  '[cancel] cancelling at period end keeps the paid plan active until the period ends'
+);
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
+select public.resume_subscription('org-paytest-a');
+reset role;
+insert into test_log(line) select * from extensions.ok(
+  (select not cancel_at_period_end from public.organization_subscriptions where organization_id = 'org-paytest-a'),
+  '[cancel] a scheduled cancellation can be undone'
+);
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
+select public.cancel_subscription('org-paytest-a', true);
+reset role;
+insert into test_log(line) select * from extensions.is(
+  public.org_effective_tier('org-paytest-a')::text, 'free'::text,
+  '[cancel] *** cancelling now drops the organization to Free limits immediately ***'
+);
+insert into test_log(line) select * from extensions.ok(
+  'org-paytest-a' not in (select public.priority_organization_ids()),
+  '[cancel][priority] priority visibility ends with the plan'
+);
+insert into test_log(line) select * from extensions.ok(
+  (select count(*) from public.opportunities where organization_id = 'org-paytest-a') > 0,
+  '[cancel] *** no data is deleted *** the organization''s vacancies are still there'
+);
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select public.resume_subscription('org-paytest-a')$$, 'P0001'::char(5), NULL::text,
+  '[cancel] a plan cancelled immediately cannot be resumed (renew it instead)'
+);
+reset role;
+
+
+-- =============================================================================
+-- 13. BUSINESS-FOR-SALE LISTING PROMOTION (Boost / Featured / Premium)
+-- =============================================================================
+reset role;
+insert into public.business_listings (id, owner_user_id, title, slug, listing_type, industry, county, city_district, headline, description, status, is_confidential, asking_price_usd, created_at)
+values
+  ('biz-paytest-old', '11111111-aaaa-4aaa-8aaa-000000000001', 'Paytest older listing', 'paytest-biz-old', 'business', 'PaytestIndustry', 'Montserrado', 'Sinkor', 'Older', 'Older listing', 'published', false, 1000, now() - interval '5 days'),
+  ('biz-paytest-new', '11111111-aaaa-4aaa-8aaa-000000000001', 'Paytest newer listing', 'paytest-biz-new', 'business', 'PaytestIndustry', 'Montserrado', 'Sinkor', 'Newer', 'Newer listing', 'published', false, 1000, now() - interval '1 day');
+
+insert into test_log(line) select * from extensions.is(
+  (select string_agg(promotion_level || ':' || amount_minor::text, ',' order by amount_minor) from public.payment_plans where plan_type = 'listing'),
+  'boost:300,featured:500,premium:1000'::text,
+  '[listing-promo] listing plans: Boost $3, Featured $5, Premium $10'
+);
+insert into test_log(line) select * from extensions.ok(
+  (select indexdef like '%business_listing_id IS NULL%' from pg_indexes where indexname = 'uq_payments_one_open_subscription_per_org'),
+  '[listing-promo] a listing promotion cannot collide with the one-open-subscription-payment rule'
+);
+
+insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, business_listing_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
+values ('pay-paytest-listing', 'pub-paytest-listing', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', 'biz-paytest-old', 'plan-listing-boost', 'manual_momo_mtn', 'OHL-PAYTEST-LISTING', 1, 'USD', 'created');
+insert into test_log(line) select * from extensions.is(
+  (select amount_minor from public.payments where id = 'pay-paytest-listing'), 300,
+  '[listing-promo] a client-supplied amount of 1 is overwritten with the Boost price (300 = $3)'
+);
+
+insert into test_log(line) select * from extensions.throws_ok(
+  $$insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, business_listing_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
+    values ('pay-paytest-both', 'pub-paytest-both', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', 'biz-paytest-new', 'opp-paytest-a-basic', 'plan-listing-boost', 'manual_momo_mtn', 'OHL-PAYTEST-BOTH', 1, 'USD', 'created')$$,
+  '23514'::char(5), NULL::text,
+  '[listing-promo] a payment cannot target both a vacancy and a listing'
+);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
+    values ('pay-paytest-wrongplan', 'pub-paytest-wrongplan', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', 'opp-paytest-a-basic', 'plan-listing-boost', 'manual_momo_mtn', 'OHL-PAYTEST-WRONGPLAN', 1, 'USD', 'created')$$,
+  'P0001'::char(5), NULL::text,
+  '[listing-promo] a listing plan cannot be used to pay for a vacancy'
+);
+
+-- another seller cannot pay to promote (or touch) someone else's listing
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000002',true);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, business_listing_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
+    values ('pay-paytest-xlisting', 'pub-paytest-xlisting', 'org-paytest-b', '11111111-aaaa-4aaa-8aaa-000000000002', 'biz-paytest-new', 'plan-listing-boost', 'manual_momo_mtn', 'OHL-PAYTEST-XLISTING', 1, 'USD', 'created')$$,
+  '42501'::char(5), NULL::text,
+  '[listing-promo][cross-tenant] org B cannot create a promotion payment for org A''s seller listing'
+);
+select set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select public.refresh_open_payment('pay-paytest-listing', 'plan-vacancy-featured')$$,
+  'P0001'::char(5), NULL::text,
+  '[listing-promo] a listing payment cannot be re-quoted onto a vacancy plan'
+);
+reset role;
+
+update public.payments set status = 'payment_pending', provider_transaction_id = 'TXN-LISTING-61842', sender_phone_number = '+231770000001' where id = 'pay-paytest-listing';
+insert into test_log(line) select * from extensions.ok(
+  (select promotion_level is null from public.business_listings where id = 'biz-paytest-old'),
+  '[listing-promo] no promotion before approval'
+);
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000003',true);
+select public.admin_review_payment('pay-paytest-listing', 'approve', 'verified against MoMo statement');
+reset role;
+insert into test_log(line) select * from extensions.ok(
+  (select promotion_level = 'boost' and status = 'published'
+          and promotion_until > now() + interval '29 days' and promotion_until < now() + interval '31 days'
+   from public.business_listings where id = 'biz-paytest-old'),
+  '[listing-promo] approval switches on Boost for 30 days; the listing stays published'
+);
+
+-- the seller cannot write the promotion columns
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000001',true);
+update public.business_listings set promotion_level = 'premium', promotion_until = now() + interval '90 days' where id = 'biz-paytest-new';
+update public.business_listings set promotion_level = 'premium' where id = 'biz-paytest-old';
+reset role;
+insert into test_log(line) select * from extensions.ok(
+  (select promotion_level is null and promotion_until is null from public.business_listings where id = 'biz-paytest-new')
+  and (select promotion_level = 'boost' from public.business_listings where id = 'biz-paytest-old'),
+  '[listing-promo][seller] *** cannot grant themselves Premium *** promotion columns written by the client are discarded'
+);
+
+-- browse order: the promoted (older) listing comes first
+insert into test_log(line) select * from extensions.is(
+  (select x->>'id' from public.list_business_listings_public(p_industry => 'PaytestIndustry') x limit 1), 'biz-paytest-old'::text,
+  '[listing-promo] a promoted listing is listed above a newer unpromoted one'
+);
+update public.business_listings set promotion_until = now() - interval '1 day' where id = 'biz-paytest-old';
+insert into test_log(line) select * from extensions.is(
+  (select x->>'id' from public.list_business_listings_public(p_industry => 'PaytestIndustry') x limit 1), 'biz-paytest-new'::text,
+  '[listing-promo][expiry] once the promotion expires the listing falls back to normal (newest-first) order'
+);
+
 -- =============================================================================
 -- FINAL: dump the log
 -- =============================================================================

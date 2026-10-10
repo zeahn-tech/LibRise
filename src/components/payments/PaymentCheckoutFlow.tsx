@@ -26,10 +26,12 @@ interface Props {
   /** Exactly one of opportunityId or organizationId must be given. */
   opportunityId?: string;
   opportunityTitle?: string;
+  /** Promote a Business-for-Sale listing (the seller's own). organizationId is required with it. */
+  businessListingId?: string;
   /** Required when there's no opportunityId -- i.e. a subscription upgrade. */
   organizationId?: string;
   /** Limits the plan list to one type. Inferred from opportunityId/organizationId if omitted. */
-  planType?: 'vacancy' | 'subscription';
+  planType?: 'vacancy' | 'subscription' | 'listing';
   title?: string;
   /** Pre-select this plan id in the plan-picker step, if it's among the loaded plans. */
   preferredPlanId?: string;
@@ -50,6 +52,7 @@ const POLL_INTERVAL_MS = 20000;
 export const PaymentCheckoutFlow: React.FC<Props> = ({
   opportunityId,
   opportunityTitle,
+  businessListingId,
   organizationId,
   planType,
   title,
@@ -58,8 +61,9 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
   onPublished,
   alreadyPublished = false
 }) => {
-  const isSubscription = !opportunityId;
-  const effectivePlanType = planType ?? (isSubscription ? 'subscription' : 'vacancy');
+  const isListing = !!businessListingId && !opportunityId;
+  const isSubscription = !opportunityId && !businessListingId;
+  const effectivePlanType = planType ?? (isListing ? 'listing' : isSubscription ? 'subscription' : 'vacancy');
   const { showToast } = useToast();
   const [step, setStep] = useState<Step>('loading');
   const [plans, setPlans] = useState<PaymentPlan[]>([]);
@@ -96,7 +100,9 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
     (async () => {
       const openPaymentPromise = opportunityId
         ? paymentService.getOpenPaymentForOpportunity(opportunityId)
-        : organizationId
+        : businessListingId
+          ? paymentService.getOpenPaymentForListing(businessListingId)
+          : organizationId
           ? paymentService.getOpenSubscriptionPayment(organizationId)
           : Promise.resolve({ data: null, error: null, status: 200, timestamp: '' });
       const [plansRes, openRes] = await Promise.all([paymentService.getPlans(effectivePlanType), openPaymentPromise]);
@@ -120,7 +126,7 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
-  }, [opportunityId, organizationId, effectivePlanType, preferredPlanId, applyPaymentState, showToast]);
+  }, [opportunityId, businessListingId, organizationId, effectivePlanType, preferredPlanId, applyPaymentState, showToast]);
 
   const refreshStatus = useCallback(async () => {
     if (!payment) return;
@@ -141,7 +147,7 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
   const handleStartPayment = async () => {
     if (!selectedPlan) return;
     setBusy(true);
-    const res = await paymentService.initiate({ opportunityId, organizationId, planId: selectedPlan.id, provider });
+    const res = await paymentService.initiate({ opportunityId, businessListingId, organizationId, planId: selectedPlan.id, provider });
     setBusy(false);
     if (res.data) {
       if (res.data.paymentProvider !== provider) {
@@ -197,7 +203,7 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
       <div className="bg-white w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl shadow-2xl">
         <div className="flex items-start justify-between gap-3 p-5 border-b border-[#E8E4D9]">
           <div className="min-w-0 flex-1">
-            <h2 className="font-serif font-bold text-xl text-[#132A13] break-words">{title || (isSubscription ? 'Upgrade your subscription' : alreadyPublished ? 'Promote your vacancy' : 'Publish your vacancy')}</h2>
+            <h2 className="font-serif font-bold text-xl text-[#132A13] break-words">{title || (isListing ? 'Promote your listing' : isSubscription ? 'Upgrade your subscription' : alreadyPublished ? 'Promote your vacancy' : 'Publish your vacancy')}</h2>
             {opportunityTitle && <p className="text-xs text-stone-500 mt-0.5 break-words">{opportunityTitle}</p>}
           </div>
           <button onClick={onClose} aria-label="Close" className="w-11 h-11 shrink-0 rounded-full bg-[#F9F8F4] flex items-center justify-center text-[#283618] cursor-pointer">
@@ -216,7 +222,9 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
           {step === 'plan' && (
             <>
               <p className="text-sm text-stone-600">
-                {isSubscription
+                {isListing
+                  ? 'Your listing is live. Pick a promotion for more visibility; it switches on once payment is confirmed.'
+                  : isSubscription
                   ? 'Choose a plan below. Your subscription activates once payment is confirmed.'
                   : alreadyPublished
                     ? 'Your vacancy is already live. Pick a promotion for more visibility; it switches on once payment is confirmed.'
@@ -362,7 +370,7 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
             <div className="py-6 flex flex-col items-center text-center gap-3">
               <CheckCircle2 className="w-12 h-12 text-[#4F772D]" />
               <p className="font-bold text-[#132A13] text-lg">Payment confirmed</p>
-              <p className="text-sm text-stone-600">{isSubscription ? 'Your subscription is now active.' : 'Your vacancy is now live.'}</p>
+              <p className="text-sm text-stone-600">{isListing ? 'Your listing promotion is now active.' : isSubscription ? 'Your subscription is now active.' : 'Your vacancy is now live.'}</p>
               <button onClick={onClose} className={`${busyBtn} bg-[#4F772D] hover:bg-[#283618] text-white`}>Done</button>
             </div>
           )}

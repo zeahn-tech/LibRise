@@ -296,6 +296,9 @@ function translateError(error: { code?: string; message: string }): never {
 
 const SELECT_WITH_ORG = '*, organizations(*)';
 
+/** Vacancies already counted as viewed in this browser session. */
+const viewedThisSession = new Set<string>();
+
 export const opportunityService = {
   /**
    * Superseded by read-time computation (computeEffectiveStatus) -- kept
@@ -358,10 +361,22 @@ export const opportunityService = {
         opps = opps.filter((o) => o.status === 'published');
       }
 
-      // Placement: Premium, then Featured, then Boost, then everything else;
+      // Placement: Premium, Featured, Boost, Pro priority, then everything else;
       // newest first within each group. Array.sort is stable, so this
       // only reorders by promotion and otherwise keeps the incoming order.
-      const rank = (o: Opportunity) => ({ premium: 3, featured: 2, boost: 1 }[o.promotionLevel ?? ''] ?? 0);
+      // Pro "priority visibility": organizations on an active Pro plan rank above
+      // ordinary listings, below any paid Boost/Featured/Premium. The ids come
+      // from priority_organization_ids() (RLS hides other orgs' subscriptions);
+      // if it isn't installed yet this simply gives no priority.
+      let priorityOrgs = new Set<string>();
+      try {
+        const { data: pri } = await client().rpc('priority_organization_ids');
+        if (Array.isArray(pri)) priorityOrgs = new Set(pri as string[]);
+      } catch {
+        // no priority ranking available
+      }
+      const rank = (o: Opportunity) =>
+        ({ premium: 4, featured: 3, boost: 2 }[o.promotionLevel ?? ''] ?? (priorityOrgs.has(o.organizationId) ? 1 : 0));
       return opps
         .map((opp, i) => ({ opp, i }))
         .sort((a, b) => rank(b.opp) - rank(a.opp) || a.i - b.i)
@@ -376,21 +391,18 @@ export const opportunityService = {
       if (!data) return null;
 
       const row = data as OpportunityRow;
-      // Best-effort view increment. Under RLS, an anon/candidate viewer has
-      // no UPDATE grant on opportunities.views_count directly (there is no
-      // policy for it), so this will legitimately no-op for most viewers
-      // rather than error -- matching "don't reimplement authorization
-      // checks as a substitute for RLS": we don't pre-check who's allowed,
-      // we just let Postgres decide and swallow a denial for this
-      // non-critical counter.
-      try {
-        await client()
-          .from('opportunities')
-          .update({ views_count: (row.views_count ?? 0) + 1 })
-          .eq('id', id);
-      } catch {
-        // Non-critical; view counts simply won't increment for viewers
-        // without update rights (i.e. almost everyone, by design).
+      // Count a view through the record_opportunity_view() database function
+      // (a direct UPDATE is refused by row-level security for almost every
+      // viewer, which is why views used to barely move). Once per vacancy per
+      // browser session; the database ignores the employer's own organization
+      // and non-published vacancies. Non-critical: failures are swallowed.
+      if (!viewedThisSession.has(id)) {
+        viewedThisSession.add(id);
+        try {
+          await client().rpc('record_opportunity_view', { p_opportunity_id: id });
+        } catch {
+          // counter only
+        }
       }
 
       return rowToOpportunity(row);

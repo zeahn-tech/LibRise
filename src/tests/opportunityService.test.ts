@@ -10,9 +10,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
  */
 
 const mockFrom = vi.fn();
+const mockRpc = vi.fn();
 
 vi.mock('../lib/supabaseClient', () => ({
-  getSupabaseClient: () => ({ from: mockFrom })
+  getSupabaseClient: () => ({ from: mockFrom, rpc: mockRpc })
 }));
 
 vi.mock('../services/authService', () => ({
@@ -113,6 +114,8 @@ describe('opportunityService', () => {
   beforeEach(() => {
     vi.resetModules();
     mockFrom.mockReset();
+    mockRpc.mockReset();
+    mockRpc.mockResolvedValue({ data: null, error: null });
   });
 
   it('list(): Premium, then Featured, then Boost, then basic; expired promotions fall back to a normal listing', async () => {
@@ -238,6 +241,36 @@ describe('opportunityService', () => {
     expect(payload.organization_id).toBe('org-1');
     expect(payload.created_by_user_id).toBe('user-1');
     expect(payload.title).toBe('Backend Engineer');
+  });
+
+  it('list(): Pro organizations rank above ordinary listings but below any paid promotion', async () => {
+    const future = new Date(Date.now() + 5 * 86_400_000).toISOString();
+    const builder = chain({
+      data: [
+        sampleOppRow({ id: 'plain', organization_id: 'org-free' }),
+        sampleOppRow({ id: 'pro-org', organization_id: 'org-pro' }),
+        sampleOppRow({ id: 'boosted-free-org', organization_id: 'org-free', promotion_level: 'boost', promotion_until: future })
+      ],
+      error: null
+    });
+    mockFrom.mockReturnValue(builder);
+    mockRpc.mockImplementation((fn: string) => Promise.resolve({ data: fn === 'priority_organization_ids' ? ['org-pro'] : null, error: null }));
+
+    const { opportunityService } = await import('../services/opportunityService');
+    const res = await opportunityService.list();
+
+    expect(res.data?.map((o) => o.id)).toEqual(['boosted-free-org', 'pro-org', 'plain']);
+  });
+
+  it('getById(): a view is recorded through the database function, once per session', async () => {
+    mockFrom.mockReturnValue(chain({ data: sampleOppRow({ id: 'opp-view-1' }), error: null }));
+    mockRpc.mockResolvedValue({ data: null, error: null });
+    const { opportunityService } = await import('../services/opportunityService');
+    await opportunityService.getById('opp-view-1');
+    await opportunityService.getById('opp-view-1');
+    const calls = mockRpc.mock.calls.filter((c: unknown[]) => c[0] === 'record_opportunity_view');
+    expect(calls).toHaveLength(1);
+    expect(calls[0][1]).toEqual({ p_opportunity_id: 'opp-view-1' });
   });
 
   it('create(): a Free org within its limit posts Basic for free -- published at once, no payment', async () => {

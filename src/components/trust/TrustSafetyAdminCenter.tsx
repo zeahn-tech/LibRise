@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { PaymentReviewHistory } from '../payments/PaymentReviewHistory';
 import { PaymentReviewQueue } from '../payments/PaymentReviewQueue';
 import {
   ShieldCheck,
@@ -1361,6 +1362,7 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
           <div className="space-y-6">
             {/* REAL: manual mobile money payments awaiting admin confirmation. */}
             <PaymentReviewQueue />
+            <PaymentReviewHistory />
 
             <hr className="border-[#E8E4D9]" />
 
