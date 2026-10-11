@@ -862,8 +862,8 @@ insert into test_log(line) select * from extensions.is(
 insert into test_log(line) select * from extensions.throws_ok(
   $$insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, business_listing_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
     values ('pay-paytest-both', 'pub-paytest-both', 'org-paytest-a', '11111111-aaaa-4aaa-8aaa-000000000001', 'biz-paytest-new', 'opp-paytest-a-basic', 'plan-listing-boost', 'manual_momo_mtn', 'OHL-PAYTEST-BOTH', 1, 'USD', 'created')$$,
-  '23514'::char(5), NULL::text,
-  '[listing-promo] a payment cannot target both a vacancy and a listing'
+  'P0001'::char(5), NULL::text,
+  '[listing-promo] a payment cannot target both a vacancy and a listing (rejected by the pricing trigger before the table CHECK)'
 );
 insert into test_log(line) select * from extensions.throws_ok(
   $$insert into public.payments (id, public_payment_id, organization_id, created_by_user_id, opportunity_id, plan_id, payment_provider, provider_reference, amount_minor, currency, status)
