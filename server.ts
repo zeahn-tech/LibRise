@@ -97,6 +97,32 @@ async function startServer() {
   });
   app.use('/api/', apiLimiter);
 
+  // CORS: same-origin only unless ALLOWED_ORIGINS (comma-separated exact origins,
+  // e.g. https://zeahn-tech.github.io) is set. Required when the static frontend
+  // (GitHub Pages) calls this backend cross-origin. Never reflects arbitrary origins.
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',').map((o) => o.trim()).filter(Boolean);
+  app.use('/api/', (req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Max-Age', '600');
+    }
+    if (req.method === 'OPTIONS') return res.sendStatus(origin && allowedOrigins.includes(origin) ? 204 : 403);
+    next();
+  });
+
+  // Stripe billing is intentionally OFF: subscriptions are paid via manual mobile
+  // money (see docs/PAYMENTS.md). Stripe routes fail closed unless ENABLE_STRIPE=true.
+  const stripeEnabled = process.env.ENABLE_STRIPE === 'true';
+  app.use(['/api/webhook', '/api/create-checkout-session', '/api/create-portal-session'], (req, res, next) => {
+    if (!stripeEnabled) return res.status(503).json({ error: 'Stripe billing is not enabled.' });
+    next();
+  });
+
   // Stripe requires the raw body for webhook signature verification
   app.post('/api/webhook', express.raw({ type: 'application/json' }), (req, res) => {
     const sig = req.headers['stripe-signature'];
@@ -112,12 +138,12 @@ async function startServer() {
     let event;
 
     try {
-      if (endpointSecret) {
-        event = stripe.webhooks.constructEvent(req.body, sig as string, endpointSecret);
-      } else {
-        // Without a webhook secret, we just decode the event (not recommended for production)
-        event = JSON.parse(req.body.toString());
+      if (!endpointSecret) {
+        // Fail closed: never trust an unsigned payload as a Stripe event.
+        console.error('Webhook rejected: STRIPE_WEBHOOK_SECRET is not configured.');
+        return res.status(400).send('Webhook secret not configured');
       }
+      event = stripe.webhooks.constructEvent(req.body, sig as string, endpointSecret);
     } catch (err: any) {
       console.error(`Webhook Error: ${err.message}`);
       return res.status(400).send(`Webhook Error: ${err.message}`);

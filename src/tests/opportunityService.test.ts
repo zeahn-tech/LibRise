@@ -161,7 +161,13 @@ describe('opportunityService', () => {
     });
 
     expect(mockFrom).toHaveBeenCalledWith('opportunities');
-    expect(builder.select).toHaveBeenCalledWith('*, organizations(*)');
+    const selectArg = builder.select.mock.calls[0][0] as string;
+    // Private org columns are not readable through an embedded join: an explicit public column list, never organizations(*).
+    expect(selectArg).toMatch(/^\*, organizations\(id,slug,name,/);
+    expect(selectArg).not.toContain('organizations(*)');
+    for (const c of ['tax_id_number', 'registration_number', 'contact_email', 'contact_phone', 'settings']) {
+      expect(selectArg).not.toContain(c);
+    }
     expect(builder.eq).toHaveBeenCalledWith('organization_id', 'org-1');
     expect(builder.eq).toHaveBeenCalledWith('status', 'published');
     expect(builder.eq).toHaveBeenCalledWith('county', 'Nimba');

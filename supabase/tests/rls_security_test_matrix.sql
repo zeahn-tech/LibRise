@@ -155,12 +155,25 @@ select set_config('role','anon',true), set_config('request.jwt.claim.sub','',tru
 insert into test_log(line) select * from extensions.ok(
   (select count(*) from public.organizations where id = 'org-rlstest-a') = 1,
   '[organizations][anon][SELECT] anon can read org row (policy is USING(true), not verified-only as docs claim)');
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select tax_id_number from public.organizations where id = 'org-rlstest-a'$$,
+  '42501'::char(5), NULL::text,
+  '[organizations][anon][SELECT] tax_id_number is NOT readable by anon (column privilege revoked; was FINDING F-08)');
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select contact_email from public.organizations where id = 'org-rlstest-a'$$,
+  '42501'::char(5), NULL::text,
+  '[organizations][anon][SELECT] contact_email is NOT readable by anon (was FINDING F-08)');
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select registration_number, contact_phone, settings from public.organizations where id = 'org-rlstest-a'$$,
+  '42501'::char(5), NULL::text,
+  '[organizations][anon][SELECT] registration_number/contact_phone/settings are NOT readable by anon');
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select * from public.organizations where id = 'org-rlstest-a'$$,
+  '42501'::char(5), NULL::text,
+  '[organizations][anon][SELECT] select * is rejected, so private columns cannot ride along');
 insert into test_log(line) select * from extensions.ok(
-  (select tax_id_number from public.organizations where id = 'org-rlstest-a') is not null,
-  '[organizations][anon][SELECT] *** FINDING *** anon can read tax_id_number (sensitive) — unverified org, docs claim "verified only"');
-insert into test_log(line) select * from extensions.ok(
-  (select contact_email from public.organizations where id = 'org-rlstest-a') is not null,
-  '[organizations][anon][SELECT] *** FINDING *** anon can read contact_email (PII-adjacent) on unverified org');
+  (select name from public.organizations where id = 'org-rlstest-a') is not null,
+  '[organizations][anon][SELECT] public profile columns (name) remain readable');
 reset role;
 
 -- Org A owner can update org A; cannot update org B (cross-tenant)

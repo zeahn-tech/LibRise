@@ -19,13 +19,18 @@ import {
   SemanticSearchResponse
 } from './aiTypes';
 import { authService } from '../authService';
+import { envConfig } from '../../config/env';
+
+// Same-origin '/api' by default (Express serves the app); set VITE_API_BASE_URL to the
+// deployed backend's /api URL when the frontend is hosted separately (e.g. GitHub Pages).
+const API = envConfig.apiBaseUrl.replace(/\/+$/, '');
 
 export class GeminiAIProvider implements IAIProvider {
   name = 'Gemini 3.8 Flash (Server Intelligence)';
 
   async isAvailable(): Promise<boolean> {
     try {
-      const res = await fetch('/api/ai/health', { method: 'GET' });
+      const res = await fetch(`${API}/ai/health`, { method: 'GET' });
       if (!res.ok) return false;
       const data = await res.json();
       return !!data.configured;
@@ -35,7 +40,7 @@ export class GeminiAIProvider implements IAIProvider {
   }
 
   async getJobRecommendations(input: JobRecommendationInput): Promise<JobRecommendationsResponse> {
-    const res = await fetch('/api/ai/recommendations', {
+    const res = await fetch(`${API}/ai/recommendations`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -50,7 +55,7 @@ export class GeminiAIProvider implements IAIProvider {
   }
 
   async matchCandidateToJob(input: CandidateMatchInput): Promise<CandidateMatchResult> {
-    const res = await fetch('/api/ai/match-candidate', {
+    const res = await fetch(`${API}/ai/match-candidate`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -65,7 +70,7 @@ export class GeminiAIProvider implements IAIProvider {
   }
 
   async parseCV(input: CVParsingInput): Promise<ParsedCVResult> {
-    const res = await fetch('/api/ai/parse-cv', {
+    const res = await fetch(`${API}/ai/parse-cv`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -80,7 +85,7 @@ export class GeminiAIProvider implements IAIProvider {
   }
 
   async assistJobDescription(input: JobAssistantInput): Promise<JobAssistantResult> {
-    const res = await fetch('/api/ai/job-assistant', {
+    const res = await fetch(`${API}/ai/job-assistant`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -95,7 +100,7 @@ export class GeminiAIProvider implements IAIProvider {
   }
 
   async semanticSearch(input: SemanticSearchInput): Promise<SemanticSearchResponse> {
-    const res = await fetch('/api/ai/semantic-search', {
+    const res = await fetch(`${API}/ai/semantic-search`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',

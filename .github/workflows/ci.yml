@@ -63,17 +63,8 @@ jobs:
         run: npm run check:no-secrets-committed
 
       - name: Bundle-confidentiality regression check (seed PII)
-        # This is a REGRESSION GATE, not a currently-passing check -- see
-        # docs/PHASE3_GAP_CLOSURE.md and the certification report's
-        # Performance / UI Status sections. src/db/dbClient.ts's seed
-        # dataset (SEED_USERS: real-looking emails + one password hash)
-        # is a known, still-open leak into the client bundle. This step
-        # is intentionally wired to FAIL the build until that's fixed,
-        # so the failure below is expected and correct, not a bug in
-        # this workflow -- it's the whole point of a regression gate:
-        # it stays red as a visible reminder until the underlying issue
-        # is actually fixed, and then it silently starts protecting
-        # against the leak coming back.
+        # Regression gate: the seed dataset in src/db/dbClient.ts is tree-shaken out of
+        # non-demo builds; this fails if it ever leaks back into the client bundle.
         run: npm run check:no-seed-pii-in-bundle
 
       - name: Secret scanning (gitleaks)
@@ -127,7 +118,7 @@ jobs:
           set -uo pipefail
           DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
           STATUS=0
-          for f in supabase/tests/rls_security_test_matrix.sql supabase/tests/payments_security_tests.sql; do
+          for f in supabase/tests/rls_security_test_matrix.sql supabase/tests/payments_security_tests.sql supabase/tests/privileged_column_guard_tests.sql; do
             echo "=== $f ==="
             # Capture stderr too and DON'T let a psql error abort silently:
             # SQL errors (bad fixture, missing column, ...) must be visible.

@@ -51,7 +51,7 @@ function sampleAuditRow(overrides: Record<string, unknown> = {}) {
     reviewer_notes: null,
     reviewed_at: null,
     created_at: new Date().toISOString(),
-    organizations: { name: 'Acme Liberia', type: 'private_company', county: 'Montserrado', registration_number: 'LBR-2024-1', tax_id_number: 'TIN-1' },
+    organizations: { name: 'Acme Liberia', type: 'private_company', county: 'Montserrado', },
     ...overrides
   };
 }
@@ -61,6 +61,8 @@ describe('verificationService', () => {
     vi.resetModules();
     mockFrom.mockReset();
     mockRpc.mockReset();
+    // Default: the get_organization_private_fields RPC returns no private rows.
+    mockRpc.mockResolvedValue({ data: [], error: null });
   });
 
   it('submit(): requires an organization to be resolvable before ever calling Supabase', async () => {
@@ -94,10 +96,29 @@ describe('verificationService', () => {
     mockFrom.mockReturnValue(chain({ data: [sampleAuditRow()], error: null }));
 
     const { verificationService } = await import('../services/verificationService');
+    mockRpc.mockResolvedValueOnce({
+      data: [{ id: 'org-1', settings: null, registration_number: 'LBR-2024-1', tax_id_number: 'TIN-9', contact_email: null, contact_phone: null }],
+      error: null
+    });
     const res = await verificationService.list();
 
     expect(res.data![0].organizationName).toBe('Acme Liberia');
+    // registration/tax numbers are private org columns: they come from the RPC, not the join.
+    expect(mockRpc).toHaveBeenCalledWith('get_organization_private_fields', { p_org_ids: ['org-1'] });
     expect(res.data![0].registryNumber).toBe('LBR-2024-1');
+    expect(res.data![0].taxIdNumber).toBe('TIN-9');
+  });
+
+  it('list(): if the private-fields RPC is denied/fails, the queue still loads with blank registry/TIN', async () => {
+    mockFrom.mockReturnValue(chain({ data: [sampleAuditRow()], error: null }));
+    mockRpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'denied' } });
+
+    const { verificationService } = await import('../services/verificationService');
+    const res = await verificationService.list();
+
+    expect(res.data![0].organizationName).toBe('Acme Liberia');
+    expect(res.data![0].registryNumber).toBe('');
+    expect(res.data![0].taxIdNumber).toBe('');
   });
 
   it('decide(): checks authService.can() as fast-fail UX before ever calling the RPC', async () => {
@@ -112,7 +133,9 @@ describe('verificationService', () => {
   });
 
   it('decide(): calls decide_verification_audit RPC, then re-fetches the joined row', async () => {
-    mockRpc.mockResolvedValue({ data: { id: 'audit-1' }, error: null });
+    mockRpc.mockImplementation((name: string) =>
+      Promise.resolve(name === 'decide_verification_audit' ? { data: { id: 'audit-1' }, error: null } : { data: [], error: null })
+    );
     mockFrom.mockReturnValue(chain({ data: sampleAuditRow({ status: 'approved' }), error: null }));
 
     const { verificationService } = await import('../services/verificationService');

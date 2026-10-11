@@ -109,6 +109,8 @@ interface MembershipRow {
   updated_at: string | null;
 }
 
+import { ORG_PUBLIC_COLUMNS, OrganizationPrivateRow } from './orgColumns';
+
 function rowToOrganization(row: OrganizationRow): Organization {
   return {
     id: row.id,
@@ -219,6 +221,39 @@ function translateError(error: { code?: string; message: string }): never {
 // Organizations
 // ---------------------------------------------------------------------
 
+/**
+ * Reads the private organization columns via the members/platform-admin-only
+ * RPC. Rows the caller is not authorised to see are simply absent. With
+ * strict=false (display paths) any failure degrades to "no private fields";
+ * with strict=true (write paths that merge into a stored value) it throws.
+ */
+async function fetchPrivateFields(ids: string[], strict = false): Promise<OrganizationPrivateRow[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await client().rpc('get_organization_private_fields', { p_org_ids: ids });
+  if (error) {
+    if (strict) translateError(error);
+    return [];
+  }
+  return (data as OrganizationPrivateRow[]) ?? [];
+}
+
+async function attachPrivateFields(orgs: Organization[]): Promise<Organization[]> {
+  const priv = await fetchPrivateFields(orgs.map((o) => o.id));
+  const byId = new Map(priv.map((p) => [p.id, p]));
+  return orgs.map((o) => {
+    const p = byId.get(o.id);
+    if (!p) return o;
+    return {
+      ...o,
+      settings: (p.settings as unknown as Organization['settings']) ?? undefined,
+      registrationNumber: p.registration_number ?? undefined,
+      taxIdNumber: p.tax_id_number ?? undefined,
+      contactEmail: p.contact_email ?? undefined,
+      contactPhone: p.contact_phone ?? undefined
+    };
+  });
+}
+
 export interface OrganizationFilter {
   type?: OrganizationType;
   county?: County;
@@ -229,7 +264,7 @@ export interface OrganizationFilter {
 export const organizationService = {
   /** Public read -- covered by the "Allow public read access" RLS policy; works for anon or authenticated callers alike. */
   async getOrganizations(filter?: OrganizationFilter): Promise<Organization[]> {
-    let q = client().from('organizations').select('*');
+    let q = client().from('organizations').select(ORG_PUBLIC_COLUMNS);
     if (filter?.type) q = q.eq('type', filter.type);
     if (filter?.county) q = q.eq('county', filter.county);
     if (typeof filter?.isVerified === 'boolean') q = q.eq('is_verified', filter.isVerified);
@@ -243,15 +278,17 @@ export const organizationService = {
   },
 
   async getOrganizationById(id: string): Promise<Organization | null> {
-    const { data, error } = await client().from('organizations').select('*').eq('id', id).maybeSingle();
+    const { data, error } = await client().from('organizations').select(ORG_PUBLIC_COLUMNS).eq('id', id).maybeSingle();
     if (error) translateError(error);
-    return data ? rowToOrganization(data as OrganizationRow) : null;
+    if (!data) return null;
+    return (await attachPrivateFields([rowToOrganization(data as OrganizationRow)]))[0];
   },
 
   async getOrganizationBySlug(slug: string): Promise<Organization | null> {
-    const { data, error } = await client().from('organizations').select('*').eq('slug', slug).maybeSingle();
+    const { data, error } = await client().from('organizations').select(ORG_PUBLIC_COLUMNS).eq('slug', slug).maybeSingle();
     if (error) translateError(error);
-    return data ? rowToOrganization(data as OrganizationRow) : null;
+    if (!data) return null;
+    return (await attachPrivateFields([rowToOrganization(data as OrganizationRow)]))[0];
   },
 
   /**
@@ -334,29 +371,31 @@ export const organizationService = {
       .from('organizations')
       .update(safe)
       .eq('id', organizationId)
-      .select('*')
+      .select(ORG_PUBLIC_COLUMNS)
       .maybeSingle();
     if (error) translateError(error);
     if (!data) throw new NotFoundError('Organization', organizationId);
-    return rowToOrganization(data as OrganizationRow);
+    return (await attachPrivateFields([rowToOrganization(data as OrganizationRow)]))[0];
   },
 
   async updateOrganizationSettings(
     organizationId: string,
     settingsUpdates: Partial<OrganizationSettings>
   ): Promise<Organization> {
-    const existing = await this.getOrganizationById(organizationId);
-    if (!existing) throw new NotFoundError('Organization', organizationId);
-    const merged = { ...(existing.settings || {}), ...settingsUpdates };
+    // settings is a private column: read it strictly through the RPC so a
+    // failed read can never be mistaken for "no settings" and overwrite them.
+    const priv = await fetchPrivateFields([organizationId], true);
+    if (priv.length === 0) throw new NotFoundError('Organization', organizationId);
+    const merged = { ...((priv[0].settings as unknown as Partial<OrganizationSettings>) || {}), ...settingsUpdates };
     const { data, error } = await client()
       .from('organizations')
       .update({ settings: merged })
       .eq('id', organizationId)
-      .select('*')
+      .select(ORG_PUBLIC_COLUMNS)
       .maybeSingle();
     if (error) translateError(error);
     if (!data) throw new NotFoundError('Organization', organizationId);
-    return rowToOrganization(data as OrganizationRow);
+    return (await attachPrivateFields([rowToOrganization(data as OrganizationRow)]))[0];
   },
 
   // ---------------------------------------------------------------------
@@ -379,10 +418,10 @@ export const organizationService = {
     if (memberships.length === 0) return [];
     const { data, error } = await client()
       .from('organizations')
-      .select('*')
+      .select(ORG_PUBLIC_COLUMNS)
       .in('id', memberships.map((m) => m.organizationId));
     if (error) translateError(error);
-    const orgs = (data as OrganizationRow[]).map(rowToOrganization);
+    const orgs = await attachPrivateFields((data as OrganizationRow[]).map(rowToOrganization));
     return memberships
       .map((m) => {
         const org = orgs.find((o) => o.id === m.organizationId);
