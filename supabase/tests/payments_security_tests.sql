@@ -836,6 +836,7 @@ reset role;
 -- 13. BUSINESS-FOR-SALE LISTING PROMOTION (Boost / Featured / Premium)
 -- =============================================================================
 reset role;
+select set_config('request.jwt.claim.sub','',true);
 insert into public.business_listings (id, owner_user_id, title, slug, listing_type, industry, county, city_district, headline, description, status, is_confidential, asking_price_usd, created_at)
 values
   ('biz-paytest-old', '11111111-aaaa-4aaa-8aaa-000000000001', 'Paytest older listing', 'paytest-biz-old', 'business', 'PaytestIndustry', 'Montserrado', 'Sinkor', 'Older', 'Older listing', 'published', false, 1000, now() - interval '5 days'),
@@ -886,6 +887,7 @@ insert into test_log(line) select * from extensions.throws_ok(
   '[listing-promo] a listing payment cannot be re-quoted onto a vacancy plan'
 );
 reset role;
+select set_config('request.jwt.claim.sub','',true);
 
 update public.payments set status = 'payment_pending', provider_transaction_id = 'TXN-LISTING-61842', sender_phone_number = '+231770000001' where id = 'pay-paytest-listing';
 insert into test_log(line) select * from extensions.ok(
@@ -895,6 +897,7 @@ insert into test_log(line) select * from extensions.ok(
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','11111111-aaaa-4aaa-8aaa-000000000003',true);
 select public.admin_review_payment('pay-paytest-listing', 'approve', 'verified against MoMo statement');
 reset role;
+select set_config('request.jwt.claim.sub','',true);
 insert into test_log(line) select * from extensions.ok(
   (select promotion_level = 'boost' and status = 'published'
           and promotion_until > now() + interval '29 days' and promotion_until < now() + interval '31 days'
@@ -907,6 +910,7 @@ select set_config('role','authenticated',true), set_config('request.jwt.claim.su
 update public.business_listings set promotion_level = 'premium', promotion_until = now() + interval '90 days' where id = 'biz-paytest-new';
 update public.business_listings set promotion_level = 'premium' where id = 'biz-paytest-old';
 reset role;
+select set_config('request.jwt.claim.sub','',true);
 insert into test_log(line) select * from extensions.ok(
   (select promotion_level is null and promotion_until is null from public.business_listings where id = 'biz-paytest-new')
   and (select promotion_level = 'boost' from public.business_listings where id = 'biz-paytest-old'),
