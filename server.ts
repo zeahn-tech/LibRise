@@ -116,9 +116,17 @@ async function startServer() {
   });
 
   // Stripe billing is intentionally OFF: subscriptions are paid via manual mobile
-  // money (see docs/PAYMENTS.md). Stripe routes fail closed unless ENABLE_STRIPE=true.
+  // money (see docs/PAYMENTS.md).
+  //  * Checkout / portal creation stay hard-disabled regardless of any flag until
+  //    audit finding F-05 is fixed (membership is checked against the demo store, and
+  //    priceId / redirect URLs / customerId are not validated) -- see docs/LAUNCH_AUDIT.md.
+  //  * The webhook additionally needs ENABLE_STRIPE=true AND a STRIPE_WEBHOOK_SECRET
+  //    (it rejects unsigned payloads either way).
   const stripeEnabled = process.env.ENABLE_STRIPE === 'true';
-  app.use(['/api/webhook', '/api/create-checkout-session', '/api/create-portal-session'], (req, res, next) => {
+  app.use(['/api/create-checkout-session', '/api/create-portal-session'], (_req, res) => {
+    res.status(503).json({ error: 'Stripe checkout is disabled.' });
+  });
+  app.use('/api/webhook', (_req, res, next) => {
     if (!stripeEnabled) return res.status(503).json({ error: 'Stripe billing is not enabled.' });
     next();
   });

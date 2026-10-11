@@ -30,21 +30,11 @@ jobs:
         run: npm run lint
 
       - name: Run test suite
-        # 164/166 tests are fully self-contained (in-memory dbClient / RBAC / env /
-        # logger fixtures). The remaining 2, in organizations.test.ts, exercise
-        # AuthService.login() against a REAL Supabase Auth endpoint over the network
-        # and will fail with "fetch failed" unless SUPABASE_TEST_URL /
-        # SUPABASE_TEST_ANON_KEY secrets are configured for this repo (Settings ->
-        # Secrets and variables -> Actions) pointing at a real (ideally disposable/
-        # staging) Supabase project. Without those secrets set, this step is EXPECTED
-        # to report 2 failures -- that's a known, pre-existing gap in test isolation,
-        # not something introduced by this workflow. See docs/DEPLOYMENT.md's CI
-        # section and docs/PRODUCTION_CERTIFICATION_REPORT.md's Testing Status for
-        # the full account of this.
+        # Unit tests are hermetic: vite.config.ts clears VITE_SUPABASE_* for the test
+        # run, so authService uses the in-memory demo store and nothing touches the
+        # network. Anything needing a real Supabase project is covered by the
+        # database-level pgTAP/RLS jobs below, not here.
         run: npm test -- --run
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_TEST_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_TEST_ANON_KEY }}
 
       - name: Build production bundle
         run: npm run build

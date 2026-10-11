@@ -1,11 +1,19 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import {defineConfig} from 'vitest/config';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
   return {
+    // Unit tests must be hermetic: with a Supabase URL in the environment,
+    // authService.login() calls a real Auth endpoint instead of the in-memory demo
+    // store (this made 2 organizations.test.ts tests fail with "fetch failed"
+    // whenever VITE_SUPABASE_URL was set, incl. the CI secrets). Integration tests
+    // that need a real project belong in supabase/tests (pgTAP) instead.
+    test: {
+      env: { VITE_SUPABASE_URL: '', VITE_SUPABASE_ANON_KEY: '' }
+    },
     base: './',
     plugins: [
       react(), 

@@ -1,0 +1,13 @@
+do $$ declare r text; begin foreach r in array array['anon','authenticated','service_role','supabase_admin'] loop if not exists (select 1 from pg_roles where rolname=r) then execute format('create role %I nologin', r); end if; end loop; end $$;
+create schema extensions; create schema auth;
+create extension "uuid-ossp" with schema extensions;
+create extension pgtap with schema extensions;
+grant usage on schema extensions to anon, authenticated, service_role, public;
+create table auth.users (id uuid primary key default extensions.uuid_generate_v4(), email varchar, raw_user_meta_data jsonb default '{}'::jsonb, email_confirmed_at timestamptz, created_at timestamptz default now());
+create function auth.uid() returns uuid language sql stable as $$ select coalesce(nullif(current_setting('request.jwt.claim.sub', true),''), nullif(current_setting('request.jwt.claims', true),'')::jsonb->>'sub')::uuid $$;
+create function auth.role() returns text language sql stable as $$ select current_setting('role', true) $$;
+create function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$;
+grant usage on schema auth to anon, authenticated, service_role;
+grant execute on all functions in schema auth to anon, authenticated, service_role;
+create publication supabase_realtime;
+do $$ begin if not exists (select 1 from pg_roles where rolname='authenticator') then create role authenticator noinherit login password 'pw'; end if; end $$; grant anon, authenticated, service_role to authenticator;
