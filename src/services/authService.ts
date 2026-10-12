@@ -268,6 +268,17 @@ class AuthService {
       } else {
         row = data;
       }
+      // A suspended / deactivated account must not hold a usable session: the database
+      // already denies it all data access (migration 20261012150000), so end the
+      // session here with a clear message instead of showing a silently empty app.
+      if (row && (row.account_status === 'suspended' || row.account_status === 'deactivated')) {
+        try {
+          await supabase.auth.signOut();
+        } catch {
+          /* the session is rejected below either way */
+        }
+        throw new UnauthorizedError('This account has been suspended. Please contact support.');
+      }
     }
 
     const meta = supabaseUser.user_metadata || {};
@@ -375,8 +386,16 @@ class AuthService {
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, supaSession) => {
       if (supaSession?.user) {
-        const updated = await this.hydrateSessionFromSupabase(supaSession.user, supaSession);
-        callback(updated);
+        try {
+          const updated = await this.hydrateSessionFromSupabase(supaSession.user, supaSession);
+          callback(updated);
+        } catch (err) {
+          // e.g. a suspended account: drop the local session instead of leaking an unhandled rejection
+          logger.warn('AUTH', 'Session rejected during auth state change', { error: (err as Error).message });
+          this.currentSession = emptySession();
+          storageAdapter.removeItem(SESSION_STORAGE_KEY);
+          callback(this.currentSession);
+        }
       } else if (!this.currentSession.isDemoMode) {
         this.currentSession = emptySession();
         storageAdapter.removeItem(SESSION_STORAGE_KEY);

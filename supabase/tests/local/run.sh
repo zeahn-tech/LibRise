@@ -35,6 +35,6 @@ jwt-secret = "super-secret-jwt-token-with-at-least-32-characters-long"
 server-port = 3999
 CONF
   "$POSTGREST_BIN" "$CONF" >"$LOGF" 2>&1 & PR=$!; sleep 3
-  python3 "$HERE/http_authz_check.py" | tail -3; [ "${PIPESTATUS[0]}" -eq 0 ] || fail=1; kill $PR 2>/dev/null
+  python3 "$HERE/http_authz_check.py" | grep -E "^FAIL|passed"; [ "${PIPESTATUS[0]}" -eq 0 ] || fail=1; kill $PR 2>/dev/null
 fi
 exit $fail

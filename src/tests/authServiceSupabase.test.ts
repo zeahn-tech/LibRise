@@ -265,4 +265,43 @@ describe('authService -- Supabase-backed flows (mocked Supabase, no local fallba
     );
     vi.doUnmock('../config/env');
   });
+
+  it.each(['suspended', 'deactivated'])('login(): a %s account is signed out and rejected with a clear message', async (status) => {
+    mockClient = buildMockSupabaseClient();
+    const supabaseUserId = 'a1b2c3d4-0000-4000-8000-0000000000aa';
+    mockSignInWithPassword.mockResolvedValue({
+      data: {
+        user: { id: supabaseUserId, email: 'restricted@opportunityhub.lr', user_metadata: {} },
+        session: { access_token: 'token-for-restricted-user' }
+      },
+      error: null
+    });
+    mockSignOut.mockResolvedValue({ error: null });
+    mockUsersTableSelect({ id: supabaseUserId, email: 'restricted@opportunityhub.lr', full_name: 'R', primary_role: 'job_seeker', system_role: 'user', account_status: status });
+
+    const { authService } = await import('../services/authService');
+    await expect(authService.login('restricted@opportunityhub.lr', 'StrongPassword2026!')).rejects.toThrow(/suspended/i);
+    expect(mockSignOut).toHaveBeenCalled();
+    // the restricted user's token must never become the current session
+    expect(authService.getSession().token).not.toBe('token-for-restricted-user');
+  });
+
+  it('login(): an active account is unaffected by the suspension check', async () => {
+    mockClient = buildMockSupabaseClient();
+    const supabaseUserId = 'a1b2c3d4-0000-4000-8000-0000000000ab';
+    mockSignInWithPassword.mockResolvedValue({
+      data: {
+        user: { id: supabaseUserId, email: 'ok@opportunityhub.lr', user_metadata: {} },
+        session: { access_token: 'token-for-active-user' }
+      },
+      error: null
+    });
+    mockUsersTableSelect({ id: supabaseUserId, email: 'ok@opportunityhub.lr', full_name: 'OK', primary_role: 'job_seeker', system_role: 'user', account_status: 'active' });
+
+    const { authService } = await import('../services/authService');
+    const session = await authService.login('ok@opportunityhub.lr', 'StrongPassword2026!');
+    expect(session.isAuthenticated).toBe(true);
+    expect(session.token).toBe('token-for-active-user');
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
 });
