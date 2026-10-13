@@ -105,7 +105,7 @@ reset role;
 -- =====================================================================
 update public.users set account_status = 'active' where id = '0a0a0a0a-0000-4000-8000-000000000009';
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000009',true);
-insert into test_log(line) select * from extensions.is(public.is_account_suspended(), true,
+insert into test_log(line) select * from extensions.is(public.current_account_suspended(), true,
   '[suspended][defence in depth] an ACTIVE full_suspension restriction suspends the account even when account_status says active');
 insert into test_log(line) select * from extensions.throws_ok(
   $$insert into public.applications (id, opportunity_id, applicant_user_id, organization_id, applicant_full_name, applicant_email, stage) values ('app-as-s2', 'opp-as-pub', '0a0a0a0a-0000-4000-8000-000000000009', 'org-as', 'AS S2', 'as-s2@example.com', 'submitted')$$,
@@ -240,6 +240,124 @@ insert into test_log(line) select * from extensions.throws_ok($$select public.re
 insert into test_log(line) select * from extensions.throws_ok($$select public.admin_review_payment('pay-none', 'approved', 'x')$$, '42501'::char(5), NULL::text, '[ordinary user][RPC admin_review_payment] denied');
 insert into test_log(line) select * from extensions.throws_ok($$select * from public.get_platform_analytics()$$, '42501'::char(5), NULL::text, '[ordinary user][RPC get_platform_analytics] denied');
 insert into test_log(line) select * from extensions.throws_ok($$select public.decide_verification_audit('aud-none', 'approved', 'x')$$, '42501'::char(5), NULL::text, '[ordinary user][RPC decide_verification_audit] denied');
+reset role;
+
+
+-- =====================================================================
+-- I. F-22: enforcement status cannot be used to inspect other accounts
+-- =====================================================================
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000006',true);   -- T, an ordinary active user
+insert into test_log(line) select * from extensions.throws_ok($$select public.is_account_suspended('0a0a0a0a-0000-4000-8000-000000000002')$$, '42501'::char(5), NULL::text,
+  '[F-22][ordinary user] cannot ask whether ANOTHER account is suspended (parameterised helper not executable)');
+insert into test_log(line) select * from extensions.throws_ok($$select public.has_active_restriction('0a0a0a0a-0000-4000-8000-000000000004', 'posting_disabled')$$, '42501'::char(5), NULL::text,
+  '[F-22][ordinary user] cannot ask whether ANOTHER account has a restriction');
+insert into test_log(line) select * from extensions.is((select count(*) from public.account_restrictions where user_id <> '0a0a0a0a-0000-4000-8000-000000000006'), 0::bigint,
+  '[F-22][ordinary user] cannot read other users'' restriction rows');
+insert into test_log(line) select * from extensions.is(public.current_account_suspended(), false, '[F-22][ordinary active user] current_account_suspended() answers about themselves only: false');
+insert into test_log(line) select * from extensions.is(public.current_has_restriction('messaging_disabled'), true, '[F-22][T with an active messaging_disabled restriction] can see their OWN restriction through the wrapper');
+insert into test_log(line) select * from extensions.is(public.current_has_restriction('posting_disabled'), false, '[F-22][T] ...and only their own (no posting restriction)');
+reset role;
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000002',true);   -- S, suspended
+insert into test_log(line) select * from extensions.is(public.current_account_suspended(), true, '[F-22][suspended S] sees their own suspension');
+insert into test_log(line) select * from extensions.throws_ok($$select public.assert_account_active()$$, '42501'::char(5), NULL::text, '[F-22][suspended S] assert_account_active() raises for themselves');
+insert into test_log(line) select * from extensions.throws_ok($$select public.is_account_suspended('0a0a0a0a-0000-4000-8000-000000000006')$$, '42501'::char(5), NULL::text, '[F-22][suspended S] cannot probe other accounts either');
+reset role;
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000007',true);   -- PA
+insert into test_log(line) select * from extensions.ok((select count(*) from public.account_restrictions) >= 4, '[F-22][platform admin] can still read all restriction rows (enforcement tooling intact)');
+insert into test_log(line) select * from extensions.lives_ok($$select public.apply_account_restriction('as-f22', '0a0a0a0a-0000-4000-8000-000000000006', 'posting_disabled', 'abuse', null)$$, '[F-22][platform admin] can still apply restrictions');
+reset role;
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000006',true);
+insert into test_log(line) select * from extensions.is(public.current_has_restriction('posting_disabled'), true, '[F-22][T] the restriction just applied is enforced via the self-only wrapper');
+reset role;
+-- coverage: no parameterised enforcement helper is executable by client roles
+insert into test_log(line) select * from extensions.is((select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace
+   and p.proname in ('is_account_suspended', 'has_active_restriction')
+   and (has_function_privilege('authenticated', p.oid, 'execute') or has_function_privilege('anon', p.oid, 'execute'))), 0::bigint,
+  '[F-22][coverage] the parameterised enforcement helpers are not executable by authenticated or anon');
+
+
+-- =====================================================================
+-- J. F-19: full suspension bans the auth user and revokes its sessions; lifting restores
+-- =====================================================================
+insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at, created_at)
+values ('0a0a0a0a-0000-4000-8000-0000000000c1', 'as-ban@example.com', '{"primaryRole":"employer"}'::jsonb, now(), now());
+insert into auth.sessions (id, user_id) values ('0a0a0a0a-0000-4000-8000-0000000000d1', '0a0a0a0a-0000-4000-8000-0000000000c1');
+insert into auth.refresh_tokens (user_id, session_id) values ('0a0a0a0a-0000-4000-8000-0000000000c1', '0a0a0a0a-0000-4000-8000-0000000000d1');
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000007',true);
+insert into test_log(line) select * from extensions.lives_ok($$select public.apply_account_restriction('as-ban-1', '0a0a0a0a-0000-4000-8000-0000000000c1', 'full_suspension', 'abuse', null)$$, '[F-19][platform admin] suspends an account');
+reset role;
+insert into test_log(line) select * from extensions.ok((select banned_until = 'infinity' from auth.users where id = '0a0a0a0a-0000-4000-8000-0000000000c1'), '[F-19] the auth user is banned (sign-in and token refresh refused)');
+insert into test_log(line) select * from extensions.is((select count(*) from auth.sessions where user_id = '0a0a0a0a-0000-4000-8000-0000000000c1') + (select count(*) from auth.refresh_tokens where user_id = '0a0a0a0a-0000-4000-8000-0000000000c1'), 0::bigint, '[F-19] sessions and refresh tokens are revoked');
+-- a still-valid access token is denied by the database
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-0000000000c1',true);
+insert into test_log(line) select * from extensions.is((select count(*) from public.organizations), 0::bigint, '[F-19] an already-issued access token still gets no data (RLS)');
+reset role;
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000007',true);
+insert into test_log(line) select * from extensions.lives_ok($$select public.lift_account_restriction('as-ban-1')$$, '[F-19][platform admin] lifts the suspension');
+reset role;
+insert into test_log(line) select * from extensions.ok((select banned_until is null from auth.users where id = '0a0a0a0a-0000-4000-8000-0000000000c1'), '[F-19] lifting the last full suspension clears the ban');
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000006',true);
+insert into test_log(line) select * from extensions.throws_ok($$select public.set_auth_ban('0a0a0a0a-0000-4000-8000-000000000006', true)$$, '42501'::char(5), NULL::text, '[F-19][ordinary user] set_auth_ban is not callable by client roles');
+-- F-21: organizations only through the RPC
+insert into test_log(line) select * from extensions.throws_ok(
+  $$insert into public.organizations (id, slug, name, type, industry, county, city_district, description) values ('org-as-direct', 'org-as-direct', 'Ministry of Finance', 'government', 'x', 'Montserrado', 'Monrovia', 'd')$$,
+  '42501'::char(5), NULL::text, '[F-21][authenticated] a direct INSERT into organizations is denied');
+insert into test_log(line) select * from extensions.lives_ok(
+  $$select public.create_organization_with_owner('org-as-rpc', 'org-as-rpc', 'RPC Org', 'private_company', 'services', 'Montserrado', 'Monrovia', 'd', null, null, null, null, null)$$,
+  '[F-21][authenticated] create_organization_with_owner still works');
+reset role;
+
+
+-- =====================================================================
+-- K. F-24: previously APPROVED deal-room access is restricted too
+-- =====================================================================
+insert into public.business_listings (id, owner_user_id, title, slug, listing_type, industry, county, city_district, headline, description, status, is_confidential, asking_price_usd, annual_revenue_usd, exact_address, seller_name, seller_contact_email, seller_contact_phone)
+values ('biz-as-conf', '0a0a0a0a-0000-4000-8000-000000000001', 'AS Confidential', 'as-conf', 'business', 'Retail', 'Montserrado', 'Sinkor', 'h', 'd', 'published', true, 1000, 777777, '1 Vault St', 'AS Seller', 'seller@example.com', '+231-1');
+insert into public.business_access_requests (id, listing_id, buyer_user_id, buyer_full_name, buyer_email, status, nda_signed)
+values ('bar-as-t', 'biz-as-conf', '0a0a0a0a-0000-4000-8000-000000000006', 'AS T', 'as-t@example.com', 'approved', true);
+delete from public.account_restrictions where id in ('as-t-app', 'as-t-msg', 'as-f22');   -- T starts clean
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000006',true);
+insert into test_log(line) select * from extensions.ok((public.get_business_listing_public('biz-as-conf')->>'annual_revenue_usd')::numeric = 777777, '[F-24][approved buyer, active] sees the confidential figures (legitimate access, positive control)');
+reset role;
+insert into public.account_restrictions (id, user_id, user_name, user_email, restriction_type, reason, issued_by_user_id, issued_by_name, expires_at, status)
+values ('as-t-deal', '0a0a0a0a-0000-4000-8000-000000000006', 'AS T', 'as-t@example.com', 'deal_room_disabled', 'test', '0a0a0a0a-0000-4000-8000-000000000007', 'AS PA', null, 'active');
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000006',true);
+insert into test_log(line) select * from extensions.ok((public.get_business_listing_public('biz-as-conf') ? 'annual_revenue_usd') = false and (public.get_business_listing_public('biz-as-conf') ? 'seller_contact_email') = false,
+  '[F-24][approved buyer + deal_room_disabled] confidential fields are withheld');
+reset role;
+update public.account_restrictions set status = 'lifted' where id = 'as-t-deal';
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000006',true);
+insert into test_log(line) select * from extensions.ok((public.get_business_listing_public('biz-as-conf')->>'annual_revenue_usd')::numeric = 777777, '[F-24] lifting the restriction restores access automatically (approval/NDA untouched)');
+reset role;
+update public.users set account_status = 'suspended' where id = '0a0a0a0a-0000-4000-8000-000000000006';
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000006',true);
+insert into test_log(line) select * from extensions.ok((public.get_business_listing_public('biz-as-conf') ? 'annual_revenue_usd') = false, '[F-24][approved buyer, SUSPENDED] confidential fields are withheld');
+reset role;
+update public.users set account_status = 'suspended' where id = '0a0a0a0a-0000-4000-8000-000000000001';
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000001',true);
+insert into test_log(line) select * from extensions.ok((public.get_business_listing_public('biz-as-conf') ? 'exact_address') = false, '[F-24][listing OWNER, suspended] no longer receives the owner view through the RPC');
+reset role;
+update public.users set account_status = 'active' where id in ('0a0a0a0a-0000-4000-8000-000000000001', '0a0a0a0a-0000-4000-8000-000000000006');
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000001',true);
+insert into test_log(line) select * from extensions.is(public.get_business_listing_public('biz-as-conf')->>'exact_address', '1 Vault St', '[F-24][listing owner, reinstated] owner view restored');
+reset role;
+
+-- =====================================================================
+-- L. F-20 coverage: only the intentionally public functions are executable by anon
+-- =====================================================================
+insert into test_log(line) select * from extensions.is(
+  (select string_agg(p.proname, ',' order by p.proname) from pg_proc p
+    where p.pronamespace = 'public'::regnamespace and p.prokind = 'f' and p.prorettype <> 'trigger'::regtype
+      and has_function_privilege('anon', p.oid, 'execute')
+      and p.proname not in ('get_business_listing_public', 'list_business_listings_public', 'record_opportunity_view',
+                            'priority_organization_ids', 'org_effective_tier', 'tier_limits',
+                            'normalize_momo_transaction_id', 'normalize_sender_phone')),
+  NULL, '[F-20][coverage] no other public function is executable by anon (a new function must be revoked or allow-listed here)');
+select set_config('role','anon',true), set_config('request.jwt.claim.sub','',true);
+insert into test_log(line) select * from extensions.throws_ok($$select public.is_platform_admin('0a0a0a0a-0000-4000-8000-000000000007')$$, '42501'::char(5), NULL::text, '[F-20][anon] can no longer ask whether a user is a platform administrator');
+insert into test_log(line) select * from extensions.throws_ok($$select public.candidate_has_applied_to_org('0a0a0a0a-0000-4000-8000-000000000006', 'org-as')$$, '42501'::char(5), NULL::text, '[F-20][anon] can no longer probe application relationships');
+insert into test_log(line) select * from extensions.lives_ok($$select public.list_business_listings_public(null, null, null, 10, 0)$$, '[F-20][anon] public listings RPC still works');
+insert into test_log(line) select * from extensions.lives_ok($$select public.priority_organization_ids()$$, '[F-20][anon] public priority-organization lookup still works');
 reset role;
 
 select line from test_log order by seq;

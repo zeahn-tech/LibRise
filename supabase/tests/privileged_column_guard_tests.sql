@@ -132,9 +132,9 @@ reset role;
 -- ---------------------------------------------------------------------
 -- F-13: users.email / verified flags are not client-writable (invitation takeover)
 -- ---------------------------------------------------------------------
-insert into public.users (id, email, full_name, phone_number, primary_role, system_role, account_status) values
-  ('0f0f0f0f-0000-4000-8000-000000000005', 'invitee-pcg@example.com', 'PCG Invitee', '+231-770-200-005', 'recruiter', 'user', 'active'),
-  ('0f0f0f0f-0000-4000-8000-000000000006', 'pcg-creator@example.com', 'PCG Creator', '+231-770-200-006', 'employer', 'user', 'active');
+insert into public.users (id, email, full_name, phone_number, primary_role, system_role, account_status, is_email_verified) values
+  ('0f0f0f0f-0000-4000-8000-000000000005', 'invitee-pcg@example.com', 'PCG Invitee', '+231-770-200-005', 'recruiter', 'user', 'active', true),
+  ('0f0f0f0f-0000-4000-8000-000000000006', 'pcg-creator@example.com', 'PCG Creator', '+231-770-200-006', 'employer', 'user', 'active', true);
 insert into public.organization_invitations (id, organization_id, inviter_user_id, invitee_email, org_role, token, expires_at)
 values ('inv-pcg-1', 'org-pcg-a', '0f0f0f0f-0000-4000-8000-000000000001', 'invitee-pcg@example.com', 'admin', 'PCG-SECRET-TOKEN', now() + interval '7 days');
 
@@ -175,13 +175,13 @@ insert into test_log(line) select * from extensions.is(
 -- Organization verification integrity (INSERT + trusted workflow)
 -- ---------------------------------------------------------------------
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0f0f0f0f-0000-4000-8000-000000000006',true);
-insert into test_log(line) select * from extensions.lives_ok(
+-- (F-21, migration 20261012230000) direct INSERTs into organizations are denied outright; the
+-- verification-state trigger remains as defence in depth for any future INSERT policy.
+insert into test_log(line) select * from extensions.throws_ok(
   $$insert into public.organizations (id, slug, name, type, industry, county, city_district, description, is_verified)
     values ('org-pcg-iv', 'org-pcg-iv', 'PCG IV', 'private_company', 'services', 'Montserrado', 'Monrovia', 'd', true)$$,
-  '[organizations][authenticated][INSERT] is_verified=true in the payload does not error...');
-insert into test_log(line) select * from extensions.is(
-  (select is_verified from public.organizations where id = 'org-pcg-iv'), false,
-  '[organizations][authenticated][INSERT] ...but the stored is_verified is false (sync trigger recomputes on INSERT)');
+  '42501'::char(5), NULL::text,
+  '[organizations][authenticated][INSERT] a direct INSERT (even one claiming is_verified=true) is denied');
 insert into test_log(line) select * from extensions.throws_ok(
   $$insert into public.organizations (id, slug, name, type, industry, county, city_district, description, verification_status)
     values ('org-pcg-sv', 'org-pcg-sv', 'PCG SV', 'private_company', 'services', 'Montserrado', 'Monrovia', 'd', 'verified')$$,

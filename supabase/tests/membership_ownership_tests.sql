@@ -130,13 +130,88 @@ insert into test_log(line) select * from extensions.is(
   (select org_role from public.organization_memberships where organization_id = 'org-own-new' and user_id = '0e0e0e0e-0000-4000-8000-000000000005'), 'owner',
   '[memberships][RPC] ...and the caller really is the owner of the new org');
 reset role;
--- an owner-issued owner invitation is honoured by the trusted accept path
-insert into public.users (id, email, full_name, phone_number, primary_role, system_role, account_status)
-values ('0e0e0e0e-0000-4000-8000-000000000006', 'coowner@example.com', 'Co Owner', '+231-770-300-006', 'employer', 'user', 'active');
+-- =====================================================================
+-- Invitation acceptance (F-23): the inviter's authority is re-checked at ACCEPT time
+-- At this point: A (user 02) is the sole owner; O (user 01) was demoted to admin.
+-- =====================================================================
+insert into public.users (id, email, full_name, phone_number, primary_role, system_role, account_status, is_email_verified) values
+  ('0e0e0e0e-0000-4000-8000-000000000006', 'coowner@example.com',  'Co Owner',   '+231-770-300-006', 'employer', 'user', 'active', true),
+  ('0e0e0e0e-0000-4000-8000-000000000007', 'legacy-x@example.com', 'Legacy X',   '+231-770-300-007', 'employer', 'user', 'active', true),
+  ('0e0e0e0e-0000-4000-8000-000000000008', 'unverified@example.com','Unverified','+231-770-300-008', 'employer', 'user', 'active', false),
+  ('0e0e0e0e-0000-4000-8000-000000000009', 'suspmember@example.com','SuspMember','+231-770-300-009', 'recruiter','user', 'active', true);
+update public.users set is_email_verified = true where id in ('0e0e0e0e-0000-4000-8000-000000000001','0e0e0e0e-0000-4000-8000-000000000002','0e0e0e0e-0000-4000-8000-000000000005');
+-- legacy / stale pending invitations, inserted as a trusted role (simulating rows that pre-date the guard)
+insert into public.organization_invitations (id, organization_id, inviter_user_id, invitee_email, org_role, token, expires_at) values
+  ('inv-leg-own-by-admin',  'org-own-1', '0e0e0e0e-0000-4000-8000-000000000001', 'legacy-x@example.com', 'owner', 'tok-leg-own',  now() + interval '7 days'),   -- inviter O is only an admin now
+  ('inv-leg-adm-by-member', 'org-own-1', '0e0e0e0e-0000-4000-8000-000000000003', 'unverified@example.com','admin', 'tok-leg-adm',  now() + interval '7 days'),   -- inviter M1 is a plain member
+  ('inv-leg-gone-inviter',  'org-own-1', '0e0e0e0e-0000-4000-8000-000000000004', 'coowner@example.com',   'member','tok-leg-gone', now() + interval '7 days'),   -- inviter M2 was removed (no membership)
+  ('inv-ok-owner',          'org-own-1', '0e0e0e0e-0000-4000-8000-000000000002', 'coowner@example.com',   'owner', 'tok-ok-owner', now() + interval '7 days'),   -- issued by the real owner A
+  ('inv-ok-admin',          'org-own-1', '0e0e0e0e-0000-4000-8000-000000000001', 'unverified@example.com','admin', 'tok-ok-admin', now() + interval '7 days'),   -- issued by admin O: fine for admin
+  ('inv-susp',              'org-own-1', '0e0e0e0e-0000-4000-8000-000000000001', 'suspmember@example.com', 'member','tok-susp',     now() + interval '7 days'),
+  ('inv-owner-lower',       'org-own-1', '0e0e0e0e-0000-4000-8000-000000000001', 'own-a@example.com',     'member','tok-lower',    now() + interval '7 days');   -- invitation to the current OWNER's own address
+insert into public.organization_memberships (id, organization_id, user_id, org_role, status, permissions)
+values ('m-susp', 'org-own-1', '0e0e0e0e-0000-4000-8000-000000000009', 'member', 'suspended', '[]'::jsonb);
+delete from public.organization_memberships where id = 'm2';
+
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0e0e0e0e-0000-4000-8000-000000000007',true);
+insert into test_log(line) select * from extensions.throws_ok($$select public.accept_organization_invitation('tok-leg-own')$$, '42501'::char(5), NULL::text,
+  '[F-23][pre-existing owner invitation whose inviter is no longer an owner] cannot be accepted (account takeover blocked)');
+reset role;
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0e0e0e0e-0000-4000-8000-000000000008',true);
+insert into test_log(line) select * from extensions.throws_ok($$select public.accept_organization_invitation('tok-leg-adm')$$, '42501'::char(5), NULL::text,
+  '[F-23][admin invitation issued by a plain member] cannot be accepted');
+insert into test_log(line) select * from extensions.throws_ok($$select public.accept_organization_invitation('tok-ok-admin')$$, '42501'::char(5), NULL::text,
+  '[F-23][valid invitation, UNVERIFIED email] cannot be accepted until the email is verified');
+reset role;
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0e0e0e0e-0000-4000-8000-000000000006',true);
+insert into test_log(line) select * from extensions.throws_ok($$select public.accept_organization_invitation('tok-leg-gone')$$, '42501'::char(5), NULL::text,
+  '[F-23][invitation whose inviter was removed from the organization] cannot be accepted');
+insert into test_log(line) select * from extensions.is((select org_role from public.accept_organization_invitation('tok-ok-owner')), 'owner',
+  '[F-23][owner invitation issued by the CURRENT owner] is accepted (authorised ownership transfer still works)');
+reset role;
+update public.users set is_email_verified = true where id = '0e0e0e0e-0000-4000-8000-000000000008';
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0e0e0e0e-0000-4000-8000-000000000008',true);
+insert into test_log(line) select * from extensions.is((select org_role from public.accept_organization_invitation('tok-ok-admin')), 'admin',
+  '[F-23][admin invitation from an admin, verified email] is accepted (legitimate admin onboarding)');
+reset role;
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0e0e0e0e-0000-4000-8000-000000000009',true);
+insert into test_log(line) select * from extensions.throws_ok($$select public.accept_organization_invitation('tok-susp')$$, '42501'::char(5), NULL::text,
+  '[F-23][suspended member] cannot reactivate themselves by accepting an invitation');
+reset role;
+insert into test_log(line) select * from extensions.is((select status from public.organization_memberships where id = 'm-susp'), 'suspended',
+  '[F-23] ...and the membership is still suspended');
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0e0e0e0e-0000-4000-8000-000000000002',true);
+insert into test_log(line) select * from extensions.is((select org_role from public.accept_organization_invitation('tok-lower')), 'owner',
+  '[F-23][existing owner accepts a lower-role invitation] is NOT demoted');
+reset role;
+-- another user cannot use someone else's token (email binding)
+insert into public.organization_invitations (id, organization_id, inviter_user_id, invitee_email, org_role, token, expires_at) values ('inv-bound', 'org-own-1', '0e0e0e0e-0000-4000-8000-000000000002', 'bound@example.com', 'member', 'tok-bound', now() + interval '7 days');
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0e0e0e0e-0000-4000-8000-000000000005',true);
+insert into test_log(line) select * from extensions.throws_ok($$select public.accept_organization_invitation('tok-bound')$$, '42501'::char(5), NULL::text,
+  '[F-23][token holder with a different email] cannot accept (invitation bound to the intended recipient)');
+reset role;
+
+-- =====================================================================
+-- F-15: confirmed auth email changes are mirrored; invitations follow the current address
+-- =====================================================================
+insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at, created_at)
+values ('0e0e0e0e-0000-4000-8000-0000000000c1', 'before@example.com', '{"primaryRole":"recruiter"}'::jsonb, now(), now());
+insert into test_log(line) select * from extensions.is((select email from public.users where id = '0e0e0e0e-0000-4000-8000-0000000000c1'), 'before@example.com', '[F-15] (setup) signup created the profile row with the signup email');
+update auth.users set email = 'after@example.com' where id = '0e0e0e0e-0000-4000-8000-0000000000c1';
+insert into test_log(line) select * from extensions.is((select email from public.users where id = '0e0e0e0e-0000-4000-8000-0000000000c1'), 'after@example.com', '[F-15] a confirmed auth email change is mirrored to public.users.email');
+insert into public.organization_invitations (id, organization_id, inviter_user_id, invitee_email, org_role, token, expires_at) values
+  ('inv-old-email', 'org-own-1', '0e0e0e0e-0000-4000-8000-000000000002', 'before@example.com', 'member', 'tok-old-email', now() + interval '7 days'),
+  ('inv-new-email', 'org-own-1', '0e0e0e0e-0000-4000-8000-000000000002', 'after@example.com',  'member', 'tok-new-email', now() + interval '7 days');
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0e0e0e0e-0000-4000-8000-0000000000c1',true);
+insert into test_log(line) select * from extensions.throws_ok($$select public.accept_organization_invitation('tok-old-email')$$, '42501'::char(5), NULL::text, '[F-15] an invitation to the address the account NO LONGER owns cannot be accepted');
+insert into test_log(line) select * from extensions.is((select org_role from public.accept_organization_invitation('tok-new-email')), 'member', '[F-15] an invitation to the current address can be accepted');
+reset role;
+
+-- initial-owner creation is unaffected (definer path)
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0e0e0e0e-0000-4000-8000-000000000005',true);
 insert into test_log(line) select * from extensions.is(
-  (select org_role from public.accept_organization_invitation('tok-own-oo')), 'owner',
-  '[invitations][RPC] invitee can accept an owner invitation issued by an owner');
+  (select org_role from public.organization_memberships where organization_id = 'org-own-new' and user_id = '0e0e0e0e-0000-4000-8000-000000000005'), 'owner',
+  '[memberships][RPC] (re-check) the creator of a new organization is its owner');
 reset role;
 
 select line from test_log order by seq;

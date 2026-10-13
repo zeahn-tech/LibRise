@@ -96,5 +96,70 @@ select set_config('role','authenticated',true), set_config('request.jwt.claim.su
 insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000002')->>'cv_raw_text', NULL, '[recruiter][contact not public, not applied] cv_raw_text (embeds contact details) is withheld');
 reset role;
 
+
+-- =====================================================================
+-- F-17b (migration 20261012180000): fail-closed defaults, contact values, anonymity vs CV
+-- =====================================================================
+insert into public.users (id, email, full_name, phone_number, primary_role, system_role, account_status)
+select '0c0c0c0c-0000-4000-8000-0000000000' || lpad(g::text, 2, '0'), 'cp-k' || g || '@example.com', 'CP K' || g, '+231-770-600-0' || lpad(g::text, 2, '0'), 'job_seeker', 'user', 'active'
+from generate_series(11, 19) g;
+-- K11 '{}' | K12 json null | K13 missing profileVisibility | K14 public + missing contactVisibility
+-- K15 public + unknown contactVisibility | K16 anonymous + public contact + identifying CV | K17 public + CV perms
+-- K18 column default (privacy_settings omitted) | K19 public + unknown cvDownloadPermission
+insert into public.candidate_profiles (user_id, headline, email, phone, cv_raw_text, cv_file_url, cv_data_json, privacy_settings) values
+ ('0c0c0c0c-0000-4000-8000-000000000011', 'k11', 'k11@example.com', '+231-1', 'cv11', null, null, '{}'::jsonb),
+ ('0c0c0c0c-0000-4000-8000-000000000012', 'k12', 'k12@example.com', '+231-2', 'cv12', null, null, 'null'::jsonb),
+ ('0c0c0c0c-0000-4000-8000-000000000013', 'k13', 'k13@example.com', '+231-3', 'cv13', null, null, '{"contactVisibility":"public","cvDownloadPermission":"all_employers"}'::jsonb),
+ ('0c0c0c0c-0000-4000-8000-000000000014', 'k14', 'k14@example.com', '+231-4', 'cv14', null, null, '{"profileVisibility":"public"}'::jsonb),
+ ('0c0c0c0c-0000-4000-8000-000000000015', 'k15', 'k15@example.com', '+231-5', 'cv15', null, null, '{"profileVisibility":"public","contactVisibility":"visible_to_all"}'::jsonb),
+ ('0c0c0c0c-0000-4000-8000-000000000016', 'k16', 'k16@example.com', '+231-6', 'Jane Q. Candidate, jane.q@example.com, +231 77 000 0000', 'https://x/cv16.pdf', '{"fileDataUrl":"data:application/pdf;base64,K16","fullName":"Jane Q. Candidate"}'::jsonb, '{"profileVisibility":"anonymous","contactVisibility":"public","cvDownloadPermission":"all_employers"}'::jsonb),
+ ('0c0c0c0c-0000-4000-8000-000000000017', 'k17', 'k17@example.com', '+231-7', 'cv17', 'https://x/cv17.pdf', '{"fileDataUrl":"data:application/pdf;base64,K17"}'::jsonb, '{"profileVisibility":"public","contactVisibility":"public","cvDownloadPermission":"applied_jobs_only"}'::jsonb),
+ ('0c0c0c0c-0000-4000-8000-000000000019', 'k19', 'k19@example.com', '+231-9', 'cv19', 'https://x/cv19.pdf', '{"fileDataUrl":"data:application/pdf;base64,K19"}'::jsonb, '{"profileVisibility":"public","contactVisibility":"public","cvDownloadPermission":"weird"}'::jsonb);
+insert into public.candidate_profiles (user_id, headline) values ('0c0c0c0c-0000-4000-8000-000000000018', 'k18');   -- privacy_settings omitted => column default
+insert into public.applications (id, opportunity_id, applicant_user_id, organization_id, applicant_full_name, applicant_email, stage) values
+ ('app-cp-k15', 'opp-cp-ver', '0c0c0c0c-0000-4000-8000-000000000015', 'org-cp-ver', 'CP K15', 'cp-k15@example.com', 'submitted');
+
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0c0c0c0c-0000-4000-8000-0000000000a1',true);   -- V: employer in a verified org
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000011'), NULL::jsonb, '[F-17b][privacy_settings = {}] hidden (missing profileVisibility defaults to private)');
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000012'), NULL::jsonb, '[F-17b][privacy_settings = JSON null] hidden');
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000013'), NULL::jsonb, '[F-17b][profileVisibility key missing, contact public] hidden');
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000018'), NULL::jsonb, '[F-17b][privacy_settings omitted -> column default] hidden: new candidates and legacy rows behave the same');
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000014')->>'email', '[Visible upon application]', '[F-17b][contactVisibility missing] email withheld until application');
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000014')->>'phone', '[Visible upon application]', '[F-17b][contactVisibility missing] phone withheld until application');
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000015')->>'email', '[Private]', '[F-17b][unknown contactVisibility] email NOT shown (fails closed)');
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000015')->>'phone', '[Private]', '[F-17b][unknown contactVisibility] phone NOT shown, even though the candidate applied to this org');
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000015')->>'cv_raw_text', NULL, '[F-17b][unknown contactVisibility] CV text (embeds contact details) withheld');
+-- anonymous profile with identifying CV, contact public, viewer has no application
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000016')->>'full_name', 'Candidate #0016', '[F-17b][anonymous] name is pseudonymised');
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000016')->>'email', NULL, '[F-17b][anonymous, contact=public] email still not shown');
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000016')->>'cv_raw_text', NULL, '[F-17b][anonymous] cv_raw_text containing name/email/phone is withheld');
+insert into test_log(line) select * from extensions.ok((public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000016')->'cv_data_json') = 'null'::jsonb and (public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000016')->>'cv_file_url') is null,
+  '[F-17b][anonymous] structured CV (incl. fullName) and CV file URL are withheld even with cvDownloadPermission=all_employers');
+-- CV file permissions on visible profiles
+insert into test_log(line) select * from extensions.ok(not (public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000017')->'cv_data_json') ? 'fileDataUrl' and (public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000017')->>'cv_file_url') is null,
+  '[F-17b][applied_jobs_only] employer without an application gets no CV file');
+insert into test_log(line) select * from extensions.ok(not (public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000019')->'cv_data_json') ? 'fileDataUrl',
+  '[F-17b][unknown cvDownloadPermission] treated as permission_required: no CV file');
+reset role;
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0c0c0c0c-0000-4000-8000-0000000000a3',true);   -- J: signed-in non-employer
+insert into test_log(line) select * from extensions.ok(not (public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000001')->'cv_data_json') ? 'fileDataUrl' and (public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000001')->>'cv_file_url') is null,
+  '[F-17b][all_employers] a signed-in user who is NOT an employer gets no CV file (was: any signed-in user)');
+reset role;
+-- applications lift the restrictions legitimately
+insert into public.applications (id, opportunity_id, applicant_user_id, organization_id, applicant_full_name, applicant_email, stage) values
+ ('app-cp-k16', 'opp-cp-ver', '0c0c0c0c-0000-4000-8000-000000000016', 'org-cp-ver', 'CP K16', 'cp-k16@example.com', 'submitted'),
+ ('app-cp-k17', 'opp-cp-ver', '0c0c0c0c-0000-4000-8000-000000000017', 'org-cp-ver', 'CP K17', 'cp-k17@example.com', 'submitted');
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0c0c0c0c-0000-4000-8000-0000000000a1',true);
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000016')->>'cv_raw_text', 'Jane Q. Candidate, jane.q@example.com, +231 77 000 0000', '[F-17b][anonymous, candidate APPLIED to the viewer''s org] CV text is shared (legitimate)');
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000016')->>'cv_file_url', 'https://x/cv16.pdf', '[F-17b][anonymous, applied] CV file URL is shared');
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000017')->'cv_data_json'->>'fileDataUrl', 'data:application/pdf;base64,K17', '[F-17b][applied_jobs_only, applied] CV file is shared (legitimate)');
+reset role;
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0c0c0c0c-0000-4000-8000-000000000016',true);
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000016')->>'email', 'k16@example.com', '[F-17b][candidate, own anonymous profile] sees their real, unredacted data');
+reset role;
+insert into test_log(line) select * from extensions.ok(
+  (select column_default::text from information_schema.columns where table_name = 'candidate_profiles' and column_name = 'privacy_settings') like '%"profileVisibility": "private"%',
+  '[F-17b][column default] the table default is profileVisibility=private, consistent with the function default');
+
 select line from test_log order by seq;
 rollback;

@@ -9,3 +9,6 @@ insert into public.users (id,email,full_name,primary_role,system_role,account_st
  ('11111111-aaaa-4000-8000-000000000004','susp@acme.test','Suspended','employer','user','suspended'),
  ('11111111-aaaa-4000-8000-000000000005','adm2@acme.test','Org Admin','recruiter','user','active') on conflict do nothing;
 insert into public.organization_memberships (id,organization_id,user_id,org_role,status) values ('m-http-adm','org-http','11111111-aaaa-4000-8000-000000000005','admin','active') on conflict do nothing;
+update public.users set is_email_verified = true where id in ('11111111-aaaa-4000-8000-000000000001','11111111-aaaa-4000-8000-000000000002','11111111-aaaa-4000-8000-000000000005');
+insert into public.organization_invitations (id,organization_id,inviter_user_id,invitee_email,org_role,token,expires_at) values
+ ('inv-http-legacy','org-http','11111111-aaaa-4000-8000-000000000005','other@acme.test','owner','tok-http-legacy',now()+interval '3 days') on conflict do nothing;
