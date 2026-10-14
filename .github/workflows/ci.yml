@@ -108,7 +108,7 @@ jobs:
           set -uo pipefail
           DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
           STATUS=0
-          for f in supabase/tests/rls_security_test_matrix.sql supabase/tests/payments_security_tests.sql supabase/tests/privileged_column_guard_tests.sql supabase/tests/account_status_enforcement_tests.sql supabase/tests/membership_ownership_tests.sql supabase/tests/candidate_privacy_tests.sql supabase/tests/notification_authorization_tests.sql; do
+          for f in supabase/tests/rls_security_test_matrix.sql supabase/tests/payments_security_tests.sql supabase/tests/privileged_column_guard_tests.sql supabase/tests/account_status_enforcement_tests.sql supabase/tests/membership_ownership_tests.sql supabase/tests/candidate_privacy_tests.sql supabase/tests/notification_authorization_tests.sql supabase/tests/auth_ban_enforcement_tests.sql supabase/tests/deal_room_authorization_tests.sql; do
             echo "=== $f ==="
             # Capture stderr too and DON'T let a psql error abort silently:
             # SQL errors (bad fixture, missing column, ...) must be visible.

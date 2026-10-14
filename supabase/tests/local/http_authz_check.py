@@ -71,5 +71,12 @@ s,b=call("POST","/rpc/accept_organization_invitation",OTHER,{"p_token":"tok-http
 s,b=call("POST","/notifications",OTHER,{"id":"n-http-forged","recipient_user_id":OWNER,"category":"billing","title":"Payment approved","message":"x","action_url":"https://evil.example"}); check("forged notification for an unrelated user rejected", s in (401,403), f"{s} {b}")
 s,b=call("POST","/notifications?select=id",OTHER,{"id":"n-http-self","recipient_user_id":OTHER,"category":"system","title":"t","message":"m","action_url":"/billing"}); check("notification to self with a relative link still works", s in (200,201), f"{s} {b}")
 s,b=call("POST","/organizations",OTHER,{"id":"o-direct","slug":"o-direct","name":"Ministry of Finance","type":"government","industry":"x","county":"Montserrado","city_district":"M","description":"d"}); check("direct POST /organizations rejected (RPC only)", s in (401,403), f"{s} {b}")
+# --- round 5: auth-ban admin tooling, deal-room helper ---
+s,b=call("POST","/rpc/list_suspended_accounts_not_banned",OTHER,{}); check("ordinary user cannot run the suspended-not-banned report", s in (401,403), f"{s} {b}")
+s,b=call("POST","/rpc/reapply_account_auth_ban",OTHER,{"p_user_id":SUSP}); check("ordinary user cannot re-apply an auth ban", s in (401,403), f"{s} {b}")
+s,b=call("POST","/rpc/set_auth_ban",ADMIN,{"p_uid":SUSP,"p_ban":False}); check("set_auth_ban is not callable through the API, even with an admin token", s in (401,403,404), f"{s} {b}")
+s,b=call("POST","/rpc/has_business_access",OTHER,{"p_listing_id":"x","p_viewer_id":OWNER}); check("has_business_access is not callable through the API", s in (401,403,404), f"{s} {b}")
+s,b=call("GET","/account_auth_enforcement",OTHER); check("ordinary user sees no auth-enforcement records", s in (200,401,403) and (s!=200 or json.loads(b)==[]), f"{s} {b}")
+s,b=call("GET","/account_auth_enforcement",None); check("anon cannot read auth-enforcement records", s in (401,403) or (s==200 and json.loads(b)==[]), f"{s} {b}")
 print(f"\n{sum(res)}/{len(res)} passed")
 import sys; sys.exit(0 if all(res) else 1)

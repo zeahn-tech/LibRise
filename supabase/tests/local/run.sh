@@ -12,7 +12,18 @@ HERE="$(cd "$(dirname "$0")" && pwd)"; ROOT="$(cd "$HERE/../../.." && pwd)"
 case "${PGHOST:-}" in *supabase.co*|*supabase.com*|*amazonaws*) echo "Refusing to run against a hosted database."; exit 2;; esac
 P=(psql -X -q -v ON_ERROR_STOP=1)
 dropdb --if-exists "$DB" >/dev/null 2>&1; createdb "$DB"
-"${P[@]}" -d "$DB" -f "$HERE/stub.sql" 2>&1 | grep -v "WARNING\|HINT\|NOTICE"
+"${P[@]}" -d "$DB" -f "$HERE/stub_base.sql" 2>&1 | grep -v "WARNING\|HINT\|NOTICE"
+if [ -n "${GOTRUE_MIGRATIONS_DIR:-}" ]; then
+  # REAL Supabase Auth schema: git clone --depth 1 https://github.com/supabase/auth && GOTRUE_MIGRATIONS_DIR=auth/migrations
+  "${P[@]}" -d "$DB" -c 'create extension if not exists pgcrypto with schema extensions' >/dev/null 2>&1
+  for g in $(ls "$GOTRUE_MIGRATIONS_DIR"/*.up.sql | sort); do
+    sed -E 's/\{\{ ?index \.Options "Namespace" ?\}\}/auth/g' "$g" | psql -X -q -d "$DB" -c 'set search_path=auth,public' -f - >/dev/null 2>&1
+  done
+  echo "auth schema: real GoTrue migrations ($(ls "$GOTRUE_MIGRATIONS_DIR"/*.up.sql | wc -l) files)"
+else
+  "${P[@]}" -d "$DB" -f "$HERE/stub_auth_tables.sql"
+  echo "auth schema: minimal stand-in tables (set GOTRUE_MIGRATIONS_DIR for the real schema)"
+fi
 psql -X -q -d "$DB" -c "alter database $DB set search_path = \"\$user\", public, extensions"
 fail=0
 for f in "$ROOT"/supabase/migrations/*.sql; do

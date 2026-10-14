@@ -153,6 +153,18 @@ insert into public.organization_memberships (id, organization_id, user_id, org_r
 values ('m-susp', 'org-own-1', '0e0e0e0e-0000-4000-8000-000000000009', 'member', 'suspended', '[]'::jsonb);
 delete from public.organization_memberships where id = 'm2';
 
+-- the documented review query (docs/LAUNCH_AUDIT.md) must flag exactly the invitations that can no longer be accepted
+insert into test_log(line) select * from extensions.is(
+  (select string_agg(i.id, ',' order by i.id)
+   from public.organization_invitations i
+   left join public.organization_memberships m
+     on m.organization_id = i.organization_id and m.user_id = i.inviter_user_id
+   where i.status = 'pending' and i.org_role in ('owner','admin')
+     and (m.org_role is null or m.status <> 'active'
+          or (i.org_role = 'owner' and m.org_role <> 'owner')
+          or (i.org_role = 'admin' and m.org_role not in ('owner','admin')))),
+  'inv-leg-adm-by-member,inv-leg-own-by-admin,inv-own-oo',
+  '[legacy review query] flags the pending owner/admin invitations whose inviter lacks authority (and not the valid ones issued by the current owner/admin)');
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0e0e0e0e-0000-4000-8000-000000000007',true);
 insert into test_log(line) select * from extensions.throws_ok($$select public.accept_organization_invitation('tok-leg-own')$$, '42501'::char(5), NULL::text,
   '[F-23][pre-existing owner invitation whose inviter is no longer an owner] cannot be accepted (account takeover blocked)');

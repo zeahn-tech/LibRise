@@ -210,6 +210,15 @@ insert into test_log(line) select * from extensions.is(
                             'handle_new_auth_user', 'handle_auth_user_email_confirmed')),
   0::bigint, '[coverage] every client-callable plpgsql SECURITY DEFINER RPC that uses auth.uid() carries the account-status guard (allow-list: RLS helpers and public-read functions)');
 
+insert into test_log(line) select * from extensions.is(
+  (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef
+     and (p.proconfig is null or not exists (select 1 from unnest(p.proconfig) c where c like 'search_path=%'))),
+  0::bigint, '[coverage] every SECURITY DEFINER function in public pins its search_path');
+insert into test_log(line) select * from extensions.is(
+  (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind in ('r', 'p', 'v', 'm') and not (c.relkind in ('r','p') and c.relrowsecurity)),
+  0::bigint, '[coverage] every table in public has RLS enabled and there are no views / materialised views exposed');
+
 -- =====================================================================
 -- H. Privilege-assignment pathways: INSERT / upsert / definer RPCs
 -- =====================================================================

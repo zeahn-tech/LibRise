@@ -161,5 +161,33 @@ insert into test_log(line) select * from extensions.ok(
   (select column_default::text from information_schema.columns where table_name = 'candidate_profiles' and column_name = 'privacy_settings') like '%"profileVisibility": "private"%',
   '[F-17b][column default] the table default is profileVisibility=private, consistent with the function default');
 
+
+-- =====================================================================
+-- Task-3 additions: suspended employer, direct table access, permission_required
+-- =====================================================================
+insert into public.users (id, email, full_name, phone_number, primary_role, system_role, account_status) values
+  ('0c0c0c0c-0000-4000-8000-0000000000b1', 'cp-susp-emp@example.com', 'CP Suspended Employer', '+231-770-500-021', 'recruiter', 'user', 'suspended');
+insert into public.organization_memberships (id, organization_id, user_id, org_role, status) values ('cp-m-su', 'org-cp-ver', '0c0c0c0c-0000-4000-8000-0000000000b1', 'member', 'active');
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0c0c0c0c-0000-4000-8000-0000000000b1',true);
+insert into test_log(line) select * from extensions.throws_ok($$select public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000001')$$, '42501'::char(5), NULL::text, '[suspended employer][RPC get_public_candidate_profile] denied even for a PUBLIC all_employers profile');
+insert into test_log(line) select * from extensions.throws_ok($$select * from public.search_candidate_profiles()$$, '42501'::char(5), NULL::text, '[suspended employer][RPC search_candidate_profiles] denied');
+reset role;
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0c0c0c0c-0000-4000-8000-0000000000a1',true);   -- V: employer in a verified org
+insert into test_log(line) select * from extensions.is((select count(*) from public.candidate_profiles), 0::bigint, '[employer][direct table] candidate_profiles cannot be read directly by employers (only through the redacting RPCs)');
+update public.candidate_profiles set headline = 'tampered' where user_id = '0c0c0c0c-0000-4000-8000-000000000001';   -- RLS: not the owner -> 0 rows
+reset role;
+insert into test_log(line) select * from extensions.is((select headline from public.candidate_profiles where user_id = '0c0c0c0c-0000-4000-8000-000000000001'), 'public headline', '[employer][direct table] ...and cannot modify them (UPDATE filtered, row unchanged)');
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0c0c0c0c-0000-4000-8000-0000000000a3',true);   -- J: plain signed-in user
+insert into test_log(line) select * from extensions.is((select count(*) from public.candidate_profiles), 0::bigint, '[signed-in non-owner][direct table] candidate_profiles is not readable');
+reset role;
+-- permission_required has no grant mechanism in the schema: only an application opens it
+update public.candidate_profiles set privacy_settings = '{"profileVisibility":"public","contactVisibility":"public","cvDownloadPermission":"permission_required"}'::jsonb where user_id = '0c0c0c0c-0000-4000-8000-000000000017';
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0c0c0c0c-0000-4000-8000-0000000000a2',true);   -- U: employer in an UNVERIFIED org, no application
+insert into test_log(line) select * from extensions.ok(not (public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000017')->'cv_data_json') ? 'fileDataUrl', '[permission_required][employer without application] no CV file');
+reset role;
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0c0c0c0c-0000-4000-8000-0000000000a1',true);   -- V: candidate 017 applied to org-cp-ver
+insert into test_log(line) select * from extensions.is(public.get_public_candidate_profile('0c0c0c0c-0000-4000-8000-000000000017')->'cv_data_json'->>'fileDataUrl', 'data:application/pdf;base64,K17', '[permission_required][employer the candidate applied to] CV file available');
+reset role;
+
 select line from test_log order by seq;
 rollback;

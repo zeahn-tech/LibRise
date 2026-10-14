@@ -1,82 +1,63 @@
-# Launch audit — findings register (updated after patch review)
+# LibRise launch audit — findings register (V5)
 
-Baseline: `main` @ c6375d2. Payments: manual mobile money only; Stripe is intentionally OFF (future work).
+Baseline `main` @ c6375d2. Payments: manual mobile money only; **Stripe is intentionally disabled** (checkout/portal return 503 regardless of flags; webhook needs `ENABLE_STRIPE=true` AND a signing secret).
+Migrations: **52 files** (34 original + 18 `20261012*`), unique 14-digit versions, strictly ordered. Nothing here has been applied to any real project by this work.
 
-## Verification evidence (disposable local Postgres 16 + Supabase stand-ins; see `supabase/tests/local/README.md`)
-- All 50 migrations applied with the **Supabase CLI** (`supabase db push --db-url …`); second push "up to date"; no duplicate versions; every 20261012* migration re-runs without error; documented rollbacks execute (transaction-tested).
-- **Data preservation:** legacy rows seeded on the pre-fix schema, then all 16 new migrations applied: every row in all 26 tables byte-identical; function grants changed only for the 13 intentionally changed functions; only 2 policies replaced on purpose; no trigger removed.
-- pgTAP (7 files, 456 assertions): RLS matrix 115, payments 124, privileged-column guards 40, account status 80, ownership/invitations 42, candidate privacy 42, notifications 13 — all pass.
-- Real **PostgREST** HTTP checks (`http_authz_check.py`): 46/46.
-- `npm run lint`, `build`, three bundle/secret scans: pass. `npm test -- --run`: 311/311 (with and without `VITE_SUPABASE_*`).
-- Reproduced on the pre-fix schema and blocked afterwards: F-09, F-12, F-13, F-14, F-16, F-17, F-17b (three concerns), F-18, F-22, F-23, F-24.
-- NOT verified here: a real Supabase project (GoTrue, Storage, Realtime; stand-in `auth` schema/roles used — CI starts a real local Supabase and runs all seven pgTAP files), ban/session behaviour of the real Auth service, Realtime event delivery, Storage buckets, server→Supabase JWT validation with real tokens, the live site, mobile/device behaviour, whether any migration was already applied to a real project.
+## 1. Verification evidence (what was actually executed)
+Local disposable Postgres 16 + PostgREST 12.2.3. Two auth schemas are used: a minimal stand-in, and the **real GoTrue schema** built from `supabase/auth` `migrations/` (76 files; used to verify column types and the ban/session tables).
+| Check | Result |
+|---|---|
+| Supabase CLI `db push` of all 52 migrations to a fresh DB | applied; second push "Remote database is up to date"; 52 versions recorded |
+| pgTAP, 9 files, both auth schemas | 531 assertions each: RLS matrix 115, payments 124, privileged-column guards 40, account status 82, auth ban 40, deal room 24, ownership/invitations 43, candidate privacy 49, notifications 13 — 0 failed |
+| PostgREST HTTP authorization checks (`supabase/tests/local/http_authz_check.py`) | 52/52 on both schemas |
+| Legacy-data preservation (rows seeded on the pre-fix schema, all new migrations applied) | the only table difference is the NEW empty `account_auth_enforcement`; every row of the 26 existing tables is byte-identical; 13 functions changed grants on purpose; 2 policies replaced on purpose; no trigger removed |
+| Re-running each new migration on a migrated DB | OK, except `…220000` (cannot be replayed after `…260000`: it re-declares `set_auth_ban` as `void`). The CLI never replays applied files; never run old files by hand |
+| Rollback statements of the newest migrations in a rolled-back transaction | execute without error |
+| `npm run lint` / `build` / 3 secret+bundle scans / `npm test -- --run` | exit 0 / 0 / 0 / 311 of 311 (also with `VITE_SUPABASE_*` set) |
 
-## Register
-| ID | Sev | Finding | Status |
-|----|-----|---------|--------|
-| F-12 | P0 | Signup `options.data.primaryRole` was copied into `users.primary_role`; anyone could register as `platform_admin`. | FIXED 20261012110000 |
-| F-09 | P0 | `users` self-UPDATE could set `system_role`/`primary_role`=`platform_admin`, `account_status`. | FIXED 20261012100000 |
-| **F-13** | **P0** | **(found in patch review)** `users.email` was still self-editable. Invitations are matched on `users.email`, so a user could set their email to an invitee's, read the invitation token via RLS and `accept_organization_invitation()` it — joining any org with the invited role (incl. `admin`). Reproduced; also `is_email_verified`/`is_phone_verified` were self-assertable. | FIXED 20261012130000 |
-| F-10 | P0 | Org admins could self-verify an org / badge; any user could insert a pre-verified org. | FIXED 20261012100000 (INSERT path re-tested: `is_verified=true` in an INSERT payload is overwritten to false by the sync trigger; status/badge inserts rejected) |
-| F-08 | P1 | Anyone (anon) could read every org's tax ID, registration no., contact email/phone, settings. | FIXED 20261012120000 (+ 20261012140000: suspended accounts get nothing from the RPC) |
-| F-06 | P1 | `npm start` crashed: server bundle read `import.meta.env` (undefined in CJS). | FIXED (esbuild define) |
-| F-01 | P1 | Client called root-relative `/api/...`; unusable on GitHub Pages. | FIXED in code (`VITE_API_BASE_URL`, `ALLOWED_ORIGINS`). **Needs a deployed Express backend — owner action.** |
-| F-02 | P1 | PWA scope/start_url/icons absolute `/`. | FIXED |
-| F-03 | P1 | Pages deploy silently published a seed-data demo build when secrets were missing. | FIXED: fails closed unless repo variable `ALLOW_DEMO_BUILD=true` (simulated: secrets→real build; missing→fail; missing+allow→demo) |
-| F-04 | P1 | Stripe webhook accepted unsigned events. | FIXED (fail closed) |
-| F-05 | P2 | Stripe checkout/portal: membership check against demo store; price/redirect/customer unvalidated. | MITIGATED: checkout & portal are now **hard-disabled (503)** regardless of flags; webhook needs `ENABLE_STRIPE=true` AND a secret. Must be redesigned before Stripe is enabled. |
-| F-07 | P2 | Default MoMo numbers/account name baked into Pages build. | ACCEPTED (public payment destination; override with `VITE_MOMO_*`) |
-| F-11 | P2 (Medium) | `verification_officer` exists in the TypeScript types and `VerificationHub` shows decision controls to it, but the database only honours `platform_admin` (`decide_verification_audit`, `review_verification_request`), and no operator process assigns the role. **Platform-admin-only verification is the safe default and is currently what is enforced; it is not documented as intentional.** An officer would see buttons that fail. | OPEN — product decision; not a vulnerability; not a launch blocker (only admins can verify) |
-| F-14 | P1 | Org `admin` could promote themselves to `owner` then suspend/delete the real owner; same via invitations (`org_role='owner'/'admin'`). Reproduced (admin ended up sole owner). | FIXED 20261012160000: only an active owner can grant/modify/remove owner; admins keep full administration of non-owners; invitations for owner need an owner, for admin need an admin/owner |
-| **F-16** | **P0/High** | Suspended accounts were not restricted by the database (RLS + RPCs ignored `account_status`; posting/messaging/applications/deal-room restrictions were client-side only). Recorded as a "CRITICAL FINDING" in the RLS matrix; reproduced. | FIXED 20261012150000 (restrictive RLS policy on every RLS table, per-action INSERT policies, guard injected into 21 client-callable RPCs, coverage tests) + app signs suspended users out |
-| **F-17** | **P1** | Candidate profiles: `get_public_candidate_profile`/`search_candidate_profiles` were callable by `anon`, and `private`/`registered_only`/`verified_employers_only` visibility and `permission_required` CV permission were not enforced — the DEFAULT (`private`) profile was fully readable, incl. CV text/file. Reproduced. | FIXED 20261012170000 (anon revoked, fail-closed visibility, CV gating). **Behaviour change:** default-`private` profiles are no longer returned to employers until the candidate applies or changes the setting |
-| F-18 | P2 | Any signed-in user could create a notification for any user (forged payment/verification notices, phishing links). | FIXED 20261012210000: recipient must be self, a related user (same org, conversation, application, business inquiry/request) or an admin; action_url must be a relative path. Residual: content inside a legitimate relationship is free text (no sender column) |
-| F-19 | P2 | A suspended user's Auth login/refresh kept working. | FIXED in SQL 20261012220000 (full suspension bans the auth user, deletes sessions/refresh tokens; lifting clears the ban; failures degrade to a warning). **Real GoTrue behaviour UNVERIFIED** — validate on staging. An already-issued access JWT stays valid until expiry but gets no data (RLS, tested) |
-| F-20 | P3 | Anon-executable helper functions were boolean oracles. | PARTLY FIXED 20261012240000: 11 helpers no longer executable by anon (PUBLIC revoked; verified every anon-readable table and public RPC still works). A signed-in user can still call those helpers with arbitrary ids; closing that needs a self-only redesign per helper (as done for the account-status helpers). OPEN, Low, not a blocker |
-| F-21 | P3 | Organizations could be created by a direct INSERT. | FIXED 20261012230000 (INSERT policy removed; RPC only). Not present anywhere: a per-user organization cap and name-impersonation rules — product decisions. OPEN (business rules), Low |
-| **F-22** | **P2** | Enforcement status of ANY account was queryable (`is_account_suspended(uid)` / `has_active_restriction(uid,type)` executable by every signed-in user). | FIXED 20261012190000: policies use self-only wrappers; parameterised helpers revoked from clients |
-| **F-23** | **P1** | `accept_organization_invitation()` honoured stored owner/admin invitations created by anyone (incl. later-demoted/removed inviters), reactivated suspended members, and demoted owners. Reproduced (admin-issued OWNER invitation made the attacker owner). | FIXED 20261012200000: inviter authority re-checked at accept time; verified email required; suspended memberships not reactivated; existing roles only upgraded |
-| **F-24** | **P2** | Approved deal-room access survived suspension and `deal_room_disabled`; a suspended owner kept the owner view of a listing. Reproduced. | FIXED 20261012250000 |
-| **F-17b** | **P1** | Candidate privacy defaults: missing `profileVisibility` defaulted to public; unknown `contactVisibility` showed email/phone; anonymous profiles leaked identity through `cv_raw_text` / structured CV; `all_employers` CV was open to any signed-in user. Reproduced. | FIXED 20261012180000 (missing → `private`; unknown → hidden; anonymous CV artefacts withheld; `all_employers` needs an org membership). **Behaviour change** — count affected rows first |
-| F-15 | P3 | `users.email` was not synced from `auth.users` on a confirmed email change, so invitation matching followed a stale address. | FIXED 20261012200000 (mirror trigger; accept requires a verified email equal to the invitee address) |
+**Not executed (needs a real Supabase project):** GoTrue sign-in and token-refresh refusal for a banned user, whether the hosted `postgres` role may write `auth.*`, Realtime delivery, Storage, the Express server validating real tokens, the GitHub Actions run, the live site, mobile. The local run cannot prove these.
 
-## Role review (Task 1)
-Only `platform_admin` (in `primary_role` or `system_role`) carries database authority (`is_platform_admin`, `get_public_candidate_profile`). Every other role value (`organization_admin`, `recruiter`, `employer`, `investor_buyer`, …) is advisory UI data: org management, billing, verification and moderation authority come from `organization_memberships.org_role`/`permissions`, whose writes require `is_org_admin()` (tested: member cannot self-promote; outsider cannot insert themselves; membership cannot be moved to another org). `verification_officer` is blocked from self-assignment although no SQL honours it yet. The server derives no roles from user-editable `user_metadata`.
+## 2. Findings register and classification
+Class: **R** = resolved with evidence (locally) · **V** = potential, needs staging validation · **I** = intentional product behaviour · **A** = accepted residual risk · **D** = product decision open.
+| ID | Sev | Finding | Class | Evidence / remaining risk |
+|---|---|---|---|---|
+| F-12 | P0 | Signup metadata could assign `platform_admin` | R | reproduced + blocked; `…110000` |
+| F-09 | P0 | Self-UPDATE of `system_role`/`primary_role`/`account_status` | R | `…100000`, HTTP + pgTAP |
+| F-13 | P0 | Self-editable `users.email` → invitation takeover | R | `…130000` |
+| F-10 | P0 | Org admin self-verification / pre-verified orgs | R | `…100000` + F-21 |
+| F-16 | P0/High | Suspended accounts not restricted by DB | R | `…150000`; RLS matrix finding inverted |
+| F-14 | P1 | Admin → owner takeover (membership + invitations) | R | `…160000`; reproduced |
+| F-23 | P1 | Stored owner/admin invitations accepted regardless of inviter authority; suspended members reactivated; owners demoted | R | `…200000`; reproduced |
+| F-08 | P1 | Org tax ID/contact data readable by anyone | R | `…120000/140000`; HTTP `select=*` rejected |
+| F-17 / F-17b | P1 | Candidate profiles readable by anon; defaults/unknown values/CV leaks | R | `…170000/180000`; 49 tests. **Behaviour change:** profiles without a stored `profileVisibility` are now hidden |
+| **F-19b** | **High** | `set_auth_ban` ran ban + deletes in one exception block: a failed session cleanup rolled back the ban while the RPC reported success and public status said "suspended" (reproduced on the real GoTrue schema); lifting an unrelated restriction reinstated a suspended account | R (DB side) | `…260000`: ban is its own step and persists; result verified and recorded (`account_auth_enforcement`, `audit_logs`, WARNING); a trigger on `users.account_status` enforces on every pathway; admin report + retry RPC; lift only acts on `full_suspension`. Real Auth refusal: **V** |
+| F-19c | Medium | Direct writes to `auth.users/sessions/refresh_tokens` from SQL are not a documented Supabase contract; the supported mechanism is the Auth Admin API (`ban_duration`, sign-out) called with the service-role key from a backend | V | Types verified against real GoTrue (`users.id` uuid, `sessions.user_id` uuid, `refresh_tokens.user_id` varchar(255) — the original comparison was type-valid). Staging must confirm the hosted `postgres` role can write; the reconciliation RPC detects failure. Recommended hardening: have the Express backend call the Admin API after suspension |
+| F-24 / F-24b | Medium | Approved deal-room access survived suspension/`deal_room_disabled`; owner-with-restriction could keep approving; access oracles | R | `…250000/270000`; 24-scenario matrix; 3 gaps proven pre-fix |
+| F-22 | Medium | Anyone could query another account's suspension/restriction status | R | `…190000` |
+| F-18 | Medium | Notification forgery to any user | R (partly A) | `…210000`; residual: free text inside a legitimate relationship, no sender column |
+| F-21 | Low | Direct organization INSERT | R | `…230000`. Org-per-user cap and name-impersonation rules do not exist: **D** |
+| F-15 | Low | `users.email` not synced from auth | R | `…200000`; accept requires verified email equal to invitee |
+| F-20 | Low | Helper functions as oracles | R (anon) / A (signed-in) | anon executes only 5 intentionally public functions (coverage test). Signed-in users can still call `is_platform_admin(uid)` and `is_conversation_participant(conv, uid)` (policies need them). Not a launch blocker |
+| F-11 | Medium (functional) | `verification_officer` appears in UI/types, DB only honours `platform_admin` | D | Platform-admin-only verification is the **safe default currently enforced**, not documented as intentional; an officer would see buttons that fail. Not a vulnerability; decide before onboarding officers |
+| F-25 | Low | Invitation tokens are generated client-side with `Math.random()` | A | mitigated by email binding + verified email + inviter re-check; fix = server-side `gen_random_bytes` default |
+| F-26 | Low | `record_opportunity_view` (anon) can inflate view counters | A | pre-existing |
+| F-27 | Low | An expired time-boxed `full_suspension` does not auto-lift (status stays `suspended` until an admin lifts) | I | pre-existing behaviour; fail-safe |
+| F-05 | Medium (dormant) | Stripe checkout/portal flaws | I | hard-disabled; separate work item before enabling Stripe |
+| F-01…04, 06, 07 | — | API base URL/CORS, PWA scope, Pages deploy fail-closed, webhook fail-closed, server bundle crash, public MoMo numbers | R / I | earlier rounds; re-verified: built manifest `start_url ./`, CORS exact-origin only, Stripe 503 |
 
-## Mobile-money payments — no code defects found
-Server-authoritative pricing, no direct writes to payments/subscriptions, admin-only approval, no double approval, one open payment per vacancy/listing/org subscription, unique live provider transaction id, reference hardening, expiry, org isolation, publication gated on approval (124 assertions). Approval is a manual admin judgement against the MoMo statement; there is no "amount received" field, so reconcile statements periodically.
+## 3. Account-status and deal-room policy (as implemented)
+* active / pending_verification: normal. suspended / deactivated: no table or RPC access except reading their own `users` row and their own restriction rows; auth user banned and sessions revoked; no appeal write path exists in the schema, so none is preserved.
+* `posting_disabled`, `applications_disabled`, `messaging_disabled`: matching INSERT denied. `deal_room_disabled`: cannot request access, sign NDAs, or approve/decline requests; confidential fields withheld from a restricted or suspended buyer even if previously approved; a restricted OWNER still sees/edits their listing but cannot grant new access (existing approvals stay — **ambiguous, conservative choice**). Platform admins have no confidential read path (unchanged).
+* Coverage tests fail if a new RLS table lacks the restrictive policy, a new client-callable RPC lacks the guard, a definer function lacks a pinned `search_path`, a table lacks RLS or a view appears, or a new function becomes executable by `anon`.
 
-## Migrations
-`20261012100000`…`140000` follow the last existing migration (`20261011100000`), are unique and 14-digit. They are dated one day after the audit date; harmless for ordering, but any migration created later with an earlier timestamp would sort before them (Supabase CLI then needs `--include-all`). Not renamed, because it is unknown whether any were already applied somewhere. If NONE has been applied to a real project, renaming to a later-than-now timestamp is safe. Later migrations only `CREATE OR REPLACE` earlier ones (130000 supersedes the function in 100000; 140000 supersedes the RPC in 120000) so the sequence is correct whether or not earlier files were already applied.
+## 4. Inventory of security-sensitive objects
+* **Tables:** 27 in `public` (26 original + `account_auth_enforcement`), all RLS-enabled, no views/materialised views. `anon`: SELECT only (25 tables). `authenticated`: SELECT/INSERT/UPDATE/DELETE; no TRUNCATE/REFERENCES/TRIGGER grants. Sensitive: `users` (guarded columns), `organizations` (5 private columns, column-level grants), `candidate_profiles` (owner-only; RPC-redacted), `account_restrictions`, `account_auth_enforcement` (admin read only), `organization_memberships`/`organization_invitations` (ownership guards), `payments`/`organization_subscriptions` (server pricing, admin approval), `business_listings`/`business_access_requests` (confidential data via RPC), `notifications` (relationship rule).
+* **Functions:** 71 SECURITY DEFINER functions, all with a pinned `search_path`. Client-callable privileged RPCs carry `assert_account_active()`. Non-trigger definer functions executable by `anon`: `get_business_listing_public`, `list_business_listings_public`, `org_effective_tier`, `priority_organization_ids`, `record_opportunity_view` (intended). Trigger functions are not callable directly.
+* **Storage:** the application does not use Supabase Storage (CVs are data URLs in `candidate_profiles`) and no migration creates a bucket or `storage.objects` policy. Any bucket created in the dashboard is **not covered** and storage RLS does not consult account status. **Validate on staging that no buckets exist (or all are private with explicit policies).** Not testable locally.
+* **Realtime:** only `notifications` is published and the app subscribes with `postgres_changes` filtered by recipient (no broadcast/presence). Events pass through RLS with the subscriber's token, so recipient-only SELECT and the suspended-account policy apply; an already-open socket persists until its token expires/re-authenticates (the ban stops re-authentication). **Not executable locally — validate on staging.**
 
-## Test failures investigated
-The 2 historic `organizations.test.ts` failures were **environment-dependent test isolation**, not a code defect: with `VITE_SUPABASE_URL` set, `authService.login()` uses real Supabase Auth ("fetch failed") instead of the in-memory demo store. Fixed by `test.env` in `vite.config.ts`; CI no longer passes Supabase secrets to the unit-test step.
-
-## Account-status model (F-16)
-active / pending_verification: normal. suspended / deactivated: no table or RPC access except reading their own `users` row and their own restriction rows (and signing out); there is no appeal write path in the schema (`appeal_notes` has no writer) so none is preserved. `posting_disabled`, `applications_disabled`, `messaging_disabled`, `deal_room_disabled` deny the matching INSERT (`deal_room_disabled` currently covers new access requests only; reads of already-approved deal rooms are not blocked — Medium, open). Platform administrators keep their administrative RPCs; a suspended administrator is denied. The test `[coverage]` assertions fail if a new RLS table lacks the policy or a new client-callable RPC lacks the guard.
-
-## Migrations: inspect and apply to a STAGING project
-```
-supabase link --project-ref <STAGING_REF>                    # never the production ref
-supabase migration list                                      # local vs remote versions; confirm 20261012100000..170000 are NOT yet applied remotely
-supabase db push --dry-run                                   # lists exactly what would run
-supabase db push                                             # applies the pending ones, in order, once
-supabase migration list                                      # all 42 on both sides
-# then, against the staging database URL:
-for f in supabase/tests/*.sql; do psql "$STAGING_DB_URL" -v ON_ERROR_STOP=1 -t -A -f "$f" | grep -E '^(not ok|ok) ' | grep -c '^not ok'; done
-```
-All pgTAP files run inside `BEGIN … ROLLBACK`. If a migration was already applied to a real project, do NOT edit or rename it: all follow-ups are additive `CREATE OR REPLACE` migrations (later files supersede earlier function bodies: 130000 supersedes the guard in 100000, 140000 the RPC in 120000, 150000 re-creates guarded RPC bodies, 170000 the candidate function); re-running an OLD file after a newer one would revert that function, which the CLI never does.
-
-## Supabase Storage and Realtime — what the database policies do NOT protect
-- **Storage:** the application does not use Supabase Storage (CVs are stored as data URLs in `candidate_profiles`) and no migration creates a bucket or a `storage.objects` policy. Any bucket that exists was created in the dashboard and is **not covered by these tests**. On staging: confirm there are no buckets, or that every bucket is private with explicit `storage.objects` policies; storage RLS does not consult `account_status` — add a policy using `public.current_account_suspended()` if buckets are ever used.
-- **Realtime:** the only publication table is `notifications`; the app subscribes with `postgres_changes` filtered by recipient (no broadcast/presence channels). Realtime evaluates RLS with the subscriber's JWT, so the recipient-only SELECT policy and the suspended-account restrictive policy apply to events; an already-open socket can keep receiving events until its token expires/re-authenticates. **UNVERIFIED locally** (no Realtime server): test on staging by suspending a subscribed user and publishing a notification.
-- Auth ban/session revocation (F-19) is the control that closes both for suspended users once the Auth service honours `banned_until`.
-
-## Table / function exposure review (Task 4)
-No public view or materialised view exists; every one of the 26 public tables has RLS enabled; `anon` holds only SELECT (25 tables) and `authenticated` SELECT/INSERT/UPDATE/DELETE — no TRUNCATE/REFERENCES/TRIGGER grants. A pgTAP coverage test fails if an RLS table lacks the restrictive suspended-account policy, if a client-callable plpgsql SECURITY DEFINER RPC that uses `auth.uid()` lacks the guard, if a parameterised enforcement helper becomes client-executable, or if a new function becomes executable by `anon` without being allow-listed.
-
-## Pending owner/admin invitations: review and safe clean-up (do NOT automate)
-Acceptance now rejects invitations whose inviter lacks authority, so stale ones are harmless, but review them:
+## 5. Pending owner/admin invitations — review and safe clean-up (never automatic)
+Acceptance rejects invitations whose inviter lacks authority, so stale ones are inert, but review them. The query below is executed by a pgTAP test and flags exactly those:
 ```
 select i.id, i.organization_id, i.invitee_email, i.org_role, i.created_at, i.expires_at,
        m.org_role as inviter_current_role, m.status as inviter_status
@@ -89,25 +70,20 @@ where i.status = 'pending' and i.org_role in ('owner','admin')
        or (i.org_role = 'admin' and m.org_role not in ('owner','admin')))
 order by i.created_at;
 ```
-Each row is an invitation that can no longer be accepted. After a human has confirmed with the organization owner, revoke one at a time, inside a transaction you inspect before COMMIT: `update public.organization_invitations set status = 'revoked' where id = '<id>' and status = 'pending';` (check the allowed status values first). Also review memberships created through invitations before this release: `select * from public.organization_memberships where org_role in ('owner','admin') order by created_at desc;`.
+Procedure: export the result, confirm each row with the organization's owner, then in a transaction you inspect before COMMIT set `status = 'revoked'` for one id at a time (check the allowed status values first). Also review: `select * from public.organization_memberships where org_role in ('owner','admin') order by created_at desc;`, admin-role accounts `select id,email,primary_role,system_role from public.users where primary_role in ('platform_admin','verification_officer') or system_role <> 'user';`, and candidate profiles that become hidden: `select count(*) from public.candidate_profiles where coalesce(privacy_settings->>'profileVisibility','') = '';`.
 
-## REQUIRED owner actions before launch
-1. Review/apply migrations through CI; confirm the CI Supabase-CLI job passes the three pgTAP files.
-2. **Review existing accounts** — F-09/F-12/F-13 may already have been exploited:
-   `select id, email, primary_role, system_role, created_at from public.users where primary_role in ('platform_admin','verification_officer') or system_role <> 'user' order by created_at;`
-   Also: organizations `verified` without a completed review, recent `payments`/`organization_subscriptions` approvals, and `organization_memberships` with `admin`/`owner` roles you do not recognise (invitation takeover leaves a normal membership row).
-3. Deploy the Express backend (needs `node_modules`; `npm ci --omit=dev` + `node dist/server.cjs`). Set `ALLOWED_ORIGINS=https://zeahn-tech.github.io` (exact match, no trailing slash), `GEMINI_API_KEY`, `VITE_SUPABASE_URL`/`SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`/`SUPABASE_ANON_KEY`; do NOT set `VITE_ENABLE_DEMO_MODE` on it. Set repo variable `VITE_API_BASE_URL=https://<backend>/api`.
-4. Confirm `SUPABASE_PAGES_URL` / `SUPABASE_PAGES_ANON_KEY` repo secrets exist and Supabase Auth redirect URLs include `https://zeahn-tech.github.io/LibRise/`.
-5. Org contact email/phone are now private (members/admins only). To show a public contact email, re-grant that one column in a new migration and add it to `ORG_PUBLIC_COLUMNS` (a unit test keeps them in sync).
-6. Decide F-11 (verification officer role) and the F-17b default (candidates now hidden until they apply / opt in). Review pending owner/admin invitations created before 20261012160000: `select * from public.organization_invitations where status='pending' and org_role in ('owner','admin');` and revoke any you do not recognise.
-7. Ban the auth user and revoke sessions whenever you apply `full_suspension` (F-19), and tell product that default-`private` candidate profiles are now hidden from employers (F-17).
+## 6. Required staging validation (cannot be done locally)
+1. Link the CLI to the STAGING project only. `supabase migration list` (new versions must be absent remotely) → `supabase db push --dry-run` → `supabase db push` → `supabase migration list` (52 on both sides).
+2. Run all nine pgTAP files against staging (`BEGIN … ROLLBACK`); optionally run `supabase/tests/local/run.sh` with `GOTRUE_MIGRATIONS_DIR` pointing at a clone of `supabase/auth`.
+3. **Auth ban (F-19b/c):** create a test user, sign in (note the refresh token), suspend with `apply_account_restriction('full_suspension')`. Confirm: password sign-in refused; refresh with the old token refused; the old access token returns no data and writes are denied via the REST API; `select * from public.account_auth_enforcement` shows `applied` (if `failed`, the hosted role cannot write `auth.*` → apply the ban through the Auth Admin API from the backend and keep using `list_suspended_accounts_not_banned()` as the control); lift → sign-in works again; an unrelated restriction (posting_disabled) survives; a second active suspension keeps the ban when the first is lifted.
+4. **Realtime:** subscribe a test user to notifications, suspend them, publish a notification: no event must arrive after the next token check. **Storage:** list buckets (expected none); if any exist, review each policy.
+5. Candidates: default-`private` candidate hidden from employer search until they apply; `public` + `all_employers` CV visible only to org members; anonymous profile shows no identity through CV data.
+6. Invitations: invite → accept with a verified and an unverified email; email change then re-check matching; an old admin-issued owner invitation is refused.
+7. Deal room, notifications (application/message/verification/payment flows still notify the right people), organization registration, opportunity publish/apply, mobile-money submit/approve, AI features via the deployed backend, password recovery link under `/LibRise/`, PWA install.
 
-## Required staging validation (cannot be done locally)
-1. `supabase migration list` → apply with `db push --dry-run` then `db push` on STAGING only; run the seven pgTAP files (they roll back).
-2. Real Auth: sign up → confirm email → log in → refresh; password recovery link under `/LibRise/`; invite → accept (verified and unverified email); change email and re-check invitation matching (F-15).
-3. Suspend a logged-in test user with `apply_account_restriction('full_suspension')`: confirm the next refresh/login is refused (ban), data calls return nothing, a Realtime subscription stops delivering, and `lift_account_restriction` restores everything. If `set_auth_ban` logged a WARNING, apply the ban through the Auth admin API instead (F-19).
-4. Candidate flows: a new candidate (default `private`) is hidden from employer search until they apply; `public` + `all_employers` shows the CV only to org members.
-5. Notifications: application, message, verification and payment flows still notify the right people (F-18); a forged notification for a stranger is refused.
-6. Deal room: approved buyer sees confidential figures; after `deal_room_disabled` or suspension they do not.
-7. Storage: list buckets (expected none). Realtime: see above.
-8. Mobile-money payment submit/approve, organization registration, opportunity publish/apply, AI features through the deployed backend, GitHub Pages routing/PWA install.
+## 7. Required owner actions before any production deployment
+1. CI green on a real local Supabase (all nine pgTAP files) and the staging checks above.
+2. Review existing accounts, invitations, organizations marked verified and recent payment approvals (F-09/F-12/F-13 may already have been exploited).
+3. Deploy the Express backend (`ALLOWED_ORIGINS`, `GEMINI_API_KEY`, Supabase URL/anon key; never `VITE_ENABLE_DEMO_MODE`), set `VITE_API_BASE_URL`, confirm Pages secrets and Supabase redirect URLs.
+4. Tell product about: hidden-by-default candidate profiles (F-17b), private organization contact details (F-08), frozen deal-room approvals for restricted owners (F-24b); decide F-11.
+5. Plan the Auth Admin API call from the backend (F-19c) and the server-generated invitation tokens (F-25).
