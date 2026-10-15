@@ -29,7 +29,7 @@ vi.mock('../services/authService', () => ({
 
 function chain(result: { data: unknown; error: unknown }) {
   const builder: any = {};
-  const methods = ['select', 'eq', 'order', 'insert'];
+  const methods = ['select', 'eq', 'order', 'insert', 'in'];
   for (const m of methods) {
     builder[m] = vi.fn(() => builder);
   }
@@ -43,6 +43,7 @@ describe('trustSafetyService', () => {
     vi.resetModules();
     mockFrom.mockReset();
     mockRpc.mockReset();
+    vi.unstubAllGlobals();
   });
 
   it('submitReport(): calls the submit_content_report RPC (not a raw insert), never computing the report count client-side', async () => {
@@ -115,6 +116,8 @@ describe('trustSafetyService', () => {
       },
       error: null
     });
+    // the Auth side is already enforced (SQL path recorded 'applied'), so no backend call is needed
+    mockFrom.mockImplementation((table: string) => chain({ data: table === 'account_auth_enforcement' ? { status: 'applied', detail: 'ok' } : null, error: null }));
 
     const { trustSafetyService } = await import('../services/trustSafetyService');
     const restriction = await trustSafetyService.applyAccountRestriction({
@@ -170,5 +173,79 @@ describe('trustSafetyService', () => {
 
     expect(result.flags.length).toBeGreaterThan(0);
     expect(result.recommendedStatus).toBe('quarantined');
+  });
+
+  const fullSuspensionRow = (over: Record<string, unknown> = {}) => ({
+    id: 'restr-9', user_id: 'user-2', user_name: 'T', user_email: 't@example.com', organization_id: null,
+    restriction_type: 'full_suspension', reason: 'r', issued_by_user_id: 'user-1', issued_by_name: 'A',
+    expires_at: null, status: 'active', appeal_notes: null, created_at: new Date().toISOString(), updated_at: null, ...over
+  });
+
+  it('applyAccountRestriction(): when the Auth ban is missing it runs the backend sync and succeeds only if that succeeds', async () => {
+    mockRpc.mockResolvedValue({ data: fullSuspensionRow(), error: null });
+    mockFrom.mockImplementation((table: string) => chain({ data: table === 'account_auth_enforcement' ? { status: 'failed', detail: 'permission denied' } : null, error: null }));
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ success: true }) });
+    vi.stubGlobal('fetch', fetchMock);
+    (await import('../services/authService')).authService.getSession = vi.fn(() => ({ token: 'admin-token', isAuthenticated: true })) as never;
+
+    const { trustSafetyService } = await import('../services/trustSafetyService');
+    await expect(trustSafetyService.applyAccountRestriction({ userId: 'user-2', restrictionType: 'full_suspension', reason: 'r' })).resolves.toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toContain('/admin/auth-enforcement/sync');
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer admin-token');
+  });
+
+  it('applyAccountRestriction(): does NOT report success when authentication enforcement fails (and says what is in place)', async () => {
+    mockRpc.mockResolvedValue({ data: fullSuspensionRow(), error: null });
+    mockFrom.mockImplementation((table: string) => chain({ data: table === 'account_auth_enforcement' ? { status: 'failed', detail: 'x' } : null, error: null }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 502, json: async () => ({ error: '1 account(s) could not be enforced', results: [{ detail: 'admin api: upstream 500' }] }) }));
+    (await import('../services/authService')).authService.getSession = vi.fn(() => ({ token: 'admin-token', isAuthenticated: true })) as never;
+
+    const { trustSafetyService } = await import('../services/trustSafetyService');
+    const p = trustSafetyService.applyAccountRestriction({ userId: 'user-2', restrictionType: 'full_suspension', reason: 'r' });
+    await expect(p).rejects.toThrow(/database access is already blocked.*did NOT complete.*upstream 500/s);
+  });
+
+  it('applyAccountRestriction(): an unreachable enforcement backend is also reported as a failure', async () => {
+    mockRpc.mockResolvedValue({ data: fullSuspensionRow(), error: null });
+    mockFrom.mockImplementation(() => chain({ data: null, error: null }));   // no enforcement record at all
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fetch failed')));
+    (await import('../services/authService')).authService.getSession = vi.fn(() => ({ token: 'admin-token', isAuthenticated: true })) as never;
+
+    const { trustSafetyService } = await import('../services/trustSafetyService');
+    await expect(trustSafetyService.applyAccountRestriction({ userId: 'user-2', restrictionType: 'full_suspension', reason: 'r' })).rejects.toThrow(/unreachable/);
+  });
+
+  it('applyAccountRestriction(): a non-suspension restriction never triggers Auth enforcement', async () => {
+    mockRpc.mockResolvedValue({ data: fullSuspensionRow({ restriction_type: 'posting_disabled' }), error: null });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { trustSafetyService } = await import('../services/trustSafetyService');
+    await trustSafetyService.applyAccountRestriction({ userId: 'user-2', restrictionType: 'posting_disabled', reason: 'r' });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('liftAccountRestriction(): while another qualifying suspension remains the account must stay banned (no unban expected, no sync)', async () => {
+    mockRpc.mockResolvedValue({ data: fullSuspensionRow({ status: 'lifted' }), error: null });
+    mockFrom.mockImplementation((table: string) =>
+      table === 'account_restrictions' ? chain({ data: [{ id: 'restr-other', expires_at: null }], error: null })
+                                       : chain({ data: { status: 'applied', detail: 'ok' }, error: null }));
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { trustSafetyService } = await import('../services/trustSafetyService');
+    await expect(trustSafetyService.liftAccountRestriction('restr-9')).resolves.toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('liftAccountRestriction(): after the LAST suspension is lifted a ban that was not cleared is detected and reported', async () => {
+    mockRpc.mockResolvedValue({ data: fullSuspensionRow({ status: 'lifted' }), error: null });
+    mockFrom.mockImplementation((table: string) =>
+      table === 'account_restrictions' ? chain({ data: [], error: null })
+                                       : chain({ data: { status: 'cleared_failed', detail: 'x' }, error: null }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503, json: async () => ({ error: 'Authentication enforcement is not configured on this server.' }) }));
+    (await import('../services/authService')).authService.getSession = vi.fn(() => ({ token: 'admin-token', isAuthenticated: true })) as never;
+    const { trustSafetyService } = await import('../services/trustSafetyService');
+    await expect(trustSafetyService.liftAccountRestriction('restr-9')).rejects.toThrow(/restored.*did NOT complete.*not configured/s);
   });
 });

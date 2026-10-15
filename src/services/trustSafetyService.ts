@@ -37,6 +37,7 @@ import {
 } from '../types';
 import { getSupabaseClient } from '../lib/supabaseClient';
 import { authService } from './authService';
+import { envConfig } from '../config/env';
 import { ForbiddenError, UnauthorizedError } from '../core/errors/AppError';
 
 // Suspicious keywords indicative of scams, upfront fee charging, or illegal recruitment practices
@@ -385,13 +386,83 @@ export class TrustSafetyService {
       p_expires_at: data.expiresAt ?? null
     });
     if (error) translateError(error);
-    return rowToRestriction(created as AccountRestrictionRow);
+    const restriction = rowToRestriction(created as AccountRestrictionRow);
+    if (restriction.restrictionType === 'full_suspension') await this.ensureAuthEnforced(restriction.userId, true);
+    return restriction;
   }
 
   async liftAccountRestriction(restrictionId: string): Promise<AccountRestriction> {
     const { data, error } = await client().rpc('lift_account_restriction', { p_restriction_id: restrictionId });
     if (error) translateError(error);
-    return rowToRestriction(data as AccountRestrictionRow);
+    const restriction = rowToRestriction(data as AccountRestrictionRow);
+    if (restriction.restrictionType === 'full_suspension') await this.ensureAuthEnforced(restriction.userId);
+    return restriction;
+  }
+
+  /**
+   * The database already denies a suspended account all data access the moment the status
+   * changes, and tries to ban/unban the Auth user itself. This confirms that the Auth side
+   * really matches (account_auth_enforcement) and, if not, runs the supported Auth Admin API
+   * path on the Express backend (/api/admin/auth-enforcement/sync). It NEVER reports success when
+   * enforcement is incomplete: it throws, with a message that says what is and is not in place.
+   * Administrators can retry with syncAuthEnforcement().
+   */
+  async ensureAuthEnforced(userId: string, justSuspended = false): Promise<void> {
+    const c = client();
+    // After applying a suspension the account is suspended by definition. After lifting one it is
+    // only reinstated when no OTHER qualifying (active/appealed, unexpired) full suspension remains.
+    let suspended = justSuspended;
+    if (!justSuspended) {
+      const { data: remaining, error: remErr } = await c
+        .from('account_restrictions')
+        .select('id, expires_at')
+        .eq('user_id', userId)
+        .eq('restriction_type', 'full_suspension')
+        .in('status', ['active', 'appealed']);
+      if (remErr) throw new Error(`could not verify remaining suspensions: ${remErr.message}`);
+      suspended = ((remaining as Array<{ expires_at: string | null }> | null) ?? []).some(
+        (r) => !r.expires_at || Date.parse(r.expires_at) > Date.now()
+      );
+    }
+    const { data: enf } = await c.from('account_auth_enforcement').select('status, detail').eq('user_id', userId).maybeSingle();
+    const status = (enf as { status?: string } | null)?.status;
+    const ok = suspended
+      ? status === 'applied' || status === 'no_auth_user'
+      : status === undefined || status === 'cleared' || status === 'no_auth_user';
+    if (ok) return;
+    try {
+      await this.syncAuthEnforcement(userId);
+    } catch (err) {
+      throw new Error(
+        'The restriction change was saved and database access is already ' + (suspended ? 'blocked' : 'restored') +
+        ', but authentication enforcement did NOT complete (' + (err as Error).message +
+        '). The account can still sign in until this is retried: use Retry enforcement, or run the enforcement sync.'
+      );
+    }
+  }
+
+  /** Runs the backend reconciliation (platform administrators only). Throws unless every account was enforced. */
+  async syncAuthEnforcement(userId?: string): Promise<void> {
+    const base = envConfig.apiBaseUrl.replace(/\/+$/, '');
+    const token = authService.getSession().token;
+    if (!token) throw new UnauthorizedError('Not signed in.');
+    let res: Response;
+    try {
+      res = await fetch(`${base}/admin/auth-enforcement/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(userId ? { userId } : {})
+      });
+    } catch (err) {
+      throw new Error(`enforcement backend unreachable: ${(err as Error).message}`);
+    }
+    if (res.ok) return;
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      detail = body?.error ? `${body.error}${body.results?.length ? ': ' + body.results.map((r: { detail: string }) => r.detail).join('; ') : ''}` : detail;
+    } catch { /* keep the HTTP status */ }
+    throw new Error(detail);
   }
 
   /**

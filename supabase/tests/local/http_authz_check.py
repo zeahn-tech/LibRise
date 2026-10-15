@@ -78,5 +78,10 @@ s,b=call("POST","/rpc/set_auth_ban",ADMIN,{"p_uid":SUSP,"p_ban":False}); check("
 s,b=call("POST","/rpc/has_business_access",OTHER,{"p_listing_id":"x","p_viewer_id":OWNER}); check("has_business_access is not callable through the API", s in (401,403,404), f"{s} {b}")
 s,b=call("GET","/account_auth_enforcement",OTHER); check("ordinary user sees no auth-enforcement records", s in (200,401,403) and (s!=200 or json.loads(b)==[]), f"{s} {b}")
 s,b=call("GET","/account_auth_enforcement",None); check("anon cannot read auth-enforcement records", s in (401,403) or (s==200 and json.loads(b)==[]), f"{s} {b}")
+# --- round 6: enforcement drift / record, status consistency ---
+s,b=call("POST","/rpc/list_auth_enforcement_drift",OTHER,{}); check("ordinary user cannot read the auth-enforcement drift report", s in (401,403), f"{s} {b}")
+s,b=call("POST","/rpc/list_auth_enforcement_drift",ADMIN,{}); check("platform administrator can read the drift report (200, array)", s==200 and isinstance(json.loads(b), list), f"{s} {b}")
+s,b=call("POST","/rpc/record_auth_enforcement",ADMIN,{"p_user_id":SUSP,"p_status":"applied","p_detail":"x"}); check("record_auth_enforcement is not callable with an administrator token (service role only)", s in (401,403,404), f"{s} {b}")
+s,b=call("POST","/rpc/has_qualifying_full_suspension",ADMIN,{"p_uid":SUSP}); check("has_qualifying_full_suspension is not callable through the API", s in (401,403,404), f"{s} {b}")
 print(f"\n{sum(res)}/{len(res)} passed")
 import sys; sys.exit(0 if all(res) else 1)

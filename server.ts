@@ -9,6 +9,8 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { db } from './src/db/dbClient.js';
 import { authenticateSession as verifySupabaseSession } from './src/server/authMiddleware.js';
+import { createClient } from '@supabase/supabase-js';
+import { syncAuthEnforcement, BAN_DURATION } from './server/authEnforcement.js';
 
 dotenv.config();
 
@@ -410,6 +412,49 @@ ${cvText}`;
     } catch (error: any) {
       console.error('Error in /api/ai/parse-cv:', error);
       res.status(500).json({ error: 'Internal Server Error. Please contact security support.' });
+    }
+  });
+
+
+  // ---- Account-ban enforcement through the SUPPORTED Auth Admin API (F-19c) ----
+  // The caller must be a platform administrator: the drift report is read with the CALLER's
+  // token and the database refuses everyone else (42501 -> 403). The service-role key is read
+  // from a server-only environment variable here and nowhere else; it is never sent to a browser.
+  app.post('/api/admin/auth-enforcement/sync', authenticateSession, async (req, res) => {
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!url || !anonKey || !adminKey) {
+      return res.status(503).json({ success: false, error: 'Authentication enforcement is not configured on this server.', results: [] });
+    }
+    const opts = { auth: { persistSession: false, autoRefreshToken: false } };
+    const caller = createClient(url, anonKey, { ...opts, global: { headers: { Authorization: `Bearer ${token}` } } });
+    const admin = createClient(url, adminKey, opts);
+    const userId = typeof req.body?.userId === 'string' ? req.body.userId : undefined;
+    try {
+      const out = await syncAuthEnforcement({
+        listDrift: async () => {
+          const { data, error } = await caller.rpc('list_auth_enforcement_drift');
+          return { data: data as any, error: error ? { code: error.code, message: error.message } : null };
+        },
+        setBan: async (id, banned) => {
+          const { error } = await admin.auth.admin.updateUserById(id, { ban_duration: banned ? BAN_DURATION : 'none' } as any);
+          return { error: error ? { message: error.message } : null };
+        },
+        getBannedUntil: async (id) => {
+          const { data, error } = await admin.auth.admin.getUserById(id);
+          return { bannedUntil: ((data?.user as any)?.banned_until as string | undefined) ?? null, error: error ? { message: error.message } : null };
+        },
+        record: async (id, status, detail) => {
+          const { error } = await admin.rpc('record_auth_enforcement', { p_user_id: id, p_status: status, p_detail: detail });
+          return { error: error ? { message: error.message } : null };
+        }
+      }, { userId });
+      return res.status(out.status).json(out.body);
+    } catch (err) {
+      console.error('Auth enforcement sync failed:', (err as Error).message);
+      return res.status(502).json({ success: false, error: 'Authentication enforcement failed.', results: [] });
     }
   });
 

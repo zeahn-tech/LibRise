@@ -99,17 +99,18 @@ insert into test_log(line) select * from extensions.throws_ok(
 reset role;
 
 -- =====================================================================
--- C. Defence in depth: an ACTIVE full_suspension restriction suspends even if
---    users.account_status is (wrongly) 'active'. (Deleting the users row is
+-- C. An ACTIVE full_suspension restriction keeps the account suspended; the inconsistent state
+--    (status active + restriction active) can no longer be created (F-28). (Deleting the users row is
 --    additionally blocked by the account_restrictions FK and the restrictive DELETE policy.)
 -- =====================================================================
-update public.users set account_status = 'active' where id = '0a0a0a0a-0000-4000-8000-000000000009';
+insert into test_log(line) select * from extensions.throws_ok($$update public.users set account_status = 'active' where id = '0a0a0a0a-0000-4000-8000-000000000009'$$, '23514'::char(5), NULL::text,
+  '[F-28][direct administrative update] an account with an ACTIVE full_suspension cannot be set to active (the database refuses the inconsistent state)');
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000009',true);
 insert into test_log(line) select * from extensions.is(public.current_account_suspended(), true,
-  '[suspended][defence in depth] an ACTIVE full_suspension restriction suspends the account even when account_status says active');
+  '[suspended][F-28] the account is still suspended after the refused status change');
 insert into test_log(line) select * from extensions.throws_ok(
   $$insert into public.applications (id, opportunity_id, applicant_user_id, organization_id, applicant_full_name, applicant_email, stage) values ('app-as-s2', 'opp-as-pub', '0a0a0a0a-0000-4000-8000-000000000009', 'org-as', 'AS S2', 'as-s2@example.com', 'submitted')$$,
-  '42501'::char(5), NULL::text, '[suspended][defence in depth] writes are denied on the strength of the restriction row alone');
+  '42501'::char(5), NULL::text, '[suspended][F-28] writes are still denied');
 reset role;
 
 -- =====================================================================
