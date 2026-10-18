@@ -116,7 +116,7 @@ insert into test_log(line) select * from extensions.is((select account_status fr
 
 -- ===== 7/8. drift report, supported-API recording, authorization
 update auth.users set banned_until = now() + interval '30 days' where id = '0b3b3b3b-0000-4000-8000-000000000007';   -- G: operator ban, no LibRise record
-insert into public.account_auth_enforcement (user_id, status, detail) values ('0b3b3b3b-0000-4000-8000-000000000008', 'applied', 'ok');
+insert into public.account_auth_enforcement (user_id, status, detail, imposed_banned_until) values ('0b3b3b3b-0000-4000-8000-000000000008', 'applied', 'ok', 'infinity');   -- LibRise owns this ban
 update auth.users set banned_until = 'infinity' where id = '0b3b3b3b-0000-4000-8000-000000000008';                   -- H: banned by LibRise earlier, account is active now
 update auth.users set banned_until = null where id = '0b3b3b3b-0000-4000-8000-000000000005';                          -- E: ban lost (simulated) -> needs re-ban
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b3b3b3b-0000-4000-8000-0000000000aa',true);

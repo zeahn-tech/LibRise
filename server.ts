@@ -446,8 +446,8 @@ ${cvText}`;
           const { data, error } = await admin.auth.admin.getUserById(id);
           return { bannedUntil: ((data?.user as any)?.banned_until as string | undefined) ?? null, error: error ? { message: error.message } : null };
         },
-        record: async (id, status, detail) => {
-          const { error } = await admin.rpc('record_auth_enforcement', { p_user_id: id, p_status: status, p_detail: detail });
+        record: async (id, status, detail, imposedBannedUntil) => {
+          const { error } = await admin.rpc('record_auth_enforcement', { p_user_id: id, p_status: status, p_detail: detail, p_imposed_banned_until: imposedBannedUntil ?? null });
           return { error: error ? { message: error.message } : null };
         }
       }, { userId });

@@ -74,7 +74,7 @@ insert into test_log(line) select * from extensions.is((select status from publi
 insert into test_log(line) select * from extensions.ok((select detail like 'failed:%' from public.account_auth_enforcement where user_id = '0b1b1b1b-0000-4000-8000-000000000002'), '[failure][V2] the failure detail is stored');
 insert into test_log(line) select * from extensions.is((select count(*) from public.audit_logs where action = 'user.auth_ban_failed' and resource_id = '0b1b1b1b-0000-4000-8000-000000000002'), 1::bigint, '[failure][V2] an audit_logs entry is written');
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b1b1b1b-0000-4000-8000-000000000008',true);
-insert into test_log(line) select * from extensions.ok((select count(*) from public.list_suspended_accounts_not_banned() where user_id = '0b1b1b1b-0000-4000-8000-000000000002') = 1, '[failure][V2] the reconciliation report lists the account (live sessions remain)');
+insert into test_log(line) select * from extensions.ok((select count(*) from public.list_suspended_accounts_not_banned() where user_id = '0b1b1b1b-0000-4000-8000-000000000002') = 1, '[failure][V2] the reconciliation report lists the account (the last enforcement failed)');
 reset role;
 drop trigger ab_boom_tokens on auth.refresh_tokens;
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b1b1b1b-0000-4000-8000-000000000008',true);
