@@ -16,6 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # gitleaks-action scans the commit range of the push / pull request; with the default
+          # shallow checkout the base commit is missing and gitleaks exits with an error
+          # ("Unexpected exit code [1]") even when there is nothing to find.
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
