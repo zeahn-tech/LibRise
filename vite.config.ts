@@ -1,11 +1,19 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import {defineConfig} from 'vitest/config';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
   return {
+    // Unit tests must be hermetic: with a Supabase URL in the environment,
+    // authService.login() calls a real Auth endpoint instead of the in-memory demo
+    // store (this made 2 organizations.test.ts tests fail with "fetch failed"
+    // whenever VITE_SUPABASE_URL was set, incl. the CI secrets). Integration tests
+    // that need a real project belong in supabase/tests (pgTAP) instead.
+    test: {
+      env: { VITE_SUPABASE_URL: '', VITE_SUPABASE_ANON_KEY: '' }
+    },
     base: './',
     plugins: [
       react(), 
@@ -15,31 +23,31 @@ export default defineConfig(() => {
         injectRegister: 'script',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg', 'icon-maskable.svg'],
         manifest: {
-          id: '/',
+          id: './',
           name: 'LibRise',
           short_name: 'LibRise',
           description: 'Liberia\'s Digital Opportunity Marketplace connecting job seekers, businesses, tenders, scholarships, and investors across all 15 counties.',
           theme_color: '#283618',
           background_color: '#F9F8F6',
           display: 'standalone',
-          start_url: '/',
-          scope: '/',
+          start_url: './',
+          scope: './',
           orientation: 'portrait-primary',
           icons: [
             {
-              src: '/pwa-192x192.png',
+              src: 'pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-512x512.png',
+              src: 'pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-maskable-512x512.png',
+              src: 'pwa-maskable-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',

@@ -22,9 +22,8 @@
 --   3. Candidate PII not exposed to org members without consent
 --      (candidate_profiles is never directly selectable by an employer;
 --      only the RPC-mediated / application-snapshot paths work)
---   4. A suspended account's session is NOT rejected by RLS (see the
---      "CRITICAL FINDING" tests in section 14 -- this is a real,
---      currently-open gap, not a false negative)
+--   4. A suspended account is denied by RLS/RPC guards (migration
+--      20261012150000; section 14 -- previously a recorded gap)
 --   5. platform_admin/verification_officer overrides: platform_admin's
 --      overrides work everywhere tested; verification_officer has NO
 --      matching RLS or RPC grants today (also flagged as a finding),
@@ -155,12 +154,25 @@ select set_config('role','anon',true), set_config('request.jwt.claim.sub','',tru
 insert into test_log(line) select * from extensions.ok(
   (select count(*) from public.organizations where id = 'org-rlstest-a') = 1,
   '[organizations][anon][SELECT] anon can read org row (policy is USING(true), not verified-only as docs claim)');
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select tax_id_number from public.organizations where id = 'org-rlstest-a'$$,
+  '42501'::char(5), NULL::text,
+  '[organizations][anon][SELECT] tax_id_number is NOT readable by anon (column privilege revoked; was FINDING F-08)');
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select contact_email from public.organizations where id = 'org-rlstest-a'$$,
+  '42501'::char(5), NULL::text,
+  '[organizations][anon][SELECT] contact_email is NOT readable by anon (was FINDING F-08)');
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select registration_number, contact_phone, settings from public.organizations where id = 'org-rlstest-a'$$,
+  '42501'::char(5), NULL::text,
+  '[organizations][anon][SELECT] registration_number/contact_phone/settings are NOT readable by anon');
+insert into test_log(line) select * from extensions.throws_ok(
+  $$select * from public.organizations where id = 'org-rlstest-a'$$,
+  '42501'::char(5), NULL::text,
+  '[organizations][anon][SELECT] select * is rejected, so private columns cannot ride along');
 insert into test_log(line) select * from extensions.ok(
-  (select tax_id_number from public.organizations where id = 'org-rlstest-a') is not null,
-  '[organizations][anon][SELECT] *** FINDING *** anon can read tax_id_number (sensitive) — unverified org, docs claim "verified only"');
-insert into test_log(line) select * from extensions.ok(
-  (select contact_email from public.organizations where id = 'org-rlstest-a') is not null,
-  '[organizations][anon][SELECT] *** FINDING *** anon can read contact_email (PII-adjacent) on unverified org');
+  (select name from public.organizations where id = 'org-rlstest-a') is not null,
+  '[organizations][anon][SELECT] public profile columns (name) remain readable');
 reset role;
 
 -- Org A owner can update org A; cannot update org B (cross-tenant)
@@ -563,21 +575,25 @@ insert into test_log(line) select * from extensions.ok(
   '[account_restrictions][other user][SELECT] cannot see someone else''s restriction record');
 reset role;
 
--- *** THE HEADLINE TEST: does a suspended user's session still pass RLS on ordinary tables? ***
+-- Suspended-account enforcement (migration 20261012150000_enforce_account_status.sql; was the
+-- "CRITICAL FINDING" recorded here). Intended: a suspended session may READ its own users row
+-- (to show the suspension) but cannot change anything.
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','daf8fe74-1b3e-4fca-83f4-178006bc6179',true);
 insert into test_log(line) select * from extensions.ok(
   (select account_status from public.users where id = 'daf8fe74-1b3e-4fca-83f4-178006bc6179') = 'suspended',
   '[users][suspended user][SELECT] sanity: fixture user really is account_status=suspended');
 insert into test_log(line) select * from extensions.ok(
   (select count(*) from public.users where id = 'daf8fe74-1b3e-4fca-83f4-178006bc6179') = 1,
-  '[users][suspended user][SELECT] *** CRITICAL FINDING *** suspended user''s authenticated session STILL passes RLS and can read their own user row (no RLS policy anywhere checks account_status)');
-insert into test_log(line) select * from extensions.lives_ok(
-  $$update public.users set full_name = 'RLS Suspended User (still editing!)' where id = 'daf8fe74-1b3e-4fca-83f4-178006bc6179'$$,
-  '[users][suspended user][UPDATE] *** CRITICAL FINDING *** suspended user can still UPDATE their own profile via direct table access -- RLS has no account_status gate; suspension is enforced only in the TypeScript app layer (permissionEngine.ts), not at the database');
-insert into test_log(line) select * from extensions.lives_ok(
+  '[users][suspended user][SELECT] suspended user can still read their OWN users row (intended: status display)');
+update public.users set full_name = 'RLS Suspended User (still editing!)' where id = 'daf8fe74-1b3e-4fca-83f4-178006bc6179';
+insert into test_log(line) select * from extensions.throws_ok(
   $$insert into public.applications (id, opportunity_id, applicant_user_id, organization_id, applicant_full_name, applicant_email, stage) values ('app-rlstest-suspended', 'opp-rlstest-a-published', 'daf8fe74-1b3e-4fca-83f4-178006bc6179', 'org-rlstest-a', 'RLS Suspended User', 'rlstest-suspended@example.com', 'submitted')$$,
-  '[applications][suspended user][INSERT] *** CRITICAL FINDING *** a suspended user can still submit a job application via direct API call -- RLS does not block suspended accounts from writing');
+  '42501'::char(5), NULL::text,
+  '[applications][suspended user][INSERT] a suspended user can NOT submit a job application (restrictive policy)');
 reset role;
+insert into test_log(line) select * from extensions.is(
+  (select full_name from public.users where id = 'daf8fe74-1b3e-4fca-83f4-178006bc6179'), 'RLS Suspended User',
+  '[users][suspended user][UPDATE] suspended user''s profile edit had NO effect (RLS filtered the row)');
 
 -- =====================================================================
 -- 15. suspicious_activity_events

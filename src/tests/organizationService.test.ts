@@ -49,6 +49,8 @@ describe('organizationService', () => {
     vi.resetModules();
     mockFrom.mockReset();
     mockRpc.mockReset();
+    // Default: the get_organization_private_fields RPC returns no private rows.
+    mockRpc.mockResolvedValue({ data: [], error: null });
   });
 
   it('createOrganization(): calls the create_organization_with_owner RPC, not a raw insert', async () => {

@@ -1,0 +1,18 @@
+-- =====================================================================
+-- F-21 (Low): organizations could be created by a direct INSERT.
+--
+-- "Allow users to create organizations" was FOR INSERT TO authenticated WITH
+-- CHECK (true). A direct INSERT creates an ownerless organization with
+-- arbitrary name/type (verification fields are guarded by 20261012100000, but
+-- the row bypasses everything create_organization_with_owner() does:
+-- authentication, owner membership, validation). The application only ever
+-- uses the RPC (organizationService.createOrganization), which is SECURITY
+-- DEFINER and unaffected by this policy.
+-- Dropping the policy leaves NO INSERT policy, i.e. direct INSERT is denied.
+-- Business rule NOT present anywhere in the schema: a cap on organizations per
+-- user / name-uniqueness for impersonation; both need a product decision.
+--
+-- ROLLBACK: create policy "Allow users to create organizations" on
+-- public.organizations for insert to authenticated with check (true);
+-- =====================================================================
+drop policy if exists "Allow users to create organizations" on public.organizations;

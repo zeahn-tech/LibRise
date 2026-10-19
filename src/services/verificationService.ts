@@ -30,6 +30,7 @@
 
 import { VerificationAudit } from '../types';
 import { getSupabaseClient } from '../lib/supabaseClient';
+import type { OrganizationPrivateRow } from './orgColumns';
 import { apiClient, ApiResponse } from './apiClient';
 import { authService } from './authService';
 import { notificationService } from './notificationService';
@@ -80,7 +81,25 @@ function rowToAudit(row: VerificationAuditRow): VerificationAudit {
   };
 }
 
-const SELECT_WITH_ORG = '*, organizations(name, type, county, registration_number, tax_id_number)';
+// registration_number / tax_id_number are private organization columns (not
+// readable through an embedded join); fillPrivateOrgFields() adds them via the
+// members/platform-admin-only RPC for callers allowed to see them.
+const SELECT_WITH_ORG = '*, organizations(name, type, county)';
+
+async function fillPrivateOrgFields(rows: VerificationAuditRow[]): Promise<void> {
+  const ids = [...new Set(rows.map((r) => r.organization_id).filter(Boolean))];
+  if (ids.length === 0) return;
+  const { data, error } = await client().rpc('get_organization_private_fields', { p_org_ids: ids });
+  if (error || !Array.isArray(data)) return;
+  const byId = new Map((data as OrganizationPrivateRow[]).map((p) => [p.id, p]));
+  for (const r of rows) {
+    const p = byId.get(r.organization_id);
+    if (p && r.organizations) {
+      r.organizations.registration_number = p.registration_number;
+      r.organizations.tax_id_number = p.tax_id_number;
+    }
+  }
+}
 
 export const verificationService = {
   /** Returns whatever the caller's RLS grants: their own org's requests, or every request for a platform admin's review queue. */
@@ -88,6 +107,7 @@ export const verificationService = {
     return apiClient.execute(async () => {
       const { data, error } = await client().from('verification_audits').select(SELECT_WITH_ORG);
       if (error) throw new Error(error.message);
+      await fillPrivateOrgFields(data as VerificationAuditRow[]);
       return (data as VerificationAuditRow[]).map(rowToAudit);
     });
   },
@@ -120,6 +140,7 @@ export const verificationService = {
         .select(SELECT_WITH_ORG)
         .maybeSingle();
       if (error) translateError(error);
+      await fillPrivateOrgFields([data as VerificationAuditRow]);
       const submitted = rowToAudit(data as VerificationAuditRow);
       fireAndForget(
         notificationService.createAndDispatchNotification({
@@ -159,6 +180,7 @@ export const verificationService = {
         .eq('id', (data as VerificationAuditRow).id)
         .maybeSingle();
       if (fetchError) throw new Error(fetchError.message);
+      await fillPrivateOrgFields([full as VerificationAuditRow]);
       const decided = rowToAudit(full as VerificationAuditRow);
       const fullRow = full as VerificationAuditRow;
       fireAndForget(

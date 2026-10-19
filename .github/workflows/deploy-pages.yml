@@ -62,16 +62,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Type check
+        run: npm run lint
+
       - name: Determine build mode (real Supabase project vs. demo)
         id: mode
         env:
           SUPABASE_PAGES_URL: ${{ secrets.SUPABASE_PAGES_URL }}
           SUPABASE_PAGES_ANON_KEY: ${{ secrets.SUPABASE_PAGES_ANON_KEY }}
+          ALLOW_DEMO_BUILD: ${{ vars.ALLOW_DEMO_BUILD }}
         run: |
           if [ -n "$SUPABASE_PAGES_URL" ] && [ -n "$SUPABASE_PAGES_ANON_KEY" ]; then
             echo "supabase_url=$SUPABASE_PAGES_URL" >> "$GITHUB_OUTPUT"
             echo "supabase_anon_key=$SUPABASE_PAGES_ANON_KEY" >> "$GITHUB_OUTPUT"
             echo "demo_mode=false" >> "$GITHUB_OUTPUT"
+          elif [ "$ALLOW_DEMO_BUILD" != "true" ]; then
+            # Fail closed: never publish a seed-data demo site to the public production
+            # URL just because a secret was misnamed or mis-scoped. The previous
+            # deployment stays live. Set the repository variable ALLOW_DEMO_BUILD=true
+            # to deliberately publish a demo build.
+            echo "::error title=Refusing demo build::SUPABASE_PAGES_URL / SUPABASE_PAGES_ANON_KEY are missing and ALLOW_DEMO_BUILD is not 'true'. Add the secrets, or set the ALLOW_DEMO_BUILD repository variable to publish a demo build on purpose."
+            exit 1
           else
             # Deliberately EMPTY, not a fake placeholder string. Every
             # src/services/*.ts service guards its Supabase client with a
@@ -149,12 +160,21 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ steps.mode.outputs.supabase_anon_key }}
           VITE_ENABLE_DEMO_MODE: ${{ steps.mode.outputs.demo_mode }}
           VITE_APP_ENV: production
+          # Public URL of the deployed Express backend's /api (AI features). Empty = same-origin /api.
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
           # Public-by-design checkout details (see docs/PAYMENTS.md). Optional
           # repo Variables named VITE_MOMO_* override these defaults. NOTE: the
           # part after `vars.` must be a variable NAME -- never the value itself.
           VITE_MOMO_MTN_NUMBER: ${{ vars.VITE_MOMO_MTN_NUMBER || '0880024653' }}
           VITE_MOMO_ORANGE_NUMBER: ${{ vars.VITE_MOMO_ORANGE_NUMBER || '0776391531' }}
           VITE_MOMO_ACCOUNT_NAME: ${{ vars.VITE_MOMO_ACCOUNT_NAME || 'Emmanuel Zeahn' }}
+
+      - name: Verify no service-role key in the client bundle
+        run: npm run check:no-service-key-leak
+
+      - name: Verify no seed PII in a real (non-demo) bundle
+        if: steps.mode.outputs.demo_mode == 'false'
+        run: npm run check:no-seed-pii-in-bundle
 
       - name: Remove server bundle from the Pages artifact
         # dist/server.cjs (+ .map) is the Node server bundle -- GitHub Pages

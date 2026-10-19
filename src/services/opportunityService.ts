@@ -294,7 +294,10 @@ function translateError(error: { code?: string; message: string }): never {
   throw new Error(error.message);
 }
 
-const SELECT_WITH_ORG = '*, organizations(*)';
+// Literal (not built from ORG_PUBLIC_COLUMNS) so supabase-js can still type-parse the
+// select string. Must match ORG_PUBLIC_COLUMNS in ./orgColumns.ts: private org
+// columns are not readable through an embedded join.
+const SELECT_WITH_ORG = '*, organizations(id,slug,name,type,industry,county,city_district,website_url,logo_url,cover_image_url,description,employee_count_range,verification_status,verification_badge,created_at,updated_at,is_verified,website,logo_text,address,established_year)';
 
 /** Vacancies already counted as viewed in this browser session. */
 const viewedThisSession = new Set<string>();

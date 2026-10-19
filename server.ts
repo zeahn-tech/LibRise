@@ -9,6 +9,8 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { db } from './src/db/dbClient.js';
 import { authenticateSession as verifySupabaseSession } from './src/server/authMiddleware.js';
+import { createClient } from '@supabase/supabase-js';
+import { syncAuthEnforcement, BAN_DURATION } from './server/authEnforcement.js';
 
 dotenv.config();
 
@@ -97,6 +99,40 @@ async function startServer() {
   });
   app.use('/api/', apiLimiter);
 
+  // CORS: same-origin only unless ALLOWED_ORIGINS (comma-separated exact origins,
+  // e.g. https://zeahn-tech.github.io) is set. Required when the static frontend
+  // (GitHub Pages) calls this backend cross-origin. Never reflects arbitrary origins.
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',').map((o) => o.trim()).filter(Boolean);
+  app.use('/api/', (req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Max-Age', '600');
+    }
+    if (req.method === 'OPTIONS') return res.sendStatus(origin && allowedOrigins.includes(origin) ? 204 : 403);
+    next();
+  });
+
+  // Stripe billing is intentionally OFF: subscriptions are paid via manual mobile
+  // money (see docs/PAYMENTS.md).
+  //  * Checkout / portal creation stay hard-disabled regardless of any flag until
+  //    audit finding F-05 is fixed (membership is checked against the demo store, and
+  //    priceId / redirect URLs / customerId are not validated) -- see docs/LAUNCH_AUDIT.md.
+  //  * The webhook additionally needs ENABLE_STRIPE=true AND a STRIPE_WEBHOOK_SECRET
+  //    (it rejects unsigned payloads either way).
+  const stripeEnabled = process.env.ENABLE_STRIPE === 'true';
+  app.use(['/api/create-checkout-session', '/api/create-portal-session'], (_req, res) => {
+    res.status(503).json({ error: 'Stripe checkout is disabled.' });
+  });
+  app.use('/api/webhook', (_req, res, next) => {
+    if (!stripeEnabled) return res.status(503).json({ error: 'Stripe billing is not enabled.' });
+    next();
+  });
+
   // Stripe requires the raw body for webhook signature verification
   app.post('/api/webhook', express.raw({ type: 'application/json' }), (req, res) => {
     const sig = req.headers['stripe-signature'];
@@ -112,12 +148,12 @@ async function startServer() {
     let event;
 
     try {
-      if (endpointSecret) {
-        event = stripe.webhooks.constructEvent(req.body, sig as string, endpointSecret);
-      } else {
-        // Without a webhook secret, we just decode the event (not recommended for production)
-        event = JSON.parse(req.body.toString());
+      if (!endpointSecret) {
+        // Fail closed: never trust an unsigned payload as a Stripe event.
+        console.error('Webhook rejected: STRIPE_WEBHOOK_SECRET is not configured.');
+        return res.status(400).send('Webhook secret not configured');
       }
+      event = stripe.webhooks.constructEvent(req.body, sig as string, endpointSecret);
     } catch (err: any) {
       console.error(`Webhook Error: ${err.message}`);
       return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -376,6 +412,49 @@ ${cvText}`;
     } catch (error: any) {
       console.error('Error in /api/ai/parse-cv:', error);
       res.status(500).json({ error: 'Internal Server Error. Please contact security support.' });
+    }
+  });
+
+
+  // ---- Account-ban enforcement through the SUPPORTED Auth Admin API (F-19c) ----
+  // The caller must be a platform administrator: the drift report is read with the CALLER's
+  // token and the database refuses everyone else (42501 -> 403). The service-role key is read
+  // from a server-only environment variable here and nowhere else; it is never sent to a browser.
+  app.post('/api/admin/auth-enforcement/sync', authenticateSession, async (req, res) => {
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!url || !anonKey || !adminKey) {
+      return res.status(503).json({ success: false, error: 'Authentication enforcement is not configured on this server.', results: [] });
+    }
+    const opts = { auth: { persistSession: false, autoRefreshToken: false } };
+    const caller = createClient(url, anonKey, { ...opts, global: { headers: { Authorization: `Bearer ${token}` } } });
+    const admin = createClient(url, adminKey, opts);
+    const userId = typeof req.body?.userId === 'string' ? req.body.userId : undefined;
+    try {
+      const out = await syncAuthEnforcement({
+        listDrift: async () => {
+          const { data, error } = await caller.rpc('list_auth_enforcement_drift');
+          return { data: data as any, error: error ? { code: error.code, message: error.message } : null };
+        },
+        setBan: async (id, banned) => {
+          const { error } = await admin.auth.admin.updateUserById(id, { ban_duration: banned ? BAN_DURATION : 'none' } as any);
+          return { error: error ? { message: error.message } : null };
+        },
+        getBannedUntil: async (id) => {
+          const { data, error } = await admin.auth.admin.getUserById(id);
+          return { bannedUntil: ((data?.user as any)?.banned_until as string | undefined) ?? null, error: error ? { message: error.message } : null };
+        },
+        record: async (id, status, detail, imposedBannedUntil) => {
+          const { error } = await admin.rpc('record_auth_enforcement', { p_user_id: id, p_status: status, p_detail: detail, p_imposed_banned_until: imposedBannedUntil ?? null });
+          return { error: error ? { message: error.message } : null };
+        }
+      }, { userId });
+      return res.status(out.status).json(out.body);
+    } catch (err) {
+      console.error('Auth enforcement sync failed:', (err as Error).message);
+      return res.status(502).json({ success: false, error: 'Authentication enforcement failed.', results: [] });
     }
   });
 
