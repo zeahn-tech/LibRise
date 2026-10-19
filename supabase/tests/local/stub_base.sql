@@ -11,3 +11,10 @@ grant usage on schema auth to anon, authenticated, service_role;
 grant execute on all functions in schema auth to anon, authenticated, service_role;
 create publication supabase_realtime;
 do $$ begin if not exists (select 1 from pg_roles where rolname='authenticator') then create role authenticator noinherit login password 'pw'; end if; end $$; grant anon, authenticated, service_role to authenticator;
+
+-- Real Supabase: objects created by the migration role get EXPLICIT grants to the API roles through
+-- default privileges (in addition to the PostgreSQL default PUBLIC EXECUTE on functions). Without this,
+-- a local run cannot see functions that are executable by anon/authenticated only because of these grants.
+alter default privileges for role postgres in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges for role postgres in schema public grant all on functions to anon, authenticated, service_role;
+alter default privileges for role postgres in schema public grant all on sequences to anon, authenticated, service_role;

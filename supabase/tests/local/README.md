@@ -15,3 +15,5 @@ Limitations: `auth.uid()`/roles are stand-ins, GoTrue/Storage/Realtime are absen
 `enforcement_route_check.mjs` (run by `run.sh` when `npm run build` has produced `dist/server.cjs` and PostgREST is available) exercises the real Express route `POST /api/admin/auth-enforcement/sync` end to end against the disposable database, with the Supabase Auth service and Admin API replaced by a local stub. It proves the route's authorization, targeting, failure (502/503) and convergence behaviour; it does NOT prove how a hosted Auth service behaves. Port 3000 must be free.
 
 Set `GOTRUE_MIGRATIONS_DIR` (a clone of `github.com/supabase/auth`, `migrations/`) to run everything against the real GoTrue schema instead of the minimal stand-in tables.
+
+`stub_base.sql` also models Supabase's default privileges (new objects are granted to `anon`, `authenticated` and `service_role`). This matters: without it a local run cannot see functions that are callable by `anon` only because of those grants (CI found 12 such functions that earlier local runs could not).
