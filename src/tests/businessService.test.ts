@@ -105,7 +105,10 @@ describe('businessService', () => {
     expect(mockRpc).toHaveBeenCalledWith('list_business_listings_public', {
       p_county: 'Nimba',
       p_industry: null,
-      p_listing_type: null
+      p_listing_type: null,
+      // paging args are always sent so a leftover 3-arg overload can't cause PGRST203
+      p_limit: 500,
+      p_offset: 0
     });
     expect(mockFrom).not.toHaveBeenCalledWith('business_listings');
     expect(res.data![0].title).toBe('Bakery Chain');

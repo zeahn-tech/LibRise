@@ -168,7 +168,13 @@ export const businessService = {
       const { data, error } = await client().rpc('list_business_listings_public', {
         p_county: filter?.county || null,
         p_industry: filter?.industry || null,
-        p_listing_type: filter?.listingType || null
+        p_listing_type: filter?.listingType || null,
+        // Always send the paging arguments. If a server still has the older
+        // 3-argument overload next to the current 5-argument one, a call with
+        // only 3 arguments matches both and PostgREST refuses it (PGRST203).
+        // Naming p_limit/p_offset can only match the current function.
+        p_limit: 500,
+        p_offset: 0
       });
       if (error) throw toDbError('businessService', error);
       return ((data as BusinessListingRow[]) || []).map(rowToListing);

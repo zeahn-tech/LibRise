@@ -1,3 +1,4 @@
+import { logger } from './core/logging/logger';
 import { openedFromRecoveryLink, recoveryLinkError } from './lib/recoveryLink';
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import {
@@ -184,9 +185,15 @@ function AppContent() {
     let reported = false;
     const quiet = async (load: () => Promise<{ error?: { message: string } | null }>) => {
       const res = await load();
-      if (res?.error && !reported) {
-        reported = true;
-        showToast(res.error.message, 'error');
+      if (res?.error) {
+        // Background loads never interrupt a visitor who has not signed in: the
+        // page still works without the list, and "contact support" is not
+        // something a guest can act on. The failure is logged (console + logger).
+        logger.warn('App', 'Background data load failed', { message: res.error.message });
+        if (user?.id && !reported) {
+          reported = true;
+          showToast(res.error.message, 'error');
+        }
       }
     };
     void quiet(async () => {
