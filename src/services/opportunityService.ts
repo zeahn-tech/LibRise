@@ -61,6 +61,7 @@ import type {
   Organization,
   WorkplaceModel
 } from '../types';
+import { toDbError, isGrantProblem } from './dbErrors';
 
 export interface OpportunityFilters {
   query?: string;
@@ -283,6 +284,7 @@ function translateError(error: { code?: string; message: string }): never {
     throw new PaymentRequiredError('Payment is required to publish this vacancy.');
   }
   if (error.code === '42501') {
+    if (isGrantProblem(error)) throw toDbError('opportunityService', error);
     throw new ForbiddenError('You do not have permission to perform this action on this opportunity.');
   }
   if (error.code === '23505') {
@@ -291,7 +293,7 @@ function translateError(error: { code?: string; message: string }): never {
   if (error.code === '23503') {
     throw new ValidationError('The specified organization does not exist.');
   }
-  throw new Error(error.message);
+  throw toDbError('opportunityService', error);
 }
 
 // Literal (not built from ORG_PUBLIC_COLUMNS) so supabase-js can still type-parse the

@@ -38,6 +38,7 @@ import { notificationService } from './notificationService';
 import { fireAndForget } from '../lib/fireAndForget';
 import { envConfig } from '../config/env';
 import { ForbiddenError, UnauthorizedError, ValidationError } from '../core/errors/AppError';
+import { toDbError } from './dbErrors';
 
 interface SubscriptionRow {
   id: string;
@@ -87,7 +88,7 @@ function translateError(error: { code?: string; message: string }): never {
   if (error.code === '42501') {
     throw new ForbiddenError('You do not have permission to manage this organization\'s subscription.');
   }
-  throw new Error(error.message);
+  throw toDbError('subscriptionService', error);
 }
 
 export const subscriptionService = {
@@ -98,7 +99,7 @@ export const subscriptionService = {
         .select('*')
         .eq('organization_id', organizationId)
         .maybeSingle();
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('subscriptionService', error);
       if (data) return rowToSubscription(data as SubscriptionRow);
 
       // Auto-provision a default plan the first time an org's

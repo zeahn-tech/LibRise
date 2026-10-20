@@ -54,6 +54,7 @@ import { getPlanById } from '../data/subscriptionPlans';
 import { notificationService } from './notificationService';
 import { fireAndForget } from '../lib/fireAndForget';
 import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from '../core/errors/AppError';
+import { toDbError } from './dbErrors';
 
 interface BusinessListingRow {
   id: string;
@@ -142,7 +143,7 @@ function translateError(error: { code?: string; message: string }): never {
   if (error.code === '23505') {
     throw new ValidationError('A business listing with that slug already exists.');
   }
-  throw new Error(error.message);
+  throw toDbError('businessService', error);
 }
 
 /** Owner + title of a listing, via the public RPC (readable by any signed-in user). */
@@ -169,7 +170,7 @@ export const businessService = {
         p_industry: filter?.industry || null,
         p_listing_type: filter?.listingType || null
       });
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('businessService', error);
       return ((data as BusinessListingRow[]) || []).map(rowToListing);
     });
   },
@@ -199,7 +200,7 @@ export const businessService = {
         p_limit: limit + 1,
         p_offset: offset
       });
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('businessService', error);
       const rows = ((data as BusinessListingRow[]) || []).map(rowToListing);
       return { items: rows.slice(0, limit), hasMore: rows.length > limit };
     });
@@ -208,7 +209,7 @@ export const businessService = {
   async getById(id: string): Promise<ApiResponse<BusinessListing | null>> {
     return apiClient.execute(async () => {
       const { data, error } = await client().rpc('get_business_listing_public', { p_listing_id: id });
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('businessService', error);
       return data ? rowToListing(data as BusinessListingRow) : null;
     });
   },
@@ -454,7 +455,7 @@ export const businessService = {
   async getAccessRequestsForListing(businessId: string): Promise<ApiResponse<BusinessAccessRequest[]>> {
     return apiClient.execute(async () => {
       const { data, error } = await client().from('business_access_requests').select('*').eq('listing_id', businessId);
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('businessService', error);
       return ((data as BusinessAccessRequestRow[]) || []).map(rowToRequest);
     });
   },
@@ -523,7 +524,7 @@ export const businessService = {
   async getSavedIds(userId: string): Promise<ApiResponse<string[]>> {
     return apiClient.execute(async () => {
       const { data, error } = await client().from('business_saved_listings').select('listing_id').eq('user_id', userId);
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('businessService', error);
       return ((data as { listing_id: string }[]) || []).map((r) => r.listing_id);
     });
   },
@@ -592,7 +593,7 @@ export const businessService = {
   async getInquiries(businessId: string): Promise<ApiResponse<BusinessInquiry[]>> {
     return apiClient.execute(async () => {
       const { data, error } = await client().from('business_inquiries').select('*').eq('listing_id', businessId);
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('businessService', error);
       return ((data as BusinessInquiryRow[]) || []).map(rowToInquiry);
     });
   }

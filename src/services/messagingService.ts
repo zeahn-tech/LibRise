@@ -48,6 +48,7 @@ import { notificationService } from './notificationService';
 import { fireAndForget } from '../lib/fireAndForget';
 import { trustSafetyService } from './trustSafetyService';
 import { ForbiddenError, UnauthorizedError, ValidationError } from '../core/errors/AppError';
+import { toDbError } from './dbErrors';
 
 interface ConversationRow {
   id: string;
@@ -94,7 +95,7 @@ function translateError(error: { code?: string; message: string }): never {
   if (error.code === '42501') {
     throw new ForbiddenError(error.message || 'You do not have permission to perform this action.');
   }
-  throw new Error(error.message);
+  throw toDbError('messagingService', error);
 }
 
 async function hydrateParticipants(conversationId: string): Promise<ConversationParticipant[]> {
@@ -170,7 +171,7 @@ export const messagingService = {
         .from('conversation_participants')
         .select('conversation_id')
         .eq('user_id', userId);
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('messagingService', error);
       const ids = ((data as { conversation_id: string }[]) || []).map((r) => r.conversation_id);
       if (ids.length === 0) return [];
 
@@ -187,7 +188,7 @@ export const messagingService = {
   async getConversation(conversationId: string): Promise<ApiResponse<Conversation | null>> {
     return apiClient.execute(async () => {
       const { data, error } = await client().from('conversations').select('*').eq('id', conversationId).maybeSingle();
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('messagingService', error);
       return data ? rowToConversation(data as ConversationRow) : null;
     });
   },
@@ -201,7 +202,7 @@ export const messagingService = {
         .select('*')
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true });
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('messagingService', error);
       return (data as MessageRow[]).map(rowToMessage);
     });
   },
@@ -395,7 +396,7 @@ export const messagingService = {
   async findUserByEmail(email: string): Promise<ApiResponse<{ id: string; fullName: string; primaryRole?: string } | null>> {
     return apiClient.execute(async () => {
       const { data, error } = await client().rpc('find_user_by_email', { p_email: email });
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('messagingService', error);
       const rows = (data as { user_id: string; full_name: string; primary_role: string | null }[]) || [];
       if (rows.length === 0) return null;
       return { id: rows[0].user_id, fullName: rows[0].full_name, primaryRole: rows[0].primary_role ?? undefined };
@@ -405,7 +406,7 @@ export const messagingService = {
   async getBlockedUsers(userId: string): Promise<ApiResponse<UserBlock[]>> {
     return apiClient.execute(async () => {
       const { data, error } = await client().from('user_blocks').select('*').eq('blocking_user_id', userId);
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('messagingService', error);
       return ((data as any[]) || []).map((row) => ({
         id: row.id,
         blockingUserId: row.blocking_user_id,

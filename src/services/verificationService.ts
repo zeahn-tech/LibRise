@@ -36,6 +36,7 @@ import { authService } from './authService';
 import { notificationService } from './notificationService';
 import { fireAndForget } from '../lib/fireAndForget';
 import { ForbiddenError, UnauthorizedError, ValidationError } from '../core/errors/AppError';
+import { toDbError } from './dbErrors';
 
 interface VerificationAuditRow {
   id: string;
@@ -63,7 +64,7 @@ function translateError(error: { code?: string; message: string }): never {
   if (error.code === '42501') {
     throw new ForbiddenError(error.message || 'You do not have permission to perform this action.');
   }
-  throw new Error(error.message);
+  throw toDbError('verificationService', error);
 }
 
 function rowToAudit(row: VerificationAuditRow): VerificationAudit {
@@ -106,7 +107,7 @@ export const verificationService = {
   async list(): Promise<ApiResponse<VerificationAudit[]>> {
     return apiClient.execute(async () => {
       const { data, error } = await client().from('verification_audits').select(SELECT_WITH_ORG);
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('verificationService', error);
       await fillPrivateOrgFields(data as VerificationAuditRow[]);
       return (data as VerificationAuditRow[]).map(rowToAudit);
     });

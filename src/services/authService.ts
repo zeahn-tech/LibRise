@@ -145,19 +145,19 @@ class AuthService {
     const userId = this.currentSession.user.id;
     const orgId = this.currentSession.activeOrganization?.id;
 
-    try {
-      const { organizationService } = await import('./organizationService');
-      this.cachedUserOrganizations = await organizationService.getUserOrganizations(userId);
-
-      if (orgId) {
-        this.cachedActiveMembership = await organizationService.getUserMembership(orgId, userId);
-      } else {
-        this.cachedActiveMembership = null;
+    // One retry for a transient failure. If it still fails, KEEP the last good
+    // cache instead of wiping it: an empty cache silently removes every
+    // organization-scoped feature (Post, Recruiter workspace, billing) from an
+    // employer who is perfectly entitled to them.
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const { organizationService } = await import('./organizationService');
+        this.cachedUserOrganizations = await organizationService.getUserOrganizations(userId);
+        this.cachedActiveMembership = orgId ? await organizationService.getUserMembership(orgId, userId) : null;
+        break;
+      } catch (err) {
+        logger.warn('authService', `refreshOrgContext: failed to load organization membership (attempt ${attempt})`, { error: err instanceof Error ? err.message : String(err) });
       }
-    } catch (err) {
-      logger.warn('authService', 'refreshOrgContext: failed to load organization membership from Supabase', { error: err instanceof Error ? err.message : String(err) });
-      this.cachedActiveMembership = null;
-      this.cachedUserOrganizations = [];
     }
 
     try {
@@ -283,7 +283,28 @@ class AuthService {
 
     const meta = supabaseUser.user_metadata || {};
     const localProfile = db.getUserProfile(supabaseUser.id);
-    const primaryRole: UserRole = (row?.primary_role || meta.primaryRole || 'job_seeker') as UserRole;
+    let primaryRole: UserRole = (row?.primary_role || meta.primaryRole || 'job_seeker') as UserRole;
+
+    // Heal a role that sign-up chose but the profile row lost (the row can fall
+    // back to 'job_seeker' when it was created by an older trigger or before the
+    // role reached it). Only the self-service roles offered on the sign-up form
+    // are honoured -- never a staff role -- and the row is repaired best-effort
+    // so the person keeps the account type they registered for.
+    const SELF_SERVICE_ROLES: UserRole[] = [
+      'employer', 'recruiter', 'business_seller', 'buyer', 'service_provider', 'organization_admin', 'investor_buyer'
+    ];
+    const signupRole = meta.primaryRole as UserRole | undefined;
+    if (row && primaryRole === 'job_seeker' && signupRole && SELF_SERVICE_ROLES.includes(signupRole)) {
+      primaryRole = signupRole;
+      if (supabase) {
+        try {
+          const { error: healError } = await supabase.from('users').update({ primary_role: signupRole }).eq('id', supabaseUser.id);
+          if (healError) logger.warn('AUTH', 'Could not repair primary_role on profile row', { error: healError.message });
+        } catch {
+          /* the in-session role is already corrected above */
+        }
+      }
+    }
 
     const user: User = {
       id: supabaseUser.id,
@@ -299,7 +320,10 @@ class AuthService {
       isPhoneVerified: row ? !!row.is_phone_verified : false,
       createdAt: row?.created_at || new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
-      capabilities: localProfile?.capabilities || defaultCapabilitiesForRole(primaryRole),
+      // A cached local profile can predate (or lack) the capability that goes with
+      // the account's own role, which would hide that role's features. Always include
+      // the role's own default capability alongside whatever the person chose.
+      capabilities: Array.from(new Set([...(localProfile?.capabilities || []), ...defaultCapabilitiesForRole(primaryRole)])),
       onboardingCompleted: localProfile
         ? localProfile.capabilities.length > 0 || primaryRole === 'platform_admin' || primaryRole === 'verification_officer'
         : false,
