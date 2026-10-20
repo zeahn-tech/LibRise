@@ -300,16 +300,25 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
         }
       }
 
-      // 4. Switch session to new organization
+      // 4. Switch session to new organization. The workspace already exists at this
+      // point, so a failure here must be reported honestly rather than hidden behind
+      // a success message: the person would see no workspace and no explanation.
+      let openError: string | null = null;
       try {
         await switchOrganization(newOrg.id);
-      } catch {
-        // The workspace exists and you own it; only making it the active one
-        // failed. It appears in the organization switcher.
+      } catch (switchErr) {
+        openError = switchErr instanceof Error ? switchErr.message : 'unknown error';
       }
       refreshOrganizations();
 
-      showToast(`Workspace "${newOrg.name}" established successfully!`, 'success');
+      if (openError) {
+        showToast(
+          `Workspace "${newOrg.name}" was created, but it could not be opened: ${openError}`,
+          'error'
+        );
+      } else {
+        showToast(`Workspace "${newOrg.name}" established successfully!`, 'success');
+      }
 
       if (onCreated) {
         onCreated(newOrg);
