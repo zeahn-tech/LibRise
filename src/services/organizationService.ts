@@ -110,6 +110,7 @@ interface MembershipRow {
 }
 
 import { ORG_PUBLIC_COLUMNS, OrganizationPrivateRow } from './orgColumns';
+import { toDbError, isGrantProblem } from './dbErrors';
 
 function rowToOrganization(row: OrganizationRow): Organization {
   return {
@@ -204,6 +205,7 @@ function client() {
 function translateError(error: { code?: string; message: string }): never {
   // 42501 = insufficient_privilege (RLS denial)
   if (error.code === '42501') {
+    if (isGrantProblem(error)) throw toDbError('organizationService', error);
     throw new ForbiddenError('You do not have permission to perform this action on this organization.');
   }
   // 23514 = check_violation (the owner-invariant trigger raises this code explicitly)
@@ -214,7 +216,7 @@ function translateError(error: { code?: string; message: string }): never {
   if (error.code === '23505') {
     throw new ValidationError('That value is already in use.');
   }
-  throw new Error(error.message);
+  throw toDbError('organizationService', error);
 }
 
 // ---------------------------------------------------------------------

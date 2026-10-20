@@ -39,6 +39,7 @@ import { getSupabaseClient } from '../lib/supabaseClient';
 import { authService } from './authService';
 import { envConfig } from '../config/env';
 import { ForbiddenError, UnauthorizedError } from '../core/errors/AppError';
+import { toDbError } from './dbErrors';
 
 // Suspicious keywords indicative of scams, upfront fee charging, or illegal recruitment practices
 const SUSPICIOUS_KEYWORDS = [
@@ -66,7 +67,7 @@ function translateError(error: { code?: string; message: string }): never {
   if (error.code === '42501') {
     throw new ForbiddenError(error.message || 'You do not have permission to perform this action.');
   }
-  throw new Error(error.message);
+  throw toDbError('trustSafetyService', error);
 }
 
 interface VerificationRequestRow {
@@ -203,21 +204,21 @@ export class TrustSafetyService {
   /** Returns whatever the caller's RLS grants: their own submissions, or every request for a platform admin's review queue. */
   async getVerificationRequests(): Promise<VerificationRequest[]> {
     const { data, error } = await client().from('verification_requests').select('*').order('submitted_at', { ascending: false });
-    if (error) throw new Error(error.message);
+    if (error) throw toDbError('trustSafetyService', error);
     return (data as VerificationRequestRow[]).map(rowToVerificationRequest);
   }
 
   /** Returns whatever the caller's RLS grants: their own reports, or every report for a platform admin's review queue. */
   async getContentReports(): Promise<ContentReport[]> {
     const { data, error } = await client().from('content_reports').select('*').order('created_at', { ascending: false });
-    if (error) throw new Error(error.message);
+    if (error) throw toDbError('trustSafetyService', error);
     return (data as ContentReportRow[]).map(rowToContentReport);
   }
 
   /** Returns whatever the caller's RLS grants: their own restrictions, or every restriction for a platform admin. */
   async getAccountRestrictions(): Promise<AccountRestriction[]> {
     const { data, error } = await client().from('account_restrictions').select('*').order('created_at', { ascending: false });
-    if (error) throw new Error(error.message);
+    if (error) throw toDbError('trustSafetyService', error);
     return (data as AccountRestrictionRow[]).map(rowToRestriction);
   }
 
@@ -480,7 +481,7 @@ export class TrustSafetyService {
       .select('restriction_type, reason')
       .eq('user_id', userId)
       .eq('status', 'active');
-    if (error) throw new Error(error.message);
+    if (error) throw toDbError('trustSafetyService', error);
 
     const restrictions = (data as { restriction_type: string; reason: string }[]) || [];
     for (const r of restrictions) {

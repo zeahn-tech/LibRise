@@ -175,12 +175,47 @@ function AppContent() {
   };
 
   // All useEffect hooks
+  // Public data loads for everyone. Applications and verification audits are
+  // only meaningful (and only readable) for a signed-in person, so guests do not
+  // request them at all. Everything is re-fetched when the signed-in identity
+  // changes, so a person who has just signed in sees their own data without a
+  // manual reload. Background failures are shown once, not once per list.
   useEffect(() => {
-    refreshOpportunities();
-    refreshApplications();
-    refreshAudits();
-    refreshBusinesses();
-  }, []);
+    let reported = false;
+    const quiet = async (load: () => Promise<{ error?: { message: string } | null }>) => {
+      const res = await load();
+      if (res?.error && !reported) {
+        reported = true;
+        showToast(res.error.message, 'error');
+      }
+    };
+    void quiet(async () => {
+      const res = await opportunityService.list();
+      if (res.data) setOpportunities(res.data);
+      return res;
+    });
+    void quiet(async () => {
+      const res = await businessService.list();
+      if (res.data) setBusinesses(res.data);
+      return res;
+    });
+    if (user?.id) {
+      void quiet(async () => {
+        const res = await applicationService.listByOrganization();
+        if (res.data) setApplications(res.data);
+        return res;
+      });
+      void quiet(async () => {
+        const res = await verificationService.list();
+        if (res.data) setAudits(res.data);
+        return res;
+      });
+    } else {
+      setApplications([]);
+      setAudits([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // Active Tab synchronized with route path
   type TabKey = 'opportunities' | 'businesses' | 'verification' | 'recruiter' | 'candidate' | 'ai-studio' | 'billing' | 'messages' | 'admin';

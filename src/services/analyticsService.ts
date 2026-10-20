@@ -27,6 +27,7 @@
 
 import { getSupabaseClient } from '../lib/supabaseClient';
 import { ForbiddenError } from '../core/errors/AppError';
+import { toDbError } from './dbErrors';
 
 export interface PlatformAnalytics {
   users: {
@@ -120,7 +121,7 @@ function translateError(error: { code?: string; message: string }): never {
   if (error.code === '42501') {
     throw new ForbiddenError(error.message || 'You do not have permission to view this analytics dashboard.');
   }
-  throw new Error(error.message);
+  throw toDbError('analyticsService', error);
 }
 
 export const analyticsService = {

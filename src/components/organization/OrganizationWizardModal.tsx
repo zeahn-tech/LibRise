@@ -201,6 +201,7 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
       return;
     }
 
+    if (isSubmitting) return;
     setIsSubmitting(true);
     setError(null);
 
@@ -218,7 +219,7 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
         .join('')
         .toUpperCase() || 'OH';
 
-      const newOrg = await organizationService.createOrganization({
+      const orgInput = {
         name: name.trim(),
         slug,
         type: orgType,
@@ -238,7 +239,23 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
           notifyOnApplications,
           requireCoverNote
         }
-      });
+      };
+
+      let newOrg;
+      try {
+        newOrg = await organizationService.createOrganization(orgInput);
+      } catch (firstErr) {
+        // Two organizations can share a name (and so a slug). Retry once with a
+        // short unique suffix instead of failing the whole launch.
+        if (firstErr instanceof Error && /slug|already in use/i.test(firstErr.message)) {
+          newOrg = await organizationService.createOrganization({
+            ...orgInput,
+            slug: `${slug || 'org'}-${Math.random().toString(36).substring(2, 6)}`
+          });
+        } else {
+          throw firstErr;
+        }
+      }
 
       if (registrationNumber.trim() || taxIdNumber.trim()) {
         try {
@@ -284,7 +301,12 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
       }
 
       // 4. Switch session to new organization
-      await switchOrganization(newOrg.id);
+      try {
+        await switchOrganization(newOrg.id);
+      } catch {
+        // The workspace exists and you own it; only making it the active one
+        // failed. It appears in the organization switcher.
+      }
       refreshOrganizations();
 
       showToast(`Workspace "${newOrg.name}" established successfully!`, 'success');
@@ -295,7 +317,9 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
 
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to create organization workspace.');
+      const message = err instanceof Error ? err.message : 'Failed to create organization workspace.';
+      setError(message);
+      showToast(message, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -362,7 +386,7 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
 
         {/* Form Body */}
         <div className="p-6 sm:p-8 overflow-y-auto flex-1 space-y-6">
-          {error && (
+          {error && currentStep !== 'configuration' && (
             <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs rounded-xl flex items-center gap-2">
               <span className="font-bold">Error:</span> {error}
             </div>
@@ -838,6 +862,15 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
             </div>
           )}
         </div>
+
+        {error && currentStep === 'configuration' && (
+          <div
+            role="alert"
+            className="px-6 py-3 bg-red-50 border-t border-red-200 text-red-800 text-xs flex items-center gap-2 flex-none"
+          >
+            <span className="font-bold">Could not launch workspace:</span> {error}
+          </div>
+        )}
 
         {/* Footer Navigation */}
         <div className="p-6 border-t border-[#E8E4D9] bg-[#F9F8F6] flex items-center justify-between flex-none">

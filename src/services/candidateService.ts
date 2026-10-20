@@ -29,6 +29,7 @@ import { getSupabaseClient } from '../lib/supabaseClient';
 import { apiClient, ApiResponse } from './apiClient';
 import { authService } from './authService';
 import { ForbiddenError, UnauthorizedError, ValidationError } from '../core/errors/AppError';
+import { toDbError } from './dbErrors';
 
 interface CandidateProfileRow {
   user_id: string;
@@ -142,7 +143,7 @@ export const candidateService = {
         .select('*')
         .eq('user_id', user.id)
         .maybeSingle();
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('candidateService', error);
 
       if (data) {
         return rowToProfile(data as CandidateProfileRow);
@@ -193,7 +194,7 @@ export const candidateService = {
   async getPublicProfile(userId: string): Promise<ApiResponse<CandidateProfile | null>> {
     return apiClient.execute(async () => {
       const { data, error } = await client().rpc('get_public_candidate_profile', { p_target_user_id: userId });
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('candidateService', error);
       return data ? rowToProfile(data as CandidateProfileRow) : null;
     });
   },
@@ -280,7 +281,7 @@ export const candidateService = {
         p_min_years_exp: typeof filter.minYearsExp === 'number' ? filter.minYearsExp : null,
         p_query: filter.query || null
       });
-      if (error) throw new Error(error.message);
+      if (error) throw toDbError('candidateService', error);
       return ((data as CandidateProfileRow[]) || []).map(rowToProfile);
     });
   }

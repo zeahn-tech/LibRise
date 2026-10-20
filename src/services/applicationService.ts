@@ -39,6 +39,7 @@ import { authService } from './authService';
 import { notificationService } from './notificationService';
 import { fireAndForget } from '../lib/fireAndForget';
 import type { Application, ApplicationStage, ApplicationStatusLog, InterviewScheduleDetails } from '../types';
+import { toDbError, isGrantProblem } from './dbErrors';
 
 interface HiringOfferDetails {
   salaryUSD?: number;
@@ -151,6 +152,7 @@ function client() {
 
 function translateError(error: { code?: string; message: string }): never {
   if (error.code === '42501') {
+    if (isGrantProblem(error)) throw toDbError('applicationService', error);
     throw new ForbiddenError(
       'You do not have permission to perform this action on this application.'
     );
@@ -158,7 +160,7 @@ function translateError(error: { code?: string; message: string }): never {
   if (error.code === '23503') {
     throw new ValidationError('The specified opportunity does not exist.');
   }
-  throw new Error(error.message);
+  throw toDbError('applicationService', error);
 }
 
 const SELECT_WITH_JOINS = '*, opportunities(title), organizations(name)';
