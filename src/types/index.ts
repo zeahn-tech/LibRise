@@ -786,6 +786,9 @@ export interface MessageAttachment {
   fileName: string;
   fileType: string;
   fileSize: number;
+  /** Storage object path (bucket `message-attachments`). Present on all attachments sent after the storage migration. */
+  path?: string;
+  /** Short-lived signed URL resolved at read time, or a legacy inline data URL on old messages. */
   urlOrBase64: string;
 }
 

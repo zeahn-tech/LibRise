@@ -12,9 +12,18 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const mockFrom = vi.fn();
 const mockRpc = vi.fn();
+const mockUpload = vi.fn();
+const mockRemove = vi.fn();
+const mockCreateSignedUrls = vi.fn();
 
 vi.mock('../lib/supabaseClient', () => ({
-  getSupabaseClient: () => ({ from: mockFrom, rpc: mockRpc })
+  getSupabaseClient: () => ({
+    from: mockFrom,
+    rpc: mockRpc,
+    storage: {
+      from: () => ({ upload: mockUpload, remove: mockRemove, createSignedUrls: mockCreateSignedUrls })
+    }
+  })
 }));
 
 vi.mock('../services/authService', () => ({
@@ -61,6 +70,9 @@ describe('messagingService', () => {
     vi.resetModules();
     mockFrom.mockReset();
     mockRpc.mockReset();
+    mockUpload.mockReset();
+    mockRemove.mockReset();
+    mockCreateSignedUrls.mockReset();
   });
 
   it('sendMessage(): validates non-empty body before ever calling Supabase', async () => {
@@ -95,7 +107,7 @@ describe('messagingService', () => {
     expect(res.status).toBe(403);
   });
 
-  it('sendMessage(): inserts the mapped row and updates conversation last-message state on success', async () => {
+  it('sendMessage(): inserts the mapped row on success (last-message/unread are maintained by a DB trigger)', async () => {
     const msgBuilder = chain({
       data: {
         id: 'msg-1',
@@ -110,17 +122,8 @@ describe('messagingService', () => {
       },
       error: null
     });
-    const convUpdateBuilder = chain({ data: null, error: null });
-    const participantUpdateBuilder = chain({ data: null, error: null });
     const convSelectBuilder = chain({ data: { title: 'Test Conversation' }, error: null });
-    let call = 0;
-    mockFrom.mockImplementation((table: string) => {
-      call++;
-      if (table === 'direct_messages') return msgBuilder;
-      if (table === 'conversations' && call === 2) return convUpdateBuilder;
-      if (table === 'conversation_participants') return participantUpdateBuilder;
-      return convSelectBuilder;
-    });
+    mockFrom.mockImplementation((table: string) => (table === 'direct_messages' ? msgBuilder : convSelectBuilder));
 
     const { messagingService } = await import('../services/messagingService');
     const res = await messagingService.sendMessage({
@@ -131,10 +134,82 @@ describe('messagingService', () => {
       body: 'Hello'
     });
 
+    expect(res.error).toBeNull();
     expect(res.data!.body).toBe('Hello');
-    expect(convUpdateBuilder.update).toHaveBeenCalledWith(
-      expect.objectContaining({ last_message: 'Hello', last_sender_id: 'user-1' })
-    );
+    expect(msgBuilder.insert).toHaveBeenCalledWith(expect.objectContaining({ conversation_id: 'conv-1', body: 'Hello', attachments: [] }));
+  });
+
+  it('sendMessage(): an attachment-only message (empty body) is allowed, uploads to Storage and stores the path', async () => {
+    const png = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0])], 'photo.png', { type: 'image/png' });
+    mockUpload.mockResolvedValue({ data: { path: 'x' }, error: null });
+    mockCreateSignedUrls.mockImplementation(async (paths: string[]) => ({
+      data: paths.map((path) => ({ path, signedUrl: `https://signed.example/${path}`, error: null })),
+      error: null
+    }));
+    const msgBuilder: any = chain({ data: null, error: null });
+    msgBuilder.insert = vi.fn((row: any) => {
+      msgBuilder.maybeSingle = vi.fn(() =>
+        Promise.resolve({
+          data: { ...row, is_read: false, read_at: null, created_at: new Date().toISOString() },
+          error: null
+        })
+      );
+      return msgBuilder;
+    });
+    mockFrom.mockImplementation((table: string) => (table === 'direct_messages' ? msgBuilder : chain({ data: { title: 'T' }, error: null })));
+
+    const { messagingService } = await import('../services/messagingService');
+    const res = await messagingService.sendMessage({
+      conversationId: 'conv-1',
+      senderId: 'user-1',
+      senderName: 'Alice',
+      recipientId: 'user-2',
+      body: '',
+      files: [png]
+    });
+
+    expect(res.error).toBeNull();
+    expect(mockUpload).toHaveBeenCalledTimes(1);
+    expect(mockUpload.mock.calls[0][0]).toMatch(/^conv-1\/msg-[^/]+\/att-.*photo\.png$/);
+    const att = res.data!.attachments![0];
+    expect(att.fileName).toBe('photo.png');
+    expect(att.path).toBe(mockUpload.mock.calls[0][0]);
+    expect(att.urlOrBase64).toBe(`https://signed.example/${att.path}`);
+  });
+
+  it('sendMessage(): rejects a file whose bytes do not match its extension and uploads nothing', async () => {
+    const fake = new File([new Uint8Array([0x4d, 0x5a, 0x90, 0x00])], 'evil.png', { type: 'image/png' });
+    const { messagingService } = await import('../services/messagingService');
+    const res = await messagingService.sendMessage({
+      conversationId: 'conv-1',
+      senderId: 'user-1',
+      senderName: 'Alice',
+      recipientId: 'user-2',
+      body: 'hi',
+      files: [fake]
+    });
+    expect(res.error?.message).toMatch(/do not match/i);
+    expect(mockUpload).not.toHaveBeenCalled();
+  });
+
+  it('sendMessage(): removes uploaded files when the message insert is denied', async () => {
+    const png = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0])], 'photo.png', { type: 'image/png' });
+    mockUpload.mockResolvedValue({ data: { path: 'x' }, error: null });
+    mockRemove.mockResolvedValue({ data: [], error: null });
+    mockFrom.mockReturnValue(chain({ data: null, error: { code: '42501', message: 'blocked' } }));
+
+    const { messagingService } = await import('../services/messagingService');
+    const res = await messagingService.sendMessage({
+      conversationId: 'conv-1',
+      senderId: 'user-1',
+      senderName: 'Alice',
+      recipientId: 'user-2',
+      body: '',
+      files: [png]
+    });
+
+    expect(res.status).toBe(403);
+    expect(mockRemove).toHaveBeenCalledWith([mockUpload.mock.calls[0][0]]);
   });
 
   it('startConversation(): calls the create_conversation_with_participants RPC, not a raw two-step insert', async () => {

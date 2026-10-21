@@ -49,6 +49,11 @@ import { fireAndForget } from '../lib/fireAndForget';
 import { trustSafetyService } from './trustSafetyService';
 import { ForbiddenError, UnauthorizedError, ValidationError } from '../core/errors/AppError';
 import { toDbError } from './dbErrors';
+import { validateUploadedFile, verifyFileSignature } from '../core/security/fileValidator';
+
+export const MESSAGE_ATTACHMENT_BUCKET = 'message-attachments';
+const MAX_ATTACHMENTS_PER_MESSAGE = 5;
+const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 interface ConversationRow {
   id: string;
@@ -164,6 +169,29 @@ function rowToMessage(row: MessageRow): DirectMessage {
   };
 }
 
+/** Signed URLs for every storage-backed attachment in one round-trip; legacy inline data URLs pass through. */
+async function resolveAttachmentUrls(messages: DirectMessage[]): Promise<DirectMessage[]> {
+  const paths = Array.from(
+    new Set(messages.flatMap((m) => (m.attachments || []).map((a) => a.path).filter((p): p is string => !!p)))
+  );
+  if (paths.length === 0) return messages;
+
+  const { data, error } = await client().storage.from(MESSAGE_ATTACHMENT_BUCKET).createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
+  if (error || !data) return messages; // attachments render as unavailable; the thread itself still loads
+  const urlByPath = new Map<string, string>();
+  data.forEach((d) => {
+    if (d.path && d.signedUrl) urlByPath.set(d.path, d.signedUrl);
+  });
+  return messages.map((m) => ({
+    ...m,
+    attachments: (m.attachments || []).map((a) => (a.path ? { ...a, urlOrBase64: urlByPath.get(a.path) || '' } : a))
+  }));
+}
+
+function safeObjectName(name: string): string {
+  return name.replace(/^.*[\\/]/, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-120) || 'file';
+}
+
 export const messagingService = {
   async getUserConversations(userId: string): Promise<ApiResponse<Conversation[]>> {
     return apiClient.execute(async () => {
@@ -203,7 +231,7 @@ export const messagingService = {
         .eq('conversation_id', conversationId)
         .order('created_at', { ascending: true });
       if (error) throw toDbError('messagingService', error);
-      return (data as MessageRow[]).map(rowToMessage);
+      return resolveAttachmentUrls((data as MessageRow[]).map(rowToMessage));
     });
   },
 
@@ -236,13 +264,14 @@ export const messagingService = {
           const newIds = data.participants.map((p) => p.userId);
           if (newIds.every((id) => existingIds.includes(id))) {
             if (data.initialMessage) {
-              await this.sendMessage({
+              const sent = await this.sendMessage({
                 conversationId: row.id,
                 senderId: data.senderUserId,
                 senderName: data.participants.find((p) => p.userId === data.senderUserId)?.name || '',
                 recipientId: data.participants.find((p) => p.userId !== data.senderUserId)?.userId || '',
                 body: data.initialMessage
               });
+              if (sent.error) throw new Error(sent.error.message);
             }
             return rowToConversation(row);
           }
@@ -264,7 +293,7 @@ export const messagingService = {
         const sender = data.participants.find((p) => p.userId === data.senderUserId);
         const recipient = data.participants.find((p) => p.userId !== data.senderUserId);
         if (sender && recipient) {
-          await this.sendMessage({
+          const sent = await this.sendMessage({
             conversationId: (created as ConversationRow).id,
             senderId: sender.userId,
             senderName: sender.name,
@@ -272,6 +301,7 @@ export const messagingService = {
             recipientId: recipient.userId,
             body: data.initialMessage
           });
+          if (sent.error) throw new Error(`Conversation created, but the first message failed: ${sent.error.message}`);
         }
       }
 
@@ -287,56 +317,102 @@ export const messagingService = {
     senderRole?: UserRole;
     recipientId: string;
     body: string;
+    /** Real files picked by the user; uploaded to private Storage and referenced by path. */
+    files?: File[];
+    /** Pre-built attachment metadata (e.g. legacy inline attachments). */
     attachments?: MessageAttachment[];
   }): Promise<ApiResponse<DirectMessage>> {
     return apiClient.execute(async () => {
-      if (!data.body?.trim()) throw new ValidationError('Message body cannot be empty.');
-
-      const id = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-      const { data: created, error } = await client()
-        .from('direct_messages')
-        .insert({
-          id,
-          conversation_id: data.conversationId,
-          sender_id: data.senderId,
-          recipient_id: data.recipientId,
-          body: data.body,
-          attachments: data.attachments || []
-        })
-        .select('*')
-        .maybeSingle();
-      // The blocking trigger and participant-membership RLS both raise
-      // 42501 here -- surfaced as ForbiddenError either way, no
-      // client-side re-check of either invariant.
-      if (error) translateError(error);
-
-      const now = new Date().toISOString();
-      await client()
-        .from('conversations')
-        .update({ last_message: data.body, last_message_at: now, last_sender_id: data.senderId })
-        .eq('id', data.conversationId);
-      await client()
-        .from('conversation_participants')
-        .update({ unread_count: 1 })
-        .eq('conversation_id', data.conversationId)
-        .eq('user_id', data.recipientId);
-
-      try {
-        const { data: conv } = await client().from('conversations').select('title').eq('id', data.conversationId).maybeSingle();
-        fireAndForget(
-          notificationService.notifyNewMessage({
-            recipientUserId: data.recipientId,
-            senderName: data.senderName,
-            conversationTitle: (conv as { title: string } | null)?.title || 'Platform Message',
-            conversationId: data.conversationId
-          }),
-          'notify new message'
-        );
-      } catch {
-        // Non-critical.
+      const body = (data.body || '').trim();
+      const files = data.files || [];
+      const extra = data.attachments || [];
+      if (!body && files.length === 0 && extra.length === 0) {
+        throw new ValidationError('Write a message or attach a file before sending.');
+      }
+      if (files.length + extra.length > MAX_ATTACHMENTS_PER_MESSAGE) {
+        throw new ValidationError(`You can attach up to ${MAX_ATTACHMENTS_PER_MESSAGE} files per message.`);
       }
 
-      return rowToMessage(created as MessageRow);
+      const id = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+      const uploadedPaths: string[] = [];
+      const attachments: MessageAttachment[] = [...extra];
+
+      try {
+        for (const file of files) {
+          const category = file.type.startsWith('image/') ? 'image' : 'document';
+          const validation = validateUploadedFile(file, category);
+          if (!validation.valid) throw new ValidationError(validation.error || 'Attachment validation failed.');
+          const ext = validation.cleanFileName.split('.').pop() || '';
+          const sigError = await verifyFileSignature(file, ext);
+          if (sigError) throw new ValidationError(`${validation.cleanFileName}: ${sigError}`);
+
+          const attId = `att-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+          const path = `${data.conversationId}/${id}/${attId}-${safeObjectName(validation.cleanFileName)}`;
+          const { error: uploadError } = await client()
+            .storage.from(MESSAGE_ATTACHMENT_BUCKET)
+            .upload(path, file, { contentType: validation.fileType, upsert: false, cacheControl: '3600' });
+          if (uploadError) {
+            if (/bucket not found/i.test(uploadError.message)) {
+              throw new Error('Attachment storage is not set up yet. Please contact support.');
+            }
+            throw new Error(`Could not upload ${validation.cleanFileName}: ${uploadError.message}`);
+          }
+          uploadedPaths.push(path);
+          attachments.push({
+            id: attId,
+            fileName: validation.cleanFileName,
+            fileType: validation.fileType,
+            fileSize: file.size,
+            path,
+            urlOrBase64: ''
+          });
+        }
+
+        const { data: created, error } = await client()
+          .from('direct_messages')
+          .insert({
+            id,
+            conversation_id: data.conversationId,
+            sender_id: data.senderId,
+            recipient_id: data.recipientId,
+            body,
+            attachments
+          })
+          .select('*')
+          .maybeSingle();
+        // The blocking trigger and participant-membership RLS both raise
+        // 42501 here -- surfaced as ForbiddenError either way, no
+        // client-side re-check of either invariant.
+        if (error) translateError(error);
+        if (!created) throw new Error('The message could not be saved. Please try again.');
+
+        // last_message / unread_count are maintained atomically by the
+        // trg_on_direct_message_inserted trigger (RLS stops the sender from
+        // updating the recipient's participant row from the client).
+        try {
+          const { data: conv } = await client().from('conversations').select('title').eq('id', data.conversationId).maybeSingle();
+          fireAndForget(
+            notificationService.notifyNewMessage({
+              recipientUserId: data.recipientId,
+              senderName: data.senderName,
+              conversationTitle: (conv as { title: string } | null)?.title || 'Platform Message',
+              conversationId: data.conversationId
+            }),
+            'notify new message'
+          );
+        } catch {
+          // Non-critical.
+        }
+
+        const [message] = await resolveAttachmentUrls([rowToMessage(created as MessageRow)]);
+        return message;
+      } catch (err) {
+        // Don't leave orphaned files behind when the message itself failed.
+        if (uploadedPaths.length > 0) {
+          await client().storage.from(MESSAGE_ATTACHMENT_BUCKET).remove(uploadedPaths).catch(() => undefined);
+        }
+        throw err;
+      }
     });
   },
 

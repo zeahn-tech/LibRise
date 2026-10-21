@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { validateUploadedFile } from '../../core/security/fileValidator';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
+import { validateUploadedFile, verifyFileSignature } from '../../core/security/fileValidator';
 import {
   MessageSquare,
   Send,
@@ -11,7 +11,7 @@ import {
   Filter,
   X,
   FileText,
-  Image as ImageIcon,
+  Loader2,
   UserCheck,
   AlertCircle,
   Building,
@@ -22,6 +22,17 @@ import {
 import { Conversation, DirectMessage, MessageAttachment, ConversationCategory, MessageReport, UserRole } from '../../types';
 import { messagingService } from '../../services/messagingService';
 import { authService } from '../../services/authService';
+import { AttachmentLightbox, AttachmentTile, formatFileSize, isImageAttachment } from './AttachmentViews';
+
+interface PendingFile {
+  id: string;
+  file: File;
+  cleanName: string;
+  previewUrl?: string;
+}
+
+const MAX_FILES_PER_MESSAGE = 5;
+const MAX_MESSAGE_LENGTH = 5000;
 
 interface MessagingCenterProps {
   initialConversationId?: string;
@@ -32,7 +43,13 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
   const [activeConvId, setActiveConvId] = useState<string | null>(initialConversationId || null);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [messageInput, setMessageInput] = useState('');
-  const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const [sending, setSending] = useState(false);
+  const [composerError, setComposerError] = useState('');
+  const [previewAtt, setPreviewAtt] = useState<MessageAttachment | null>(null);
+  const sendingRef = useRef(false);
+  const pendingFilesRef = useRef<PendingFile[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -44,6 +61,7 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
   const [newMsgTitle, setNewMsgTitle] = useState('');
   const [newMsgBody, setNewMsgBody] = useState('');
   const [newMsgError, setNewMsgError] = useState('');
+  const [startingConversation, setStartingConversation] = useState(false);
 
   // Report Modal
   const [showReportModal, setShowReportModal] = useState(false);
@@ -71,6 +89,29 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Keep the open thread fresh (new replies, refreshed signed attachment URLs) without a full reload.
+  useEffect(() => {
+    if (!activeConvId || !currentUser) return;
+    const convId = activeConvId;
+    const userId = currentUser.id;
+    const timer = window.setInterval(async () => {
+      if (document.visibilityState !== 'visible' || sendingRef.current) return;
+      const res = await messagingService.getMessages(convId, userId);
+      if (!res.data) return;
+      const fresh = res.data;
+      setMessages((prev) => (prev.length === fresh.length && prev[prev.length - 1]?.id === fresh[fresh.length - 1]?.id && prev.every((m, i) => m.isRead === fresh[i].isRead) ? prev : fresh));
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [activeConvId, currentUser?.id]);
+
+  // Release image preview object URLs when the component goes away.
+  useEffect(() => {
+    pendingFilesRef.current = pendingFiles;
+  }, [pendingFiles]);
+  useEffect(() => {
+    return () => pendingFilesRef.current.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
+  }, []);
+
   const loadConversations = async () => {
     if (!currentUser) return;
     setLoading(true);
@@ -95,17 +136,38 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
     }
   };
 
+  const clearPendingFiles = useCallback(() => {
+    setPendingFiles((prev) => {
+      prev.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
+      return [];
+    });
+  }, []);
+
+  const removePendingFile = (id: string) => {
+    setPendingFiles((prev) => {
+      prev.filter((f) => f.id === id).forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
+      return prev.filter((f) => f.id !== id);
+    });
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!messageInput.trim() && attachments.length === 0) return;
+    // Hard guard against double-submits (double click, Enter + click, slow network).
+    if (sendingRef.current) return;
+    const text = messageInput.trim();
+    if (!text && pendingFiles.length === 0) return;
     if (!activeConvId || !currentUser) return;
 
-    const activeConv = conversations.find((c) => c.id === activeConvId);
-    if (!activeConv) return;
+    const conv = conversations.find((c) => c.id === activeConvId);
+    const recipient = conv?.participants.find((p) => p.userId !== currentUser.id);
+    if (!conv || !recipient) {
+      setComposerError('This conversation is no longer available. Please reopen it from the list.');
+      return;
+    }
 
-    const recipient = activeConv.participants.find((p) => p.userId !== currentUser.id);
-    if (!recipient) return;
-
+    sendingRef.current = true;
+    setSending(true);
+    setComposerError('');
     try {
       const res = await messagingService.sendMessage({
         conversationId: activeConvId,
@@ -113,47 +175,68 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
         senderName: currentUser.fullName,
         senderRole: currentUser.primaryRole as UserRole,
         recipientId: recipient.userId,
-        body: messageInput.trim(),
-        attachments
+        body: text,
+        files: pendingFiles.map((f) => f.file)
       });
 
-      if (res.data) {
-        setMessageInput('');
-        setAttachments([]);
-        await loadMessages(activeConvId);
-        await loadConversations();
+      if (res.error || !res.data) {
+        // Keep the draft and files so nothing is lost; tell the user exactly what happened.
+        setComposerError(res.error?.message || 'Message could not be sent. Please try again.');
+        return;
       }
-    } catch (error: any) {
-      alert(error.message || 'Failed to send message.');
+
+      const sent = res.data;
+      setMessages((prev) => (prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]));
+      setMessageInput('');
+      clearPendingFiles();
+      const updated = await messagingService.getUserConversations(currentUser.id);
+      if (updated.data) setConversations(updated.data);
+    } catch (error: unknown) {
+      setComposerError(error instanceof Error ? error.message : 'Failed to send message.');
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const files = input.files ? Array.from(input.files) : [];
+    // Reset so picking the same file again still fires onChange.
+    input.value = '';
+    if (files.length === 0) return;
 
-    Array.from(files).forEach((file) => {
+    setComposerError('');
+    const accepted: PendingFile[] = [];
+    const problems: string[] = [];
+
+    for (const file of files) {
+      if (pendingFiles.length + accepted.length >= MAX_FILES_PER_MESSAGE) {
+        problems.push(`You can attach up to ${MAX_FILES_PER_MESSAGE} files per message.`);
+        break;
+      }
       const category = file.type.startsWith('image/') ? 'image' : 'document';
       const validation = validateUploadedFile(file, category);
       if (!validation.valid) {
-        alert(validation.error || 'Attachment validation failed.');
-        return;
+        problems.push(`${file.name}: ${validation.error || 'Attachment validation failed.'}`);
+        continue;
       }
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        if (evt.target?.result) {
-          const newAtt: MessageAttachment = {
-            id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-            fileName: validation.cleanFileName,
-            fileType: validation.fileType,
-            fileSize: file.size,
-            urlOrBase64: evt.target.result as string
-          };
-          setAttachments((prev) => [...prev, newAtt]);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+      const ext = validation.cleanFileName.split('.').pop() || '';
+      const signatureError = await verifyFileSignature(file, ext);
+      if (signatureError) {
+        problems.push(`${file.name}: ${signatureError}`);
+        continue;
+      }
+      accepted.push({
+        id: `pf-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        file,
+        cleanName: validation.cleanFileName,
+        previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined
+      });
+    }
+
+    if (accepted.length > 0) setPendingFiles((prev) => [...prev, ...accepted]);
+    if (problems.length > 0) setComposerError(problems.join(' '));
   };
 
   const handleBlockUser = async () => {
@@ -202,11 +285,18 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
 
   const handleStartNewConversation = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (startingConversation) return;
     setNewMsgError('');
     if (!currentUser) return;
+    setStartingConversation(true);
+    try {
 
     const targetUserRes = await messagingService.findUserByEmail(newMsgRecipientEmail.trim());
     const targetUser = targetUserRes.data;
+    if (targetUserRes.error) {
+      setNewMsgError(targetUserRes.error.message);
+      return;
+    }
     if (!targetUser) {
       setNewMsgError('User not found. Please check the email address.');
       return;
@@ -240,7 +330,9 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
         senderUserId: currentUser.id
       });
 
-      if (res.data) {
+      if (res.error || !res.data) {
+        setNewMsgError(res.error?.message || 'Failed to start conversation.');
+      } else {
         setShowNewMsgModal(false);
         setNewMsgRecipientEmail('');
         setNewMsgTitle('');
@@ -250,6 +342,9 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
       }
     } catch (err: any) {
       setNewMsgError(err.message || 'Failed to start conversation.');
+    }
+    } finally {
+      setStartingConversation(false);
     }
   };
 
@@ -355,7 +450,14 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
                 return (
                   <button
                     key={conv.id}
-                    onClick={() => setActiveConvId(conv.id)}
+                    onClick={() => {
+                      if (conv.id !== activeConvId) {
+                        setMessages([]);
+                        setComposerError('');
+                        clearPendingFiles();
+                      }
+                      setActiveConvId(conv.id);
+                    }}
                     className={`w-full p-4 text-left transition-colors flex items-start gap-3 cursor-pointer ${
                       isSelected ? 'bg-white font-medium border-l-4 border-l-[#4F772D]' : 'hover:bg-white/60'
                     }`}
@@ -472,7 +574,7 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
                       className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
                     >
                       <div className="text-[10px] text-stone-400 mb-1 px-1">
-                        {msg.senderName} • {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {isMine ? 'You' : activeConv.participants.find((p) => p.userId === msg.senderId)?.name || msg.senderName || 'User'} • {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
 
                       <div
@@ -482,34 +584,13 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
                             : 'bg-white text-[#283618] border border-[#E8E4D9] rounded-bl-none'
                         }`}
                       >
-                        <p className="whitespace-pre-wrap leading-relaxed">{msg.body}</p>
+                        {msg.body && <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.body}</p>}
 
                         {/* Attachments */}
                         {msg.attachments && msg.attachments.length > 0 && (
-                          <div className="space-y-1.5 pt-2 border-t border-white/20">
+                          <div className={`space-y-2 ${msg.body ? 'pt-2 border-t border-white/20' : ''}`}>
                             {msg.attachments.map((att) => (
-                              <a
-                                key={att.id}
-                                href={att.urlOrBase64}
-                                download={att.fileName}
-                                target="_blank"
-                                rel="noreferrer"
-                                className={`flex items-center gap-2 p-2 rounded-xl text-[11px] font-semibold transition-colors ${
-                                  isMine
-                                    ? 'bg-white/10 hover:bg-white/20 text-white'
-                                    : 'bg-[#F9F8F6] hover:bg-[#ECF3E9] text-[#283618] border border-[#E8E4D9]'
-                                }`}
-                              >
-                                {att.fileType.includes('image') ? (
-                                  <ImageIcon className="w-3.5 h-3.5" />
-                                ) : (
-                                  <FileText className="w-3.5 h-3.5" />
-                                )}
-                                <span className="truncate flex-1">{att.fileName}</span>
-                                <span className="text-[9px] opacity-70">
-                                  ({Math.round(att.fileSize / 1024)} KB)
-                                </span>
-                              </a>
+                              <AttachmentTile key={att.id} attachment={att} isMine={isMine} onPreview={setPreviewAtt} />
                             ))}
                           </div>
                         )}
@@ -530,52 +611,96 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
               {/* Message Composer */}
               {!activeConv.isBlocked && (
                 <form onSubmit={handleSendMessage} className="p-3 border-t border-[#E8E4D9] bg-white space-y-2">
-                  {attachments.length > 0 && (
+                  {composerError && (
+                    <div role="alert" className="p-2.5 bg-red-50 text-red-800 text-xs rounded-xl font-medium flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-px" />
+                      <span className="flex-1">{composerError}</span>
+                      <button type="button" onClick={() => setComposerError('')} aria-label="Dismiss error" className="text-red-400 hover:text-red-700">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {pendingFiles.length > 0 && (
                     <div className="flex gap-2 overflow-x-auto py-1">
-                      {attachments.map((att) => (
-                        <div
-                          key={att.id}
-                          className="px-2.5 py-1 bg-[#ECF3E9] text-[#283618] rounded-lg text-xs flex items-center gap-1 border border-[#A3B18A]/30"
-                        >
-                          <span className="truncate max-w-[120px] font-semibold">{att.fileName}</span>
-                          <button
-                            type="button"
-                            onClick={() => setAttachments(attachments.filter((a) => a.id !== att.id))}
-                            className="text-stone-400 hover:text-red-600 ml-1"
+                      {pendingFiles.map((pf) =>
+                        pf.previewUrl ? (
+                          <div key={pf.id} className="relative shrink-0">
+                            <img src={pf.previewUrl} alt={pf.cleanName} className="w-16 h-16 rounded-xl object-cover border border-[#A3B18A]/40" />
+                            <button
+                              type="button"
+                              onClick={() => removePendingFile(pf.id)}
+                              disabled={sending}
+                              aria-label={`Remove ${pf.cleanName}`}
+                              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-stone-700 text-white flex items-center justify-center hover:bg-red-600 disabled:opacity-40"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div
+                            key={pf.id}
+                            className="px-2.5 py-2 bg-[#ECF3E9] text-[#283618] rounded-xl text-xs flex items-center gap-2 border border-[#A3B18A]/30 shrink-0"
                           >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
+                            <FileText className="w-4 h-4 text-[#4F772D]" />
+                            <div className="min-w-0">
+                              <p className="truncate max-w-[140px] font-semibold">{pf.cleanName}</p>
+                              <p className="text-[10px] text-stone-500">{formatFileSize(pf.file.size)}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removePendingFile(pf.id)}
+                              disabled={sending}
+                              aria-label={`Remove ${pf.cleanName}`}
+                              className="text-stone-400 hover:text-red-600 disabled:opacity-40"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )
+                      )}
                     </div>
                   )}
 
                   <div className="flex items-center gap-2">
-                    <label className="p-2 text-stone-400 hover:text-[#283618] hover:bg-[#F9F8F6] rounded-xl cursor-pointer transition-colors" title="Attach PDF or File">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={sending || pendingFiles.length >= MAX_FILES_PER_MESSAGE}
+                      className="p-2 min-w-11 min-h-11 flex items-center justify-center text-stone-400 hover:text-[#283618] hover:bg-[#F9F8F6] rounded-xl cursor-pointer transition-colors disabled:opacity-40"
+                      title="Attach image, PDF or Word file"
+                      aria-label="Attach file"
+                    >
                       <Paperclip className="w-4 h-4" />
-                      <input
-                        type="file"
-                        multiple
-                        accept="image/*,application/pdf,.doc,.docx"
-                        onChange={handleFileUpload}
-                        className="hidden"
-                      />
-                    </label>
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.doc,.docx"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      tabIndex={-1}
+                    />
 
                     <input
                       type="text"
                       value={messageInput}
                       onChange={(e) => setMessageInput(e.target.value)}
-                      placeholder="Type a message or candidate response..."
-                      className="flex-1 text-xs p-3 bg-[#F9F8F6] rounded-xl border border-[#E8E4D9] outline-none"
+                      maxLength={MAX_MESSAGE_LENGTH}
+                      readOnly={sending}
+                      placeholder="Type a message…"
+                      aria-label="Message"
+                      className="flex-1 text-base sm:text-xs p-3 bg-[#F9F8F6] rounded-xl border border-[#E8E4D9] outline-none focus:border-[#A3B18A]"
                     />
 
                     <button
                       type="submit"
-                      disabled={!messageInput.trim() && attachments.length === 0}
-                      className="p-3 bg-[#283618] hover:bg-[#132A13] disabled:opacity-40 text-white rounded-xl cursor-pointer transition-colors"
+                      disabled={sending || (!messageInput.trim() && pendingFiles.length === 0)}
+                      aria-label={sending ? 'Sending message' : 'Send message'}
+                      className="p-3 min-w-11 min-h-11 flex items-center justify-center bg-[#283618] hover:bg-[#132A13] disabled:opacity-40 text-white rounded-xl cursor-pointer transition-colors"
                     >
-                      <Send className="w-4 h-4" />
+                      {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                     </button>
                   </div>
                 </form>
@@ -589,6 +714,10 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
           )}
         </div>
       </div>
+
+      {previewAtt && isImageAttachment(previewAtt) && (
+        <AttachmentLightbox attachment={previewAtt} onClose={() => setPreviewAtt(null)} />
+      )}
 
       {/* Modal: New Message Inquiry */}
       {showNewMsgModal && (
@@ -669,9 +798,10 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#283618] text-white rounded-xl text-xs font-bold hover:bg-[#132A13]"
+                  disabled={startingConversation}
+                  className="px-5 py-2 bg-[#283618] text-white rounded-xl text-xs font-bold hover:bg-[#132A13] disabled:opacity-50"
                 >
-                  Start Conversation
+                  {startingConversation ? 'Starting…' : 'Start Conversation'}
                 </button>
               </div>
             </form>

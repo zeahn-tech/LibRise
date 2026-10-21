@@ -176,3 +176,27 @@ export function assertValidFile(
   }
   return result;
 }
+
+/**
+ * Verifies the file's leading bytes match the type it claims to be, so a renamed or mislabelled file
+ * (e.g. an executable called photo.png) is rejected. Returns an error string, or null when OK.
+ */
+export async function verifyFileSignature(file: Blob, ext: string): Promise<string | null> {
+  const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const startsWith = (...bytes: number[]) => bytes.every((b, i) => head[i] === b);
+  const ascii = (from: number, text: string) => [...text].every((c, i) => head[from + i] === c.charCodeAt(0));
+
+  let ok = true;
+  switch (ext.toLowerCase()) {
+    case 'pdf': ok = ascii(0, '%PDF'); break;
+    case 'png': ok = startsWith(0x89, 0x50, 0x4e, 0x47); break;
+    case 'jpg':
+    case 'jpeg': ok = startsWith(0xff, 0xd8, 0xff); break;
+    case 'gif': ok = ascii(0, 'GIF8'); break;
+    case 'webp': ok = ascii(0, 'RIFF') && ascii(8, 'WEBP'); break;
+    case 'docx': ok = startsWith(0x50, 0x4b); break; // zip container
+    case 'doc': ok = startsWith(0xd0, 0xcf, 0x11, 0xe0); break; // OLE2
+    default: ok = true;
+  }
+  return ok ? null : 'The file contents do not match its extension. Please attach a valid file.';
+}
