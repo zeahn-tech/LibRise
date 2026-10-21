@@ -399,7 +399,7 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
       {/* Main Messaging Layout */}
       <div className="bg-white rounded-[32px] border border-[#E8E4D9] overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[600px]">
         {/* Left Sidebar: Conversation List */}
-        <div className="md:col-span-4 border-r border-[#E8E4D9] flex flex-col bg-[#F9F8F6]">
+        <div className="md:col-span-4 min-w-0 border-r border-[#E8E4D9] flex flex-col bg-[#F9F8F6]">
           {/* Search & Category Filter */}
           <div className="p-4 border-b border-[#E8E4D9] space-y-3">
             <div className="relative">
@@ -499,7 +499,7 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
         </div>
 
         {/* Right Pane: Active Thread */}
-        <div className="md:col-span-8 flex flex-col h-full bg-white">
+        <div className="md:col-span-8 min-w-0 flex flex-col h-full bg-white">
           {activeConv ? (
             <>
               {/* Thread Header */}
@@ -610,7 +610,7 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
 
               {/* Message Composer */}
               {!activeConv.isBlocked && (
-                <form onSubmit={handleSendMessage} className="p-3 border-t border-[#E8E4D9] bg-white space-y-2">
+                <form onSubmit={handleSendMessage} className="p-3 border-t border-[#E8E4D9] bg-white space-y-2 min-w-0 w-full">
                   {composerError && (
                     <div role="alert" className="p-2.5 bg-red-50 text-red-800 text-xs rounded-xl font-medium flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-px" />
@@ -662,12 +662,12 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full min-w-0">
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={sending || pendingFiles.length >= MAX_FILES_PER_MESSAGE}
-                      className="p-2 min-w-11 min-h-11 flex items-center justify-center text-stone-400 hover:text-[#283618] hover:bg-[#F9F8F6] rounded-xl cursor-pointer transition-colors disabled:opacity-40"
+                      className="shrink-0 p-2 min-w-11 min-h-11 flex items-center justify-center text-stone-400 hover:text-[#283618] hover:bg-[#F9F8F6] rounded-xl cursor-pointer transition-colors disabled:opacity-40"
                       title="Attach image, PDF or Word file"
                       aria-label="Attach file"
                     >
@@ -691,16 +691,17 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
                       readOnly={sending}
                       placeholder="Type a message…"
                       aria-label="Message"
-                      className="flex-1 text-base sm:text-xs p-3 bg-[#F9F8F6] rounded-xl border border-[#E8E4D9] outline-none focus:border-[#A3B18A]"
+                      className="flex-1 min-w-0 w-full text-base sm:text-sm p-3 bg-[#F9F8F6] rounded-xl border border-[#E8E4D9] outline-none focus:border-[#A3B18A]"
                     />
 
                     <button
                       type="submit"
                       disabled={sending || (!messageInput.trim() && pendingFiles.length === 0)}
                       aria-label={sending ? 'Sending message' : 'Send message'}
-                      className="p-3 min-w-11 min-h-11 flex items-center justify-center bg-[#283618] hover:bg-[#132A13] disabled:opacity-40 text-white rounded-xl cursor-pointer transition-colors"
+                      className="shrink-0 min-w-12 min-h-12 px-3 flex items-center justify-center gap-1.5 bg-[#4F772D] hover:bg-[#283618] disabled:bg-stone-300 disabled:text-stone-500 text-white text-sm font-bold rounded-xl shadow-sm cursor-pointer transition-colors"
                     >
-                      {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                      {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                      <span className="hidden sm:inline">{sending ? 'Sending' : 'Send'}</span>
                     </button>
                   </div>
                 </form>
