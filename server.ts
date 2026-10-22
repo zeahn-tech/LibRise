@@ -107,7 +107,12 @@ const authenticateSession = verifySupabaseSession;
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  // Hosts such as Render, Railway and Cloud Run tell the app which port to listen on via PORT.
+  const PORT = Number(process.env.PORT) || 3000;
+
+  // Behind a hosting proxy every request would otherwise appear to come from the proxy's IP, so the IP rate limit
+  // would be shared by ALL users. Trust the platform's proxy hop(s) so req.ip is the real client address.
+  app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1));
 
   // 1. Disable identification headers
   app.disable('x-powered-by');
