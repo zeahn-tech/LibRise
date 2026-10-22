@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { platformPulseService, PlatformPulse } from '../services/platformPulseService';
 import { useAuth } from '../context/AuthContext';
 import { getFeatureAccess } from '../core/auth/featureAccess';
 import { ShieldCheck, ArrowRight, Sparkles, Building, Briefcase, FileCheck, Check } from 'lucide-react';
@@ -9,20 +10,44 @@ interface RightSidebarProps {
   /** Opens the AI Studio tab (candidate-side tools). */
   onOpenAiStudio?: () => void;
   onOpenBilling?: () => void;
-  activeCountiesCount?: number;
-  openTendersCount?: number;
 }
+
+const TOTAL_COUNTIES = 15; // Liberia has 15 counties
+const REFRESH_MS = 5 * 60 * 1000;
+
+const formatCount = (n: number) => n.toLocaleString('en-US');
+const formatUsd = (n: number) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(n);
+const typeLabel = (t: string) => t.replace(/_/g, ' ');
 
 export const RightSidebar: React.FC<RightSidebarProps> = ({
   onOpenVerification,
   onOpenAiCopilot,
   onOpenAiStudio,
-  onOpenBilling,
-  activeCountiesCount = 15,
-  openTendersCount = 84
+  onOpenBilling
 }) => {
   const { authContext } = useAuth();
   const access = getFeatureAccess(authContext);
+
+  // Live figures from the database; shows "—" (never invented numbers) while loading or if the request fails.
+  const [pulse, setPulse] = useState<PlatformPulse | null>(null);
+  const [pulseError, setPulseError] = useState(false);
+  const loadPulse = useCallback(async () => {
+    try {
+      setPulse(await platformPulseService.getPulse());
+      setPulseError(false);
+    } catch {
+      setPulseError(true);
+    }
+  }, []);
+  useEffect(() => {
+    loadPulse();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') loadPulse();
+    }, REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [loadPulse]);
+  const dash = '—';
   const showVerificationCard =
     access.tabs.verification.allowed && (access.isEmployer || access.canListBusiness || access.tabs.admin.allowed);
 
@@ -85,38 +110,47 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="bg-[#F9F8F4] p-3.5 rounded-2xl border border-[#E8E4D9]">
-            <div className="text-xl font-bold text-[#283618]">1,240+</div>
+            <div className="text-xl font-bold text-[#283618]">{pulse ? formatCount(pulse.verifiedCandidates) : dash}</div>
             <div className="text-[9px] uppercase font-bold text-[#A3B18A] tracking-wider mt-0.5">
               Verified Candidates
             </div>
           </div>
           <div className="bg-[#F9F8F4] p-3.5 rounded-2xl border border-[#E8E4D9]">
-            <div className="text-xl font-bold text-[#283618]">{openTendersCount}</div>
+            <div className="text-xl font-bold text-[#283618]">{pulse ? formatCount(pulse.openTenders) : dash}</div>
             <div className="text-[9px] uppercase font-bold text-[#A3B18A] tracking-wider mt-0.5">
               Open Tenders & RFPs
             </div>
           </div>
           <div className="bg-[#F9F8F4] p-3.5 rounded-2xl border border-[#E8E4D9]">
-            <div className="text-xl font-bold text-[#283618]">$4.2M</div>
+            <div className="text-xl font-bold text-[#283618]">{pulse ? formatUsd(pulse.maAssetValueUsd) : dash}</div>
             <div className="text-[9px] uppercase font-bold text-[#A3B18A] tracking-wider mt-0.5">
               M&A Asset Value
             </div>
           </div>
           <div className="bg-[#F9F8F4] p-3.5 rounded-2xl border border-[#E8E4D9]">
-            <div className="text-xl font-bold text-[#283618]">{activeCountiesCount} / 15</div>
+            <div className="text-xl font-bold text-[#283618]">{pulse ? pulse.countiesActive : dash} / {TOTAL_COUNTIES}</div>
             <div className="text-[9px] uppercase font-bold text-[#A3B18A] tracking-wider mt-0.5">
               Counties Active
             </div>
           </div>
         </div>
 
-        {/* Live notification ticker in Natural Tones cream/ochre */}
-        <div className="p-3.5 bg-[#FEFAE0] rounded-2xl flex items-center gap-3 border border-[#E8E4D9]/60">
-          <div className="w-2.5 h-2.5 bg-[#BC6C25] rounded-full animate-pulse shrink-0"></div>
-          <span className="text-xs text-[#606C38] font-medium leading-tight">
-            Live: New MPW road maintenance contract published in Nimba County
-          </span>
-        </div>
+        {/* Live ticker: newest live opportunity from the database */}
+        {pulseError && (
+          <div role="status" className="p-3.5 bg-[#FEFAE0] rounded-2xl flex items-center justify-between gap-3 border border-[#E8E4D9]/60">
+            <span className="text-xs text-[#606C38] font-medium leading-tight">Live figures are unavailable right now.</span>
+            <button onClick={loadPulse} className="text-xs font-bold text-[#BC6C25] hover:text-[#283618] px-2 py-1 rounded-lg">Retry</button>
+          </div>
+        )}
+        {!pulseError && pulse?.latestOpportunity && (
+          <div className="p-3.5 bg-[#FEFAE0] rounded-2xl flex items-center gap-3 border border-[#E8E4D9]/60">
+            <div className="w-2.5 h-2.5 bg-[#BC6C25] rounded-full animate-pulse shrink-0"></div>
+            <span className="text-xs text-[#606C38] font-medium leading-tight min-w-0 break-words">
+              Live: New {typeLabel(pulse.latestOpportunity.type)} “{pulse.latestOpportunity.title}”
+              {pulse.latestOpportunity.organization ? ` by ${pulse.latestOpportunity.organization}` : ''} published in {pulse.latestOpportunity.county} County
+            </span>
+          </div>
+        )}
 
         {/* AI Copilot Teaser -- signed-in users; employers open the copilot, candidates the AI Studio */}
         {access.tabs['ai-studio'].allowed && (

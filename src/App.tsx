@@ -635,7 +635,6 @@ function AppContent() {
                 onOpenAiCopilot={() => setIsAiModalOpen(true)}
                 onOpenAiStudio={() => handleTabChange('ai-studio')}
                 onOpenBilling={() => handleTabChange('billing')}
-                openTendersCount={opportunities.filter((o) => o.type === 'tender' && o.status === 'published').length}
               />
             </div>
           </div>
