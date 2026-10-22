@@ -27,6 +27,15 @@ import { envConfig } from '../../config/env';
 // deployed backend's /api URL when the frontend is hosted separately (e.g. GitHub Pages).
 const API = envConfig.apiBaseUrl.replace(/\/+$/, '');
 
+/** The server refused because the organization is not on a plan that includes this AI tool. Not a failure to work
+ *  around: the UI shows the message instead of silently substituting the offline engine. */
+export class AiPlanRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AiPlanRequiredError';
+  }
+}
+
 const HEALTH_TTL_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 45_000;
 
@@ -75,6 +84,7 @@ export class GeminiAIProvider implements IAIProvider {
         } catch {
           /* non-JSON error body */
         }
+        if (res.status === 402) throw new AiPlanRequiredError(detail || 'This AI tool is part of the Professional plan.');
         throw new Error(`${label} failed (${res.status})${detail ? `: ${detail}` : ''}`);
       }
       return (await res.json()) as T;

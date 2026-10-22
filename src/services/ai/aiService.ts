@@ -20,7 +20,7 @@ import {
   ScamCheckInput,
   ScamCheckResult
 } from './aiTypes';
-import { GeminiAIProvider } from './geminiAIProvider';
+import { GeminiAIProvider, AiPlanRequiredError } from './geminiAIProvider';
 import { FallbackAIProvider } from './fallbackAIProvider';
 import { sanitizeCandidateProfileForAI } from './aiGuardrails';
 
@@ -112,6 +112,7 @@ class AIServiceFacade {
         return result;
       }
     } catch (err) {
+      if (err instanceof AiPlanRequiredError) throw err;
       console.warn('Gemini AI failed, using Heuristic Fallback for candidate match:', err);
     }
 
@@ -152,6 +153,7 @@ class AIServiceFacade {
         return result;
       }
     } catch (err) {
+      if (err instanceof AiPlanRequiredError) throw err;
       console.warn('Gemini AI failed, using Fallback Job Assistant:', err);
     }
 
@@ -192,6 +194,7 @@ class AIServiceFacade {
         return result;
       }
     } catch (err) {
+      if (err instanceof AiPlanRequiredError) throw err;
       console.warn('Gemini AI failed, using Heuristic Fallback for scam scan:', err);
     }
 

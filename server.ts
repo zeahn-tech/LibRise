@@ -24,6 +24,8 @@ import {
   validateSemanticSearchBody,
   validateScamCheckBody
 } from './server/aiHelpers.js';
+import { checkAiAccess } from './server/aiAccess.js';
+import { readAuthEnv } from './src/server/authMiddleware.js';
 
 dotenv.config();
 
@@ -127,6 +129,33 @@ async function startServer() {
     message: { error: 'Too many requests from this IP. Please try again after 15 minutes.' }
   });
   app.use('/api/', apiLimiter);
+
+  // Pro-plan gate for the employer AI tools, decided by the database (my_ai_access) with the caller's own token.
+  // Demo sessions (explicit VITE_ENABLE_DEMO_MODE only) have no real account and are allowed through.
+  const requireAiPlan = async (req: any, res: any, next: any) => {
+    if (req.isDemoSession) return next();
+    const env = readAuthEnv();
+    if (!env.supabaseUrl || !env.supabaseAnonKey) {
+      return res.status(503).json({ error: 'The plan check is not configured on this server.' });
+    }
+    const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    const decision = await checkAiAccess(
+      {
+        callMyAiAccess: async (t) => {
+          const caller = createClient(env.supabaseUrl!, env.supabaseAnonKey!, {
+            auth: { persistSession: false, autoRefreshToken: false },
+            global: { headers: { Authorization: `Bearer ${t}` } }
+          });
+          const { data, error } = await caller.rpc('my_ai_access');
+          return { data, error: error ? { message: error.message } : null };
+        }
+      },
+      req.user?.id,
+      token
+    );
+    if (!decision.allowed) return res.status(decision.status ?? 503).json({ error: decision.error });
+    next();
+  };
 
   // Per-account cap on Gemini calls (cost / quota protection). Keyed by the verified user id, so one signed-in
   // account cannot burn the shared API quota even from many IPs. Runs after authentication.
@@ -300,7 +329,7 @@ Return a top-${limit} list ranked by match score (0-100). Explain the match reas
   });
 
   // 2. AI Candidate-Job Match Endpoint
-  app.post('/api/ai/match-candidate', authenticateSession, aiUserLimiter, async (req, res) => {
+  app.post('/api/ai/match-candidate', authenticateSession, requireAiPlan, aiUserLimiter, async (req, res) => {
     const ai = getGeminiClient();
     if (!ai) {
       return res.status(503).json({ error: 'Gemini API Key not configured on server' });
@@ -455,7 +484,7 @@ ${cvText}`;
 
 
   // 6. AI Scam / Fraud Shield Endpoint: reads vacancy or listing text for advance-fee and impersonation patterns.
-  app.post('/api/ai/scam-check', authenticateSession, aiUserLimiter, async (req, res) => {
+  app.post('/api/ai/scam-check', authenticateSession, requireAiPlan, aiUserLimiter, async (req, res) => {
     const ai = getGeminiClient();
     if (!ai) {
       return res.status(503).json({ error: 'Gemini API Key not configured on server' });
@@ -564,7 +593,7 @@ Return a riskLevel (low, medium or high), a riskScore (0 = clearly ordinary, 100
   });
 
   // 4. AI Job Description Assistant Endpoint
-  app.post('/api/ai/job-assistant', authenticateSession, aiUserLimiter, async (req, res) => {
+  app.post('/api/ai/job-assistant', authenticateSession, requireAiPlan, aiUserLimiter, async (req, res) => {
     const ai = getGeminiClient();
     if (!ai) {
       return res.status(503).json({ error: 'Gemini API Key not configured on server' });

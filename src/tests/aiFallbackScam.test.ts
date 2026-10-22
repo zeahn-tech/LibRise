@@ -19,3 +19,21 @@ describe('FallbackAIProvider.scanForScams', () => {
     expect(res.riskScore).toBeLessThan(20);
   });
 });
+
+import { vi, beforeEach } from 'vitest';
+
+describe('aiService: plan refusals are surfaced, not bypassed', () => {
+  beforeEach(() => vi.resetModules());
+
+  it('a 402 from the server reaches the caller instead of silently using the offline engine', async () => {
+    vi.doMock('../services/authService', () => ({ authService: { getSession: () => ({ token: 't' }) } }));
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).endsWith('/ai/health')) return { ok: true, json: async () => ({ configured: true, model: 'm' }) };
+      return { ok: false, status: 402, json: async () => ({ error: 'Pro plan required' }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { aiService } = await import('../services/ai/aiService');
+    await expect(aiService.scanForScams({ text: 'Pay a registration fee to apply for this job today.' })).rejects.toThrow(/Pro plan required/);
+    vi.unstubAllGlobals();
+  });
+});
