@@ -56,7 +56,7 @@ import { fireAndForget } from '../lib/fireAndForget';
 import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from '../core/errors/AppError';
 import { toDbError } from './dbErrors';
 
-interface BusinessListingRow {
+export interface BusinessListingRow {
   id: string;
   owner_user_id: string;
   title: string;
@@ -101,7 +101,7 @@ function client() {
   return c;
 }
 
-function rowToListing(row: BusinessListingRow): BusinessListing {
+export function rowToListing(row: BusinessListingRow): BusinessListing {
   return {
     id: row.id,
     title: row.title,

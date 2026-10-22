@@ -47,6 +47,7 @@ import {
   User,
   Organization,
   Opportunity,
+  AuditLog,
   BusinessListing,
   County,
   OpportunityType,
@@ -57,9 +58,35 @@ import {
 import { db } from '../../db/dbClient';
 import { trustSafetyService } from '../../services/trustSafetyService';
 import { organizationService } from '../../services/organizationService';
+import { adminService } from '../../services/adminService';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { storageAdapter } from '../../db/storageAdapter';
+
+/** Loading / error / empty states shared by the admin data tabs. Renders children only when there is data to show. */
+const AdminDataState: React.FC<{
+  loading: boolean;
+  error?: string;
+  count: number;
+  filteredCount: number;
+  emptyText: string;
+  noMatchText: string;
+  onRetry: () => void;
+  children: React.ReactNode;
+}> = ({ loading, error, count, filteredCount, emptyText, noMatchText, onRetry, children }) => {
+  if (loading && count === 0) return <p className="py-10 text-center text-sm text-stone-500">Loading…</p>;
+  if (error) {
+    return (
+      <div role="alert" className="p-4 rounded-2xl bg-red-50 text-red-800 text-sm flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+        <span>{error}</span>
+        <button onClick={onRetry} className="px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-bold self-start">Retry</button>
+      </div>
+    );
+  }
+  if (count === 0) return <p className="py-10 text-center text-sm text-stone-500">{emptyText}</p>;
+  if (filteredCount === 0) return <p className="py-10 text-center text-sm text-stone-500">{noMatchText}</p>;
+  return <>{children}</>;
+};
 
 export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () => {
   const { user, login, logout } = useAuth();
@@ -119,7 +146,7 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
   };
 
   // --- Dynamic State loaded directly from our unified DB client ---
-  const [users, setUsers] = useState<User[]>(() => db.getUsers());
+  const [users, setUsers] = useState<User[]>(() => (import.meta.env.VITE_ENABLE_DEMO_MODE === 'true' ? db.getUsers() : []));
   // Organizations come from Supabase (the system of record). The local demo dataset is only used when demo
   // mode is explicitly enabled; in production it is empty, which is why this tab used to show no rows.
   const DEMO_DATA_ENABLED = import.meta.env.VITE_ENABLE_DEMO_MODE === 'true';
@@ -127,13 +154,20 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
   const [orgsLoading, setOrgsLoading] = useState(true);
   const [orgsError, setOrgsError] = useState('');
   const [orgActionId, setOrgActionId] = useState<string | null>(null);
-  const [opportunities, setOpportunities] = useState<Opportunity[]>(() => db.getOpportunities());
-  const [businesses, setBusinesses] = useState<BusinessListing[]>(() => db.getBusinesses());
+  const [opportunities, setOpportunities] = useState<Opportunity[]>(() => (import.meta.env.VITE_ENABLE_DEMO_MODE === 'true' ? db.getOpportunities() : []));
+  const [businesses, setBusinesses] = useState<BusinessListing[]>(() => (import.meta.env.VITE_ENABLE_DEMO_MODE === 'true' ? db.getBusinesses() : []));
   const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
   const [reports, setReports] = useState<ContentReport[]>([]);
   const [restrictions, setRestrictions] = useState<AccountRestriction[]>([]);
-  const [anomalies, setAnomalies] = useState<SuspiciousActivityEvent[]>(() => db.getSuspiciousActivityEvents());
-  const [auditLogs, setAuditLogs] = useState(() => db.getAuditLogs());
+  const [anomalies, setAnomalies] = useState<SuspiciousActivityEvent[]>(() => (import.meta.env.VITE_ENABLE_DEMO_MODE === 'true' ? db.getSuspiciousActivityEvents() : []));
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => (import.meta.env.VITE_ENABLE_DEMO_MODE === 'true' ? db.getAuditLogs() : []));
+  const [sectionState, setSectionState] = useState<Record<string, { loading: boolean; error: string }>>({
+    users: { loading: true, error: '' },
+    opportunities: { loading: true, error: '' },
+    businesses: { loading: true, error: '' },
+    audit: { loading: true, error: '' }
+  });
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   // --- Local States for Payments & Custom taxonomies (Categories/Industries) ---
   const [payments, setPayments] = useState<Array<{ id: string; orgId: string; orgName: string; planId: string; amount: number; currency: 'USD' | 'LRD'; status: string; date: string }>>([
@@ -211,11 +245,42 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
     }
   };
 
+  // Loads one admin section from Supabase. Failures show in that tab (with Retry) instead of an empty table;
+  // the local demo dataset is only a fallback when demo mode is explicitly enabled.
+  const loadSection = async <T,>(key: string, fetcher: () => Promise<T[]>, apply: (rows: T[]) => void, demoRows: () => T[]) => {
+    setSectionState((prev) => ({ ...prev, [key]: { loading: true, error: '' } }));
+    try {
+      apply(await fetcher());
+      setSectionState((prev) => ({ ...prev, [key]: { loading: false, error: '' } }));
+    } catch (err) {
+      if (DEMO_DATA_ENABLED) {
+        apply(demoRows());
+        setSectionState((prev) => ({ ...prev, [key]: { loading: false, error: '' } }));
+      } else {
+        setSectionState((prev) => ({
+          ...prev,
+          [key]: { loading: false, error: err instanceof Error ? err.message : 'Could not load this section.' }
+        }));
+      }
+    }
+  };
+
+  const loadUsers = () => loadSection('users', () => adminService.listUsers(), setUsers, () => db.getUsers());
+  const loadOpportunities = () => loadSection('opportunities', () => adminService.listOpportunities(), setOpportunities, () => db.getOpportunities());
+  const loadBusinesses = () => loadSection('businesses', () => adminService.listBusinessListings(), setBusinesses, () => db.getBusinesses());
+  const loadAudit = () => loadSection('audit', () => adminService.listAuditLogs(300), setAuditLogs, () => db.getAuditLogs());
+
   const refreshAllData = async (silent = false) => {
-    setUsers(db.getUsers());
-    await loadOrganizations();
-    setOpportunities(db.getOpportunities());
-    setBusinesses(db.getBusinesses());
+    const sectionLoads = Promise.all([
+      loadOrganizations(),
+      loadUsers(),
+      loadOpportunities(),
+      loadBusinesses(),
+      loadAudit(),
+      adminService.listSuspiciousActivity().then(setAnomalies).catch(() => {
+        if (DEMO_DATA_ENABLED) setAnomalies(db.getSuspiciousActivityEvents());
+      })
+    ]);
     try {
       const [freshRequests, freshReports, freshRestrictions] = await Promise.all([
         trustSafetyService.getVerificationRequests(),
@@ -228,8 +293,7 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to sync trust & safety data.', 'error');
     }
-    setAnomalies(db.getSuspiciousActivityEvents());
-    setAuditLogs(db.getAuditLogs());
+    await sectionLoads;
     if (!silent) {
       showToast('Platform databases synced successfully.', 'success');
     }
@@ -242,49 +306,57 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
 
   // --- ACTIONS ---
 
-  // 1. User Status update
-  const toggleUserStatus = (targetUser: User) => {
-    const nextStatus: AccountStatus = targetUser.accountStatus === 'active' ? 'suspended' : 'active';
-    const reason = nextStatus === 'suspended' ? 'Suspended by admin for investigation' : 'Reactivated by platform administrator';
+  // 1. User account status. Suspension goes through the restriction workflow so the Auth account is
+  // banned as well as database access being blocked; reactivation lifts the active full suspensions.
+  const toggleUserStatus = async (targetUser: User) => {
+    if (busyId) return;
+    if (targetUser.id === user?.id) {
+      showToast('You cannot suspend your own account.', 'error');
+      return;
+    }
+    setBusyId(targetUser.id);
     try {
-      db.updateUserStatus(targetUser.id, nextStatus, reason);
-      db.emitAuditLog({
-        actorUserId: user?.id || 'admin',
-        actorName: user?.fullName || 'Platform Admin',
-        action: 'user.status_toggle',
-        targetEntity: 'user',
-        targetId: targetUser.id,
-        details: { nextStatus, reason }
-      });
-      refreshAllData();
-      showToast(`User status updated to ${nextStatus}`, 'success');
-    } catch (err: any) {
-      showToast(err.message || 'Failed to update user status', 'error');
+      if (targetUser.accountStatus === 'active') {
+        if (!window.confirm(`Suspend ${targetUser.fullName}? They will be signed out and blocked until reactivated.`)) return;
+        await trustSafetyService.applyAccountRestriction({
+          userId: targetUser.id,
+          restrictionType: 'full_suspension',
+          reason: 'Suspended by platform administrator for investigation'
+        });
+        showToast(`${targetUser.fullName} has been suspended`, 'success');
+      } else {
+        const active = restrictions.filter(
+          (r) => r.userId === targetUser.id && r.restrictionType === 'full_suspension' && (r.status === 'active' || r.status === 'appealed')
+        );
+        if (active.length === 0) {
+          showToast('This account is not under an active suspension restriction, so it cannot be reactivated from here.', 'error');
+          return;
+        }
+        for (const r of active) await trustSafetyService.liftAccountRestriction(r.id);
+        showToast(`${targetUser.fullName} has been reactivated`, 'success');
+      }
+      await refreshAllData(true);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update user status', 'error');
+      await refreshAllData(true);
+    } finally {
+      setBusyId(null);
     }
   };
 
   // 1b. Assign User Role
-  const changeUserSystemRole = (userId: string, nextRole: SystemRole) => {
+  const changeUserSystemRole = async (target: User, nextRole: SystemRole) => {
+    if (busyId || nextRole === target.systemRole) return;
+    setBusyId(target.id);
     try {
-      const allUsers = db.getUsers();
-      const matched = allUsers.find(u => u.id === userId);
-      if (matched) {
-        matched.systemRole = nextRole;
-        // save back to storage adapter
-        storageAdapter.setItem('users', allUsers);
-        db.emitAuditLog({
-          actorUserId: user?.id || 'admin',
-          actorName: user?.fullName || 'Platform Admin',
-          action: 'user.role_change',
-          targetEntity: 'user',
-          targetId: userId,
-          details: { nextRole }
-        });
-        refreshAllData();
-        showToast(`User role updated to ${nextRole}`, 'success');
-      }
-    } catch (err: any) {
-      showToast('Failed to change user system role', 'error');
+      await adminService.setUserSystemRole(target.id, nextRole);
+      showToast(`${target.fullName} is now ${nextRole.replace(/_/g, ' ')}`, 'success');
+      await Promise.all([loadUsers(), loadAudit()]);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to change user role', 'error');
+      await loadUsers(); // snap the dropdown back to the stored value
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -318,63 +390,32 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
   };
 
   // 3. Opportunity/Job moderation
-  const moderateOpportunity = (oppId: string, nextStatus: 'published' | 'pending_review' | 'flagged' | 'quarantined' | 'rejected') => {
+  const moderateOpportunity = async (oppId: string, nextStatus: 'published' | 'pending_review' | 'flagged' | 'quarantined' | 'rejected') => {
+    if (busyId) return;
+    setBusyId(oppId);
     try {
-      const allOpps = db.getOpportunities();
-      const opp = allOpps.find(o => o.id === oppId);
-      if (opp) {
-        opp.moderationStatus = nextStatus;
-        if (nextStatus === 'published') {
-          opp.status = 'published';
-        } else if (nextStatus === 'quarantined' || nextStatus === 'rejected') {
-          opp.status = 'archived';
-        }
-        storageAdapter.setItem('opportunities', allOpps);
-
-        db.emitAuditLog({
-          actorUserId: user?.id || 'admin',
-          actorName: user?.fullName || 'Platform Admin',
-          action: 'opportunity.moderate',
-          targetEntity: 'opportunity',
-          targetId: oppId,
-          details: { nextStatus }
-        });
-        refreshAllData();
-        showToast(`Job opportunity status set to ${nextStatus}`, 'success');
-      }
-    } catch (err: any) {
-      showToast('Failed to moderate opportunity', 'error');
+      await adminService.moderateOpportunity(oppId, nextStatus);
+      showToast(`Job opportunity status set to ${nextStatus}`, 'success');
+      await Promise.all([loadOpportunities(), loadAudit()]);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to moderate opportunity', 'error');
+    } finally {
+      setBusyId(null);
     }
   };
 
   // 4. Business listing moderation
-  const moderateBusiness = (bizId: string, nextStatus: 'pending_review' | 'published' | 'rejected' | 'suspended') => {
+  const moderateBusiness = async (bizId: string, nextStatus: 'pending_review' | 'published' | 'rejected' | 'suspended') => {
+    if (busyId) return;
+    setBusyId(bizId);
     try {
-      const allBizs = db.getBusinesses();
-      const biz = allBizs.find(b => b.id === bizId);
-      if (biz) {
-        biz.moderationStatus = nextStatus;
-        if (nextStatus === 'published') {
-          biz.status = 'published';
-          biz.isVerified = true;
-        } else if (nextStatus === 'suspended' || nextStatus === 'rejected') {
-          biz.status = 'sold';
-        }
-        storageAdapter.setItem('businesses', allBizs);
-
-        db.emitAuditLog({
-          actorUserId: user?.id || 'admin',
-          actorName: user?.fullName || 'Platform Admin',
-          action: 'business.moderate',
-          targetEntity: 'business_listing',
-          targetId: bizId,
-          details: { nextStatus }
-        });
-        refreshAllData();
-        showToast(`Business listing status set to ${nextStatus}`, 'success');
-      }
-    } catch (err: any) {
-      showToast('Failed to moderate business listing', 'error');
+      await adminService.moderateBusiness(bizId, nextStatus);
+      showToast(`Business listing status set to ${nextStatus}`, 'success');
+      await Promise.all([loadBusinesses(), loadAudit()]);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to moderate business listing', 'error');
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -865,64 +906,94 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-[#E8E4D9] bg-[#F9F8F6] text-stone-500 uppercase tracking-wider font-bold">
-                    <th className="py-3 px-4">Full Name</th>
-                    <th className="py-3 px-4">Email Contact</th>
-                    <th className="py-3 px-4">Role Assigned</th>
-                    <th className="py-3 px-4">County</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E8E4D9]">
-                  {users
-                    .filter(u => u.fullName.toLowerCase().includes(userQuery.toLowerCase()) || u.email.toLowerCase().includes(userQuery.toLowerCase()))
-                    .map((targetUser) => (
-                      <tr key={targetUser.id} className="hover:bg-stone-50/50">
-                        <td className="py-3.5 px-4 font-bold text-stone-800">{targetUser.fullName}</td>
-                        <td className="py-3.5 px-4 font-mono text-stone-600">{targetUser.email}</td>
-                        <td className="py-3.5 px-4">
-                          <select
-                            value={targetUser.systemRole}
-                            onChange={(e) => changeUserSystemRole(targetUser.id, e.target.value as any)}
-                            className="bg-stone-50 border border-stone-200 rounded-lg p-1 font-bold text-stone-700"
-                          >
-                            <option value="user">User</option>
+            {(() => {
+              const q = userQuery.trim().toLowerCase();
+              const list = users.filter((u) => !q || u.fullName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
+              const st = sectionState.users;
+              const statusPill = (u: User) => (
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${u.accountStatus === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  {u.accountStatus.replace(/_/g, ' ')}
+                </span>
+              );
+              const roleSelect = (u: User) => (
+                <select
+                  value={u.systemRole}
+                  disabled={busyId !== null}
+                  aria-label={`Role for ${u.fullName}`}
+                  onChange={(e) => changeUserSystemRole(u, e.target.value as SystemRole)}
+                  className="bg-stone-50 border border-stone-200 rounded-lg p-2 font-bold text-stone-700 disabled:opacity-50 max-w-full"
+                >
+                  <option value="user">User</option>
                             <option value="moderator">Moderator</option>
+                            <option value="moderation_officer">Moderation Officer</option>
                             <option value="verifier">Verifier</option>
+                            <option value="verification_officer">Verification Officer</option>
+                            <option value="finance_admin">Finance Admin</option>
                             <option value="platform_admin">Platform Admin</option>
-                          </select>
-                        </td>
-                        <td className="py-3.5 px-4 text-stone-700">{targetUser.primaryCounty} County</td>
-                        <td className="py-3.5 px-4">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                            targetUser.accountStatus === 'active'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {targetUser.accountStatus}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <button
-                            onClick={() => toggleUserStatus(targetUser)}
-                            className={`px-3 py-1.5 rounded-xl text-[10px] font-extrabold transition-all cursor-pointer ${
-                              targetUser.accountStatus === 'active'
-                                ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                                : 'bg-green-50 text-green-700 hover:bg-green-100'
-                            }`}
-                          >
-                            {targetUser.accountStatus === 'active' ? 'Suspend' : 'Activate'}
-                          </button>
-                        </td>
-                      </tr>
+                </select>
+              );
+              const statusButton = (u: User) => (
+                <button
+                  onClick={() => toggleUserStatus(u)}
+                  disabled={busyId !== null || u.id === user?.id}
+                  className={`px-3 py-2 min-h-10 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer disabled:opacity-40 ${
+                    u.accountStatus === 'active' ? 'bg-red-50 text-red-700 hover:bg-red-100' : 'bg-green-50 text-green-700 hover:bg-green-100'
+                  }`}
+                >
+                  {busyId === u.id ? 'Working…' : u.accountStatus === 'active' ? 'Suspend' : 'Activate'}
+                </button>
+              );
+              return (
+                <AdminDataState loading={st.loading} error={st.error} count={users.length} filteredCount={list.length}
+                  emptyText="No users have registered yet." noMatchText="No users match your search." onRetry={loadUsers}>
+                  <p className="text-[11px] text-stone-500 font-semibold">{list.length} of {users.length} users</p>
+                  <div className="md:hidden space-y-3">
+                    {list.map((u) => (
+                      <div key={u.id} className="rounded-2xl border border-[#E8E4D9] bg-white p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-bold text-stone-800 text-sm break-words">{u.fullName}</p>
+                            <p className="font-mono text-[11px] text-stone-500 break-all">{u.email}</p>
+                            <p className="text-[11px] text-stone-500 mt-0.5">{u.primaryCounty} County</p>
+                          </div>
+                          {statusPill(u)}
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          {roleSelect(u)}
+                          {statusButton(u)}
+                        </div>
+                      </div>
                     ))}
-                </tbody>
-              </table>
-            </div>
+                  </div>
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-[#E8E4D9] bg-[#F9F8F6] text-stone-500 uppercase tracking-wider font-bold whitespace-nowrap">
+                          <th className="py-3 px-4">Full Name</th>
+                          <th className="py-3 px-4">Email Contact</th>
+                          <th className="py-3 px-4">Role Assigned</th>
+                          <th className="py-3 px-4">County</th>
+                          <th className="py-3 px-4">Status</th>
+                          <th className="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E8E4D9]">
+                        {list.map((u) => (
+                          <tr key={u.id} className="hover:bg-stone-50/50">
+                            <td className="py-3.5 px-4 font-bold text-stone-800">{u.fullName}</td>
+                            <td className="py-3.5 px-4 font-mono text-stone-600">{u.email}</td>
+                            <td className="py-3.5 px-4">{roleSelect(u)}</td>
+                            <td className="py-3.5 px-4 text-stone-700 whitespace-nowrap">{u.primaryCounty} County</td>
+                            <td className="py-3.5 px-4">{statusPill(u)}</td>
+                            <td className="py-3.5 px-4 text-right">{statusButton(u)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </AdminDataState>
+              );
+            })()}
           </div>
         )}
 
@@ -1082,57 +1153,81 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-[#E8E4D9] bg-[#F9F8F6] text-stone-500 uppercase tracking-wider font-bold">
-                    <th className="py-3 px-4">Title</th>
-                    <th className="py-3 px-4">Employer Org</th>
-                    <th className="py-3 px-4">County</th>
-                    <th className="py-3 px-4">Moderation Status</th>
-                    <th className="py-3 px-4">Deadline</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E8E4D9]">
-                  {opportunities
-                    .filter(o => o.title.toLowerCase().includes(oppQuery.toLowerCase()))
-                    .map((opp) => (
-                      <tr key={opp.id} className="hover:bg-stone-50/50">
-                        <td className="py-3.5 px-4 font-bold text-[#283618]">{opp.title}</td>
-                        <td className="py-3.5 px-4 font-semibold text-stone-700">{opp.organization?.name || 'Private Employer'}</td>
-                        <td className="py-3.5 px-4 text-stone-600">{opp.county} County</td>
-                        <td className="py-3.5 px-4">
-                          <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase ${
-                            opp.moderationStatus === 'published'
-                              ? 'bg-green-100 text-green-800'
-                              : opp.moderationStatus === 'quarantined'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}>
-                            {opp.moderationStatus || 'published'}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-stone-500">{new Date(opp.deadline).toLocaleDateString()}</td>
-                        <td className="py-3.5 px-4 text-right space-x-1">
-                          <button
-                            onClick={() => moderateOpportunity(opp.id, 'published')}
-                            className="px-2 py-1 bg-green-50 text-green-700 rounded-lg font-bold border border-green-200 hover:bg-green-100 transition-all cursor-pointer"
-                          >
-                            Approve
-                          </button>
-                          <button
-                            onClick={() => moderateOpportunity(opp.id, 'quarantined')}
-                            className="px-2 py-1 bg-red-50 text-red-700 rounded-lg font-bold border border-red-200 hover:bg-red-100 transition-all cursor-pointer"
-                          >
-                            Quarantine
-                          </button>
-                        </td>
-                      </tr>
+            {(() => {
+              const q = oppQuery.trim().toLowerCase();
+              const orgName = (o: Opportunity) => organizations.find((x) => x.id === o.organizationId)?.name || o.organization?.name || 'Unknown employer';
+              const list = opportunities.filter((o) => !q || o.title.toLowerCase().includes(q) || orgName(o).toLowerCase().includes(q));
+              const st = sectionState.opportunities;
+              const pill = (o: Opportunity) => (
+                <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase whitespace-nowrap ${
+                  (o.moderationStatus || 'published') === 'published' ? 'bg-green-100 text-green-800'
+                    : o.moderationStatus === 'quarantined' || o.moderationStatus === 'rejected' ? 'bg-red-100 text-red-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {(o.moderationStatus || 'published').replace(/_/g, ' ')}
+                </span>
+              );
+              const deadline = (o: Opportunity) => (o.deadline && !isNaN(Date.parse(o.deadline)) ? new Date(o.deadline).toLocaleDateString() : 'No deadline');
+              const actions = (o: Opportunity) => (
+                <div className="flex gap-2">
+                  <button onClick={() => moderateOpportunity(o.id, 'published')} disabled={busyId !== null || o.moderationStatus === 'published'}
+                    className="px-3 py-2 min-h-10 bg-green-50 text-green-700 rounded-lg font-bold border border-green-200 hover:bg-green-100 transition-all cursor-pointer disabled:opacity-40">
+                    Approve
+                  </button>
+                  <button onClick={() => moderateOpportunity(o.id, 'quarantined')} disabled={busyId !== null || o.moderationStatus === 'quarantined'}
+                    className="px-3 py-2 min-h-10 bg-red-50 text-red-700 rounded-lg font-bold border border-red-200 hover:bg-red-100 transition-all cursor-pointer disabled:opacity-40">
+                    Quarantine
+                  </button>
+                </div>
+              );
+              return (
+                <AdminDataState loading={st.loading} error={st.error} count={opportunities.length} filteredCount={list.length}
+                  emptyText="No job opportunities have been posted yet." noMatchText="No vacancies match your search." onRetry={loadOpportunities}>
+                  <p className="text-[11px] text-stone-500 font-semibold">{list.length} of {opportunities.length} opportunities</p>
+                  <div className="md:hidden space-y-3">
+                    {list.map((o) => (
+                      <div key={o.id} className="rounded-2xl border border-[#E8E4D9] bg-white p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-bold text-[#283618] text-sm break-words">{o.title}</p>
+                            <p className="text-xs text-stone-600 font-semibold">{orgName(o)}</p>
+                            <p className="text-[11px] text-stone-500">{o.county} County · Deadline {deadline(o)}</p>
+                          </div>
+                          {pill(o)}
+                        </div>
+                        {actions(o)}
+                      </div>
                     ))}
-                </tbody>
-              </table>
-            </div>
+                  </div>
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-[#E8E4D9] bg-[#F9F8F6] text-stone-500 uppercase tracking-wider font-bold whitespace-nowrap">
+                          <th className="py-3 px-4">Title</th>
+                          <th className="py-3 px-4">Employer Org</th>
+                          <th className="py-3 px-4">County</th>
+                          <th className="py-3 px-4">Moderation Status</th>
+                          <th className="py-3 px-4">Deadline</th>
+                          <th className="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E8E4D9]">
+                        {list.map((o) => (
+                          <tr key={o.id} className="hover:bg-stone-50/50">
+                            <td className="py-3.5 px-4 font-bold text-[#283618]">{o.title}</td>
+                            <td className="py-3.5 px-4 font-semibold text-stone-700">{orgName(o)}</td>
+                            <td className="py-3.5 px-4 text-stone-600 whitespace-nowrap">{o.county} County</td>
+                            <td className="py-3.5 px-4">{pill(o)}</td>
+                            <td className="py-3.5 px-4 text-stone-500 whitespace-nowrap">{deadline(o)}</td>
+                            <td className="py-3.5 px-4 text-right">{actions(o)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </AdminDataState>
+              );
+            })()}
           </div>
         )}
 
@@ -1156,57 +1251,80 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-[#E8E4D9] bg-[#F9F8F6] text-stone-500 uppercase tracking-wider font-bold">
-                    <th className="py-3 px-4">Listing Title</th>
-                    <th className="py-3 px-4">Industry</th>
-                    <th className="py-3 px-4">Asking Price</th>
-                    <th className="py-3 px-4">County</th>
-                    <th className="py-3 px-4">Moderation Status</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E8E4D9]">
-                  {businesses
-                    .filter(b => b.title.toLowerCase().includes(bizQuery.toLowerCase()))
-                    .map((biz) => (
-                      <tr key={biz.id} className="hover:bg-stone-50/50">
-                        <td className="py-3.5 px-4 font-bold text-[#283618]">{biz.title}</td>
-                        <td className="py-3.5 px-4 text-stone-600">{biz.industry}</td>
-                        <td className="py-3.5 px-4 font-bold text-[#BC6C25]">${biz.askingPriceUSD.toLocaleString()} USD</td>
-                        <td className="py-3.5 px-4 text-stone-500">{biz.county} County</td>
-                        <td className="py-3.5 px-4">
-                          <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase ${
-                            biz.moderationStatus === 'published'
-                              ? 'bg-green-100 text-green-800'
-                              : biz.moderationStatus === 'suspended'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}>
-                            {biz.moderationStatus || 'published'}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-right space-x-1">
-                          <button
-                            onClick={() => moderateBusiness(biz.id, 'published')}
-                            className="px-2 py-1 bg-green-50 text-green-700 rounded-lg font-bold border border-green-200 hover:bg-green-100 transition-all cursor-pointer"
-                          >
-                            Approve
-                          </button>
-                          <button
-                            onClick={() => moderateBusiness(biz.id, 'suspended')}
-                            className="px-2 py-1 bg-red-50 text-red-700 rounded-lg font-bold border border-red-200 hover:bg-red-100 transition-all cursor-pointer"
-                          >
-                            Suspend
-                          </button>
-                        </td>
-                      </tr>
+            {(() => {
+              const q = bizQuery.trim().toLowerCase();
+              const list = businesses.filter((b) => !q || b.title.toLowerCase().includes(q) || (b.industry || '').toLowerCase().includes(q));
+              const st = sectionState.businesses;
+              const price = (b: BusinessListing) => (typeof b.askingPriceUSD === 'number' ? `$${b.askingPriceUSD.toLocaleString()} USD` : 'Price on request');
+              const pill = (b: BusinessListing) => (
+                <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase whitespace-nowrap ${
+                  (b.moderationStatus || 'published') === 'published' ? 'bg-green-100 text-green-800'
+                    : b.moderationStatus === 'suspended' || b.moderationStatus === 'rejected' ? 'bg-red-100 text-red-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {(b.moderationStatus || 'published').replace(/_/g, ' ')}
+                </span>
+              );
+              const actions = (b: BusinessListing) => (
+                <div className="flex gap-2">
+                  <button onClick={() => moderateBusiness(b.id, 'published')} disabled={busyId !== null || b.moderationStatus === 'published'}
+                    className="px-3 py-2 min-h-10 bg-green-50 text-green-700 rounded-lg font-bold border border-green-200 hover:bg-green-100 transition-all cursor-pointer disabled:opacity-40">
+                    Approve
+                  </button>
+                  <button onClick={() => moderateBusiness(b.id, 'suspended')} disabled={busyId !== null || b.moderationStatus === 'suspended'}
+                    className="px-3 py-2 min-h-10 bg-red-50 text-red-700 rounded-lg font-bold border border-red-200 hover:bg-red-100 transition-all cursor-pointer disabled:opacity-40">
+                    Suspend
+                  </button>
+                </div>
+              );
+              return (
+                <AdminDataState loading={st.loading} error={st.error} count={businesses.length} filteredCount={list.length}
+                  emptyText="No business listings have been submitted yet." noMatchText="No listings match your search." onRetry={loadBusinesses}>
+                  <p className="text-[11px] text-stone-500 font-semibold">{list.length} of {businesses.length} listings</p>
+                  <div className="md:hidden space-y-3">
+                    {list.map((b) => (
+                      <div key={b.id} className="rounded-2xl border border-[#E8E4D9] bg-white p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-bold text-[#283618] text-sm break-words">{b.title}</p>
+                            <p className="text-xs text-stone-600">{b.industry} · {b.county} County</p>
+                            <p className="text-xs font-bold text-[#BC6C25] mt-0.5">{price(b)}</p>
+                          </div>
+                          {pill(b)}
+                        </div>
+                        {actions(b)}
+                      </div>
                     ))}
-                </tbody>
-              </table>
-            </div>
+                  </div>
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-[#E8E4D9] bg-[#F9F8F6] text-stone-500 uppercase tracking-wider font-bold whitespace-nowrap">
+                          <th className="py-3 px-4">Listing Title</th>
+                          <th className="py-3 px-4">Industry</th>
+                          <th className="py-3 px-4">Asking Price</th>
+                          <th className="py-3 px-4">County</th>
+                          <th className="py-3 px-4">Moderation Status</th>
+                          <th className="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E8E4D9]">
+                        {list.map((b) => (
+                          <tr key={b.id} className="hover:bg-stone-50/50">
+                            <td className="py-3.5 px-4 font-bold text-[#283618]">{b.title}</td>
+                            <td className="py-3.5 px-4 text-stone-600">{b.industry}</td>
+                            <td className="py-3.5 px-4 font-bold text-[#BC6C25] whitespace-nowrap">{price(b)}</td>
+                            <td className="py-3.5 px-4 text-stone-500 whitespace-nowrap">{b.county} County</td>
+                            <td className="py-3.5 px-4">{pill(b)}</td>
+                            <td className="py-3.5 px-4 text-right">{actions(b)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </AdminDataState>
+              );
+            })()}
           </div>
         )}
 
@@ -1702,29 +1820,38 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
               </div>
             </div>
 
-            <div className="space-y-3 font-mono text-xs">
-              {auditLogs
-                .filter(log => log.action.toLowerCase().includes(auditQuery.toLowerCase()) || (log.actorName && log.actorName.toLowerCase().includes(auditQuery.toLowerCase())))
-                .map((log) => (
-                  <div key={log.id} className="p-4 bg-[#F9F8F6] border border-[#E8E4D9] rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-[11px] leading-relaxed">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-[#132A13]">{log.actorName || 'Platform Process'}</span>
-                        <span className="px-1.5 py-0.5 bg-[#ECF3E9] border border-[#D9E3D5] text-[#4F772D] rounded text-[10px] uppercase font-bold">
-                          {log.action}
-                        </span>
+            {(() => {
+              const q = auditQuery.trim().toLowerCase();
+              const list = auditLogs.filter((log) => !q || log.action.toLowerCase().includes(q) || (log.actorName || '').toLowerCase().includes(q) || (log.targetEntity || '').toLowerCase().includes(q));
+              const st = sectionState.audit;
+              return (
+                <AdminDataState loading={st.loading} error={st.error} count={auditLogs.length} filteredCount={list.length}
+                  emptyText="No administrative activity has been recorded yet." noMatchText="No log entries match your filter." onRetry={loadAudit}>
+                  <div className="space-y-3 font-mono text-xs">
+                    {list.map((log) => (
+                      <div key={log.id} className="p-4 bg-[#F9F8F6] border border-[#E8E4D9] rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-[11px] leading-relaxed">
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-bold text-[#132A13]">{log.actorName || 'Platform Process'}</span>
+                            <span className="px-1.5 py-0.5 bg-[#ECF3E9] border border-[#D9E3D5] text-[#4F772D] rounded text-[10px] uppercase font-bold">{log.action}</span>
+                          </div>
+                          <p className="text-stone-600 break-words">
+                            {log.targetEntity}{log.targetId ? ` · ${log.targetId}` : ''}
+                            {log.details && Object.keys(log.details).length > 0
+                              ? ' — ' + Object.entries(log.details).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ')
+                              : ''}
+                          </p>
+                        </div>
+                        <div className="text-stone-400 shrink-0 sm:text-right text-[10px]">
+                          <div className="break-all">ID: {log.id}</div>
+                          <div>{new Date(log.createdAt).toLocaleString()}</div>
+                        </div>
                       </div>
-                      <p className="text-stone-600">
-                        {log.details ? Object.entries(log.details).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ') : 'No parameters logged'}
-                      </p>
-                    </div>
-                    <div className="text-stone-400 shrink-0 text-right text-[10px]">
-                      <div>ID: {log.id}</div>
-                      <div>{new Date(log.createdAt).toLocaleString()}</div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-            </div>
+                </AdminDataState>
+              );
+            })()}
           </div>
         )}
 

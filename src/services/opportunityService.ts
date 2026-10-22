@@ -121,7 +121,7 @@ interface OrganizationRow {
   updated_at: string;
 }
 
-interface OpportunityRow {
+export interface OpportunityRow {
   id: string;
   organization_id: string;
   created_by_user_id: string;
@@ -215,7 +215,7 @@ function promotionFields(row: OpportunityRow): Pick<Opportunity, 'isFeatured' | 
   };
 }
 
-function rowToOpportunity(row: OpportunityRow): Opportunity {
+export function rowToOpportunity(row: OpportunityRow): Opportunity {
   const fallbackOrg: Organization = row.organizations
     ? rowToOrganization(row.organizations)
     : {
