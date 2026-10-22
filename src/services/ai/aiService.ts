@@ -16,7 +16,9 @@ import {
   JobAssistantInput,
   JobAssistantResult,
   SemanticSearchInput,
-  SemanticSearchResponse
+  SemanticSearchResponse,
+  ScamCheckInput,
+  ScamCheckResult
 } from './aiTypes';
 import { GeminiAIProvider } from './geminiAIProvider';
 import { FallbackAIProvider } from './fallbackAIProvider';
@@ -25,7 +27,7 @@ import { sanitizeCandidateProfileForAI } from './aiGuardrails';
 export interface AIAuditLogEntry {
   id: string;
   timestamp: string;
-  action: 'recommendations' | 'candidate_match' | 'cv_parse' | 'job_assistant' | 'semantic_search';
+  action: 'recommendations' | 'candidate_match' | 'cv_parse' | 'job_assistant' | 'semantic_search' | 'scam_scan';
   providerUsed: string;
   status: 'success' | 'fallback_used' | 'error';
   executionTimeMs: number;
@@ -106,7 +108,7 @@ class AIServiceFacade {
     try {
       if (await this.geminiProvider.isAvailable()) {
         const result = await this.geminiProvider.matchCandidateToJob(sanitizedInput);
-        this.logAudit('candidate_match', 'Gemini 3.8 Flash', 'success', Date.now() - startTime, true);
+        this.logAudit('candidate_match', this.geminiProvider.name, 'success', Date.now() - startTime, true);
         return result;
       }
     } catch (err) {
@@ -126,7 +128,7 @@ class AIServiceFacade {
     try {
       if (await this.geminiProvider.isAvailable()) {
         const result = await this.geminiProvider.parseCV(input);
-        this.logAudit('cv_parse', 'Gemini 3.8 Flash', 'success', Date.now() - startTime);
+        this.logAudit('cv_parse', this.geminiProvider.name, 'success', Date.now() - startTime);
         return result;
       }
     } catch (err) {
@@ -146,7 +148,7 @@ class AIServiceFacade {
     try {
       if (await this.geminiProvider.isAvailable()) {
         const result = await this.geminiProvider.assistJobDescription(input);
-        this.logAudit('job_assistant', 'Gemini 3.8 Flash', 'success', Date.now() - startTime);
+        this.logAudit('job_assistant', this.geminiProvider.name, 'success', Date.now() - startTime);
         return result;
       }
     } catch (err) {
@@ -175,6 +177,26 @@ class AIServiceFacade {
 
     const fallbackResult = await this.fallbackProvider.semanticSearch(input);
     this.logAudit('semantic_search', fallbackResult.providerUsed, 'fallback_used', Date.now() - startTime);
+    return fallbackResult;
+  }
+
+  /**
+   * 6. Scam / Fraud Shield
+   */
+  async scanForScams(input: ScamCheckInput): Promise<ScamCheckResult> {
+    const startTime = Date.now();
+    try {
+      if (await this.geminiProvider.isAvailable()) {
+        const result = await this.geminiProvider.scanForScams(input);
+        this.logAudit('scam_scan', result.providerUsed || this.geminiProvider.name, 'success', Date.now() - startTime);
+        return result;
+      }
+    } catch (err) {
+      console.warn('Gemini AI failed, using Heuristic Fallback for scam scan:', err);
+    }
+
+    const fallbackResult = await this.fallbackProvider.scanForScams(input);
+    this.logAudit('scam_scan', this.fallbackProvider.name, 'fallback_used', Date.now() - startTime);
     return fallbackResult;
   }
 }

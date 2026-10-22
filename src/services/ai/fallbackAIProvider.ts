@@ -17,8 +17,12 @@ import {
   JobAssistantResult,
   SemanticSearchInput,
   SemanticSearchResponse,
-  ExplainableMatchSignal
+  ExplainableMatchSignal,
+  ScamCheckInput,
+  ScamCheckResult,
+  ScamFinding
 } from './aiTypes';
+import { trustSafetyService } from '../trustSafetyService';
 import { sanitizeCandidateProfileForAI, ETHICAL_NOTICE_TEXT } from './aiGuardrails';
 
 export class FallbackAIProvider implements IAIProvider {
@@ -395,6 +399,35 @@ export class FallbackAIProvider implements IAIProvider {
       },
       results,
       providerUsed: this.name
+    };
+  }
+
+  /**
+   * 6. Scam / fraud screening heuristic: the platform's keyword rules (the same ones used by moderation).
+   * It can only flag known phrases, so an empty result is reported as "no known red flags", never as verified.
+   */
+  async scanForScams(input: ScamCheckInput): Promise<ScamCheckResult> {
+    const { flags } = trustSafetyService.scanContentForScams('', input.text);
+    const findings: ScamFinding[] = flags.map((f) => ({
+      indicator: f.ruleName,
+      severity: f.severity,
+      explanation: f.description
+    }));
+    const high = findings.filter((f) => f.severity === 'high').length;
+    const medium = findings.filter((f) => f.severity === 'medium').length;
+    const low = findings.filter((f) => f.severity === 'low').length;
+    const riskScore = findings.length === 0 ? 5 : Math.min(100, 15 + high * 35 + medium * 15 + low * 8);
+    const riskLevel: ScamCheckResult['riskLevel'] = high > 0 ? 'high' : medium > 0 || low >= 2 ? 'medium' : 'low';
+    return {
+      riskLevel,
+      riskScore,
+      findings,
+      recommendation:
+        findings.length === 0
+          ? 'No known scam phrases were found. This keyword check cannot confirm the employer is genuine, so still verify their registration and contact details.'
+          : 'Known scam indicators were found. Do not publish or respond until the employer is verified, and never pay any fee to apply.',
+      providerUsed: this.name,
+      isHeuristic: true
     };
   }
 }

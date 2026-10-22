@@ -16,7 +16,9 @@ import {
   JobAssistantInput,
   JobAssistantResult,
   SemanticSearchInput,
-  SemanticSearchResponse
+  SemanticSearchResponse,
+  ScamCheckInput,
+  ScamCheckResult
 } from './aiTypes';
 import { authService } from '../authService';
 import { envConfig } from '../../config/env';
@@ -25,92 +27,83 @@ import { envConfig } from '../../config/env';
 // deployed backend's /api URL when the frontend is hosted separately (e.g. GitHub Pages).
 const API = envConfig.apiBaseUrl.replace(/\/+$/, '');
 
-export class GeminiAIProvider implements IAIProvider {
-  name = 'Gemini 3.8 Flash (Server Intelligence)';
+const HEALTH_TTL_MS = 60_000;
+const REQUEST_TIMEOUT_MS = 45_000;
 
+export class GeminiAIProvider implements IAIProvider {
+  name = 'Gemini (Server Intelligence)';
+  private healthCache: { at: number; configured: boolean } | null = null;
+
+  /** Health is cached briefly so each AI action does not pay an extra round trip. */
   async isAvailable(): Promise<boolean> {
+    if (this.healthCache && Date.now() - this.healthCache.at < HEALTH_TTL_MS) return this.healthCache.configured;
+    let configured = false;
     try {
       const res = await fetch(`${API}/ai/health`, { method: 'GET' });
-      if (!res.ok) return false;
-      const data = await res.json();
-      return !!data.configured;
+      if (res.ok) {
+        const data = await res.json();
+        configured = !!data.configured;
+        if (configured && data.model) this.name = `Gemini ${data.model}`;
+      }
     } catch {
-      return false;
+      configured = false;
+    }
+    this.healthCache = { at: Date.now(), configured };
+    return configured;
+  }
+
+  /** Authenticated POST. Throws with the server's message so the facade can fall back and logs stay meaningful. */
+  private async post<T>(path: string, input: unknown, label: string): Promise<T> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${API}/ai/${path}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authService.getSession()?.token || ''}`
+        },
+        body: JSON.stringify(input),
+        signal: controller.signal
+      });
+      if (!res.ok) {
+        // A failed request may mean the server just lost its key or went down: re-check health next time.
+        this.healthCache = null;
+        let detail = '';
+        try {
+          detail = (await res.json())?.error || '';
+        } catch {
+          /* non-JSON error body */
+        }
+        throw new Error(`${label} failed (${res.status})${detail ? `: ${detail}` : ''}`);
+      }
+      return (await res.json()) as T;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
-  async getJobRecommendations(input: JobRecommendationInput): Promise<JobRecommendationsResponse> {
-    const res = await fetch(`${API}/ai/recommendations`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authService.getSession()?.token || ''}`
-      },
-      body: JSON.stringify(input)
-    });
-    if (!res.ok) {
-      throw new Error(`Gemini Recommendations failed with status ${res.status}`);
-    }
-    return res.json();
+  getJobRecommendations(input: JobRecommendationInput): Promise<JobRecommendationsResponse> {
+    return this.post('recommendations', input, 'Gemini Recommendations');
   }
 
-  async matchCandidateToJob(input: CandidateMatchInput): Promise<CandidateMatchResult> {
-    const res = await fetch(`${API}/ai/match-candidate`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authService.getSession()?.token || ''}`
-      },
-      body: JSON.stringify(input)
-    });
-    if (!res.ok) {
-      throw new Error(`Gemini Candidate Match failed with status ${res.status}`);
-    }
-    return res.json();
+  matchCandidateToJob(input: CandidateMatchInput): Promise<CandidateMatchResult> {
+    return this.post('match-candidate', input, 'Gemini Candidate Match');
   }
 
-  async parseCV(input: CVParsingInput): Promise<ParsedCVResult> {
-    const res = await fetch(`${API}/ai/parse-cv`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authService.getSession()?.token || ''}`
-      },
-      body: JSON.stringify(input)
-    });
-    if (!res.ok) {
-      throw new Error(`Gemini CV Parsing failed with status ${res.status}`);
-    }
-    return res.json();
+  parseCV(input: CVParsingInput): Promise<ParsedCVResult> {
+    return this.post('parse-cv', input, 'Gemini CV Parsing');
   }
 
-  async assistJobDescription(input: JobAssistantInput): Promise<JobAssistantResult> {
-    const res = await fetch(`${API}/ai/job-assistant`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authService.getSession()?.token || ''}`
-      },
-      body: JSON.stringify(input)
-    });
-    if (!res.ok) {
-      throw new Error(`Gemini Job Assistant failed with status ${res.status}`);
-    }
-    return res.json();
+  assistJobDescription(input: JobAssistantInput): Promise<JobAssistantResult> {
+    return this.post('job-assistant', input, 'Gemini Job Assistant');
   }
 
-  async semanticSearch(input: SemanticSearchInput): Promise<SemanticSearchResponse> {
-    const res = await fetch(`${API}/ai/semantic-search`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authService.getSession()?.token || ''}`
-      },
-      body: JSON.stringify(input)
-    });
-    if (!res.ok) {
-      throw new Error(`Gemini Semantic Search failed with status ${res.status}`);
-    }
-    return res.json();
+  semanticSearch(input: SemanticSearchInput): Promise<SemanticSearchResponse> {
+    return this.post('semantic-search', input, 'Gemini Semantic Search');
+  }
+
+  scanForScams(input: ScamCheckInput): Promise<ScamCheckResult> {
+    return this.post('scam-check', input, 'Gemini Scam Check');
   }
 }

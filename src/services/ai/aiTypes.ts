@@ -178,6 +178,27 @@ export interface SemanticSearchResponse {
   providerUsed: string;
 }
 
+export interface ScamCheckInput {
+  text: string;
+}
+
+export interface ScamFinding {
+  indicator: string;
+  severity: 'low' | 'medium' | 'high';
+  quote?: string;
+  explanation: string;
+}
+
+export interface ScamCheckResult {
+  riskLevel: 'low' | 'medium' | 'high';
+  riskScore: number; // 0 (ordinary) - 100 (almost certainly fraud)
+  findings: ScamFinding[];
+  recommendation: string;
+  providerUsed: string;
+  /** True when only keyword rules ran (no AI model), so "no findings" must not be read as "verified safe". */
+  isHeuristic?: boolean;
+}
+
 // AI Provider Interface Strategy
 export interface IAIProvider {
   name: string;
@@ -187,4 +208,5 @@ export interface IAIProvider {
   parseCV(input: CVParsingInput): Promise<ParsedCVResult>;
   assistJobDescription(input: JobAssistantInput): Promise<JobAssistantResult>;
   semanticSearch(input: SemanticSearchInput): Promise<SemanticSearchResponse>;
+  scanForScams(input: ScamCheckInput): Promise<ScamCheckResult>;
 }

@@ -20,6 +20,7 @@ export const AiJobRecommendationsWidget: React.FC<AiJobRecommendationsWidgetProp
   opportunities,
   onSelectOpportunity
 }) => {
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [recommendationsData, setRecommendationsData] = useState<JobRecommendationsResponse | null>(null);
 
@@ -51,8 +52,10 @@ export const AiJobRecommendationsWidget: React.FC<AiJobRecommendationsWidgetProp
       });
 
       setRecommendationsData(res);
+      setError('');
     } catch (err) {
       console.error('Error getting job recommendations:', err);
+      setError(err instanceof Error ? err.message : 'Recommendations could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -88,6 +91,10 @@ export const AiJobRecommendationsWidget: React.FC<AiJobRecommendationsWidgetProp
         <div className="py-6 text-center space-y-2">
           <RefreshCw className="w-6 h-6 text-[#BC6C25] animate-spin mx-auto" />
           <p className="text-xs font-bold text-[#132A13]">Computing Personalized Recommendations...</p>
+        </div>
+      ) : error ? (
+        <div role="alert" className="py-4 text-center text-xs text-red-800">
+          {error} <button onClick={loadRecommendations} className="font-bold underline ml-1">Retry</button>
         </div>
       ) : recommendationsData && recommendationsData.recommendations.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

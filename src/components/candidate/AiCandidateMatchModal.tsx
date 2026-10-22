@@ -18,6 +18,7 @@ export const AiCandidateMatchModal: React.FC<AiCandidateMatchModalProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [matchResult, setMatchResult] = useState<CandidateMatchResult | null>(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (isOpen && candidate && opportunity) {
@@ -27,6 +28,8 @@ export const AiCandidateMatchModal: React.FC<AiCandidateMatchModalProps> = ({
 
   const runMatchAnalysis = async () => {
     setLoading(true);
+    setError('');
+    setMatchResult(null);
     try {
       const result = await aiService.matchCandidateToJob({
         candidate,
@@ -35,6 +38,7 @@ export const AiCandidateMatchModal: React.FC<AiCandidateMatchModalProps> = ({
       setMatchResult(result);
     } catch (err) {
       console.error('Error running candidate match analysis:', err);
+      setError(err instanceof Error ? err.message : 'The analysis could not be completed.');
     } finally {
       setLoading(false);
     }
@@ -74,6 +78,12 @@ export const AiCandidateMatchModal: React.FC<AiCandidateMatchModalProps> = ({
               <RefreshCw className="w-8 h-8 text-[#BC6C25] animate-spin" />
               <p className="text-sm font-bold text-[#132A13]">Evaluating Merit & Competencies...</p>
               <p className="text-xs text-[#606C38]">Sanitizing demographic attributes & computing signal weights</p>
+            </div>
+          ) : error ? (
+            <div role="alert" className="py-8 text-center space-y-3">
+              <p className="text-sm font-bold text-red-800">The analysis could not be completed.</p>
+              <p className="text-xs text-stone-600">{error}</p>
+              <button onClick={runMatchAnalysis} className="px-4 py-2 min-h-10 rounded-xl bg-[#283618] text-white text-xs font-bold">Try again</button>
             </div>
           ) : matchResult ? (
             <>

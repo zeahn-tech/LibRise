@@ -11,10 +11,39 @@ import { db } from './src/db/dbClient.js';
 import { authenticateSession as verifySupabaseSession } from './src/server/authMiddleware.js';
 import { createClient } from '@supabase/supabase-js';
 import { syncAuthEnforcement, BAN_DURATION } from './server/authEnforcement.js';
+import {
+  AiInputError,
+  AiOutputError,
+  getGeminiModel,
+  providerLabel,
+  parseModelJson,
+  validateRecommendationsBody,
+  validateMatchBody,
+  validateCvBody,
+  validateJobAssistantBody,
+  validateSemanticSearchBody,
+  validateScamCheckBody
+} from './server/aiHelpers.js';
 
 dotenv.config();
 
 const __dirname = path.resolve();
+
+const GEMINI_MODEL = getGeminiModel();
+
+/** Maps AI route failures to honest HTTP statuses. 400/502/503 make the browser fall back to the heuristic engine
+ *  (or show the message) instead of rendering an empty "successful" result. */
+function sendAiError(res: any, route: string, error: any) {
+  if (error instanceof AiInputError) return res.status(400).json({ error: error.message });
+  if (error instanceof AiOutputError) {
+    console.error(`AI output problem in ${route}:`, error.message);
+    return res.status(502).json({ error: 'The AI service returned an unusable answer. Please try again.' });
+  }
+  const status = Number(error?.status ?? error?.code);
+  if (status === 429) return res.status(503).json({ error: 'The AI service is busy. Please try again shortly.' });
+  console.error(`Error in ${route}:`, error);
+  return res.status(500).json({ error: 'Internal Server Error. Please contact security support.' });
+}
 
 // Lazy Gemini client helper
 let geminiClient: GoogleGenAI | null = null;
@@ -98,6 +127,18 @@ async function startServer() {
     message: { error: 'Too many requests from this IP. Please try again after 15 minutes.' }
   });
   app.use('/api/', apiLimiter);
+
+  // Per-account cap on Gemini calls (cost / quota protection). Keyed by the verified user id, so one signed-in
+  // account cannot burn the shared API quota even from many IPs. Runs after authentication.
+  const aiUserLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: Number(process.env.AI_REQUESTS_PER_15_MIN) || 40,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req: any) => `ai:${req.user?.id || 'anon'}`,
+    validate: { keyGeneratorIpFallback: false },
+    message: { error: 'You have reached the AI usage limit. Please try again in a few minutes.' }
+  });
 
   // CORS: same-origin only unless ALLOWED_ORIGINS (comma-separated exact origins,
   // e.g. https://zeahn-tech.github.io) is set. Required when the static frontend
@@ -189,20 +230,20 @@ async function startServer() {
     const ai = getGeminiClient();
     res.json({
       configured: !!ai,
-      model: 'gemini-3.8-flash',
+      model: GEMINI_MODEL,
       status: ai ? 'online' : 'unconfigured_fallback_active',
     });
   });
 
   // 1. AI Job Recommendations Endpoint
-  app.post('/api/ai/recommendations', authenticateSession, async (req, res) => {
+  app.post('/api/ai/recommendations', authenticateSession, aiUserLimiter, async (req, res) => {
     const ai = getGeminiClient();
     if (!ai) {
       return res.status(503).json({ error: 'Gemini API Key not configured on server' });
     }
 
     try {
-      const { candidate, availableOpportunities, limit = 5 } = req.body;
+      const { candidate, availableOpportunities, limit } = validateRecommendationsBody(req.body);
 
       const prompt = `Based on the following candidate profile and list of available opportunities in Liberia, calculate personalized job recommendations.
 
@@ -215,7 +256,7 @@ ${JSON.stringify(availableOpportunities, null, 2)}
 Return a top-${limit} list ranked by match score (0-100). Explain the match reason based purely on skill overlap and county fit. Do not use protected attributes.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: GEMINI_MODEL,
         contents: prompt,
         config: {
           systemInstruction: SYSTEM_PROMPT,
@@ -247,27 +288,26 @@ Return a top-${limit} list ranked by match score (0-100). Explain the match reas
         },
       });
 
-      const parsed = JSON.parse(response.text || '{}');
+      const parsed = parseModelJson(response.text, ['recommendations']);
       res.json({
         recommendations: parsed.recommendations || [],
-        providerUsed: 'Gemini 3.8 Flash',
+        providerUsed: providerLabel(GEMINI_MODEL),
         timestamp: new Date().toISOString(),
       });
     } catch (error: any) {
-      console.error('Error in /api/ai/recommendations:', error);
-      res.status(500).json({ error: 'Internal Server Error. Please contact security support.' });
+      sendAiError(res, '/api/ai/recommendations', error);
     }
   });
 
   // 2. AI Candidate-Job Match Endpoint
-  app.post('/api/ai/match-candidate', authenticateSession, async (req, res) => {
+  app.post('/api/ai/match-candidate', authenticateSession, aiUserLimiter, async (req, res) => {
     const ai = getGeminiClient();
     if (!ai) {
       return res.status(503).json({ error: 'Gemini API Key not configured on server' });
     }
 
     try {
-      const { candidate, opportunity } = req.body;
+      const { candidate, opportunity } = validateMatchBody(req.body);
 
       const prompt = `Evaluate the candidate alignment with the target opportunity.
 
@@ -280,7 +320,7 @@ ${JSON.stringify(opportunity, null, 2)}
 Provide an explainable match breakdown across 4 non-sensitive categories: Skill Overlap, Experience Depth, County Alignment, and Education & Credentials. Include key strengths, skill gaps, and a overall score (0-100).`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: GEMINI_MODEL,
         contents: prompt,
         config: {
           systemInstruction: SYSTEM_PROMPT,
@@ -321,33 +361,32 @@ Provide an explainable match breakdown across 4 non-sensitive categories: Skill 
         },
       });
 
-      const parsed = JSON.parse(response.text || '{}');
+      const parsed = parseModelJson(response.text, ['overallMatchScore','signals']);
       res.json({
         candidateId: candidate?.id || 'cand-id',
         opportunityId: opportunity?.id || 'opp-id',
         ...parsed,
       });
     } catch (error: any) {
-      console.error('Error in /api/ai/match-candidate:', error);
-      res.status(500).json({ error: 'Internal Server Error. Please contact security support.' });
+      sendAiError(res, '/api/ai/match-candidate', error);
     }
   });
 
   // 3. AI CV Parsing Endpoint
-  app.post('/api/ai/parse-cv', authenticateSession, async (req, res) => {
+  app.post('/api/ai/parse-cv', authenticateSession, aiUserLimiter, async (req, res) => {
     const ai = getGeminiClient();
     if (!ai) {
       return res.status(503).json({ error: 'Gemini API Key not configured on server' });
     }
 
     try {
-      const { cvText } = req.body;
+      const { cvText } = validateCvBody(req.body);
 
       const prompt = `Parse the following raw CV/resume text into a structured profile object:
 ${cvText}`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: GEMINI_MODEL,
         contents: prompt,
         config: {
           systemInstruction: SYSTEM_PROMPT,
@@ -407,14 +446,80 @@ ${cvText}`;
         },
       });
 
-      const parsed = JSON.parse(response.text || '{}');
+      const parsed = parseModelJson(response.text, ['professionalSummary','extractedSkills']);
       res.json(parsed);
     } catch (error: any) {
-      console.error('Error in /api/ai/parse-cv:', error);
-      res.status(500).json({ error: 'Internal Server Error. Please contact security support.' });
+      sendAiError(res, '/api/ai/parse-cv', error);
     }
   });
 
+
+  // 6. AI Scam / Fraud Shield Endpoint: reads vacancy or listing text for advance-fee and impersonation patterns.
+  app.post('/api/ai/scam-check', authenticateSession, aiUserLimiter, async (req, res) => {
+    const ai = getGeminiClient();
+    if (!ai) {
+      return res.status(503).json({ error: 'Gemini API Key not configured on server' });
+    }
+
+    try {
+      const { text } = validateScamCheckBody(req.body);
+
+      const prompt = `You are screening a vacancy, tender or business listing posted on a Liberian marketplace for fraud before it goes live.
+Look for: advance-fee requests (application, registration, uniform, medical, "processing" fees), requests to pay by mobile money or wire before hiring, offers that are unrealistically generous, vague employer identity, off-platform-only contact (WhatsApp/Telegram only), pressure/urgency tactics, and requests for ID or bank details up front.
+Judge ONLY the text below. If it is plain and ordinary, say so: do not invent problems. Never claim you verified the employer exists.
+
+Text to screen:
+"""
+${text}
+"""
+
+Return a riskLevel (low, medium or high), a riskScore (0 = clearly ordinary, 100 = almost certainly fraud), the specific findings with the exact phrase quoted from the text, and a short recommendation for the platform reviewer.`;
+
+      const response = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: prompt,
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              riskLevel: { type: Type.STRING },
+              riskScore: { type: Type.NUMBER },
+              findings: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    indicator: { type: Type.STRING },
+                    severity: { type: Type.STRING },
+                    quote: { type: Type.STRING },
+                    explanation: { type: Type.STRING },
+                  },
+                  required: ['indicator', 'severity', 'explanation'],
+                },
+              },
+              recommendation: { type: Type.STRING },
+            },
+            required: ['riskLevel', 'riskScore', 'findings', 'recommendation'],
+          },
+        },
+      });
+
+      const parsed = parseModelJson<any>(response.text, ['riskLevel', 'riskScore', 'findings', 'recommendation']);
+      const riskLevel = ['low', 'medium', 'high'].includes(String(parsed.riskLevel).toLowerCase()) ? String(parsed.riskLevel).toLowerCase() : 'medium';
+      res.json({
+        riskLevel,
+        riskScore: Math.min(100, Math.max(0, Math.round(Number(parsed.riskScore) || 0))),
+        findings: Array.isArray(parsed.findings) ? parsed.findings : [],
+        recommendation: String(parsed.recommendation || ''),
+        providerUsed: providerLabel(GEMINI_MODEL),
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      sendAiError(res, '/api/ai/scam-check', error);
+    }
+  });
 
   // ---- Account-ban enforcement through the SUPPORTED Auth Admin API (F-19c) ----
   // The caller must be a platform administrator: the drift report is read with the CALLER's
@@ -459,14 +564,14 @@ ${cvText}`;
   });
 
   // 4. AI Job Description Assistant Endpoint
-  app.post('/api/ai/job-assistant', authenticateSession, async (req, res) => {
+  app.post('/api/ai/job-assistant', authenticateSession, aiUserLimiter, async (req, res) => {
     const ai = getGeminiClient();
     if (!ai) {
       return res.status(503).json({ error: 'Gemini API Key not configured on server' });
     }
 
     try {
-      const { title, county = 'Montserrado', opportunityType = 'Job', rawNotesOrDraft = '' } = req.body;
+      const { title, county, opportunityType, rawNotesOrDraft } = validateJobAssistantBody(req.body);
 
       const prompt = `Refine and generate a comprehensive job description based on these parameters:
 Title: ${title}
@@ -477,7 +582,7 @@ Notes/Draft: ${rawNotesOrDraft}
 Return a refined title, executive summary, structured responsibilities, key requirements, recommended skill tags, and 3 candidate screening questions.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: GEMINI_MODEL,
         contents: prompt,
         config: {
           systemInstruction: SYSTEM_PROMPT,
@@ -516,23 +621,22 @@ Return a refined title, executive summary, structured responsibilities, key requ
         },
       });
 
-      const parsed = JSON.parse(response.text || '{}');
+      const parsed = parseModelJson(response.text, ['refinedTitle','structuredResponsibilities']);
       res.json(parsed);
     } catch (error: any) {
-      console.error('Error in /api/ai/job-assistant:', error);
-      res.status(500).json({ error: 'Internal Server Error. Please contact security support.' });
+      sendAiError(res, '/api/ai/job-assistant', error);
     }
   });
 
   // 5. AI Semantic Opportunity Search Endpoint
-  app.post('/api/ai/semantic-search', authenticateSession, async (req, res) => {
+  app.post('/api/ai/semantic-search', authenticateSession, aiUserLimiter, async (req, res) => {
     const ai = getGeminiClient();
     if (!ai) {
       return res.status(503).json({ error: 'Gemini API Key not configured on server' });
     }
 
     try {
-      const { query, opportunities } = req.body;
+      const { query, opportunities } = validateSemanticSearchBody(req.body);
 
       const prompt = `Parse search intent and score opportunities by semantic relevance to the search query.
 
@@ -544,7 +648,7 @@ ${JSON.stringify(opportunities, null, 2)}
 Return parsed search intent (keywords, county if detected, opportunity type if detected) and scored results (relevanceScore 0-100, highlights, and reason).`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: GEMINI_MODEL,
         contents: prompt,
         config: {
           systemInstruction: SYSTEM_PROMPT,
@@ -587,14 +691,13 @@ Return parsed search intent (keywords, county if detected, opportunity type if d
         },
       });
 
-      const parsed = JSON.parse(response.text || '{}');
+      const parsed = parseModelJson(response.text, ['intent','results']);
       res.json({
         ...parsed,
-        providerUsed: 'Gemini 3.8 Flash',
+        providerUsed: providerLabel(GEMINI_MODEL),
       });
     } catch (error: any) {
-      console.error('Error in /api/ai/semantic-search:', error);
-      res.status(500).json({ error: 'Internal Server Error. Please contact security support.' });
+      sendAiError(res, '/api/ai/semantic-search', error);
     }
   });
 

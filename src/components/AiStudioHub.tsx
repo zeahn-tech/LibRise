@@ -16,10 +16,13 @@ import {
   Building2
 } from 'lucide-react';
 import { aiService, AIAuditLogEntry } from '../services/ai/aiService';
-import { AiCandidateMatchModal } from './candidate/AiCandidateMatchModal';
+import { ApplicantMatchPanel } from './candidate/ApplicantMatchPanel';
 import { AiCvParserModal } from './candidate/AiCvParserModal';
 import { AiJobRecommendationsWidget } from './candidate/AiJobRecommendationsWidget';
 import { opportunityService } from '../services/opportunityService';
+import { candidateService } from '../services/candidateService';
+import { candidateToRecommendationInput, mergeParsedCvIntoProfile } from '../services/ai/aiMappers';
+import type { CandidateProfile } from '../types';
 import { ParsedCVResult } from '../services/ai/aiTypes';
 import { useAuth } from '../context/AuthContext';
 import { useEntitlements } from '../hooks/useEntitlements';
@@ -40,27 +43,41 @@ export const AiStudioHub: React.FC<AiStudioHubProps> = ({ onOpenBilling }) => {
   const [previewOpportunities, setPreviewOpportunities] = useState<import('../types').Opportunity[]>([]);
 
   useEffect(() => {
-    if (activeTab === 'recommendations') {
-      opportunityService.list().then((res) => {
-        if (res.data) setPreviewOpportunities(res.data);
-      });
-    }
+    if (activeTab !== 'recommendations') return;
+    opportunityService.list().then((res) => {
+      if (res.data) setPreviewOpportunities(res.data);
+    });
+    setProfileState('loading');
+    candidateService.getMyProfile().then((res) => {
+      if (res.data) {
+        setMyProfile(res.data);
+        setProfileState('ready');
+      } else {
+        setProfileState('error');
+      }
+    });
   }, [activeTab]);
   const [auditLogs, setAuditLogs] = useState<AIAuditLogEntry[]>([]);
   const [activeProviderName, setActiveProviderName] = useState<string>('Detecting provider...');
   const [loadingProvider, setLoadingProvider] = useState(true);
 
   // Modal States
-  const [isMatchModalOpen, setIsMatchModalOpen] = useState(false);
   const [isCvParserModalOpen, setIsCvParserModalOpen] = useState(false);
   const [parsedCV, setParsedCV] = useState<ParsedCVResult | null>(null);
 
   // Job Assistant State
-  const [jobTitle, setJobTitle] = useState('Senior Renewable Energy Project Engineer');
-  const [county, setCounty] = useState('Margibi');
+  const [jobTitle, setJobTitle] = useState('');
+  const [county, setCounty] = useState('');
   const [oppType, setOppType] = useState('Job');
+  const [jobNotes, setJobNotes] = useState('');
   const [draftResult, setDraftResult] = useState<any | null>(null);
+  const [draftError, setDraftError] = useState('');
   const [isDrafting, setIsDrafting] = useState(false);
+
+  // The signed-in candidate's real profile powers recommendations and CV saving.
+  const [myProfile, setMyProfile] = useState<CandidateProfile | null>(null);
+  const [profileState, setProfileState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [cvSaveState, setCvSaveState] = useState<{ status: 'idle' | 'saving' | 'saved' | 'error'; message?: string }>({ status: 'idle' });
 
   useEffect(() => {
     checkProviderStatus();
@@ -79,46 +96,47 @@ export const AiStudioHub: React.FC<AiStudioHubProps> = ({ onOpenBilling }) => {
   };
 
   const handleRunJobAssistant = async () => {
+    if (!jobTitle.trim()) {
+      setDraftError('Enter the vacancy title first.');
+      return;
+    }
     setIsDrafting(true);
     setDraftResult(null);
+    setDraftError('');
     try {
       const res = await aiService.assistJobDescription({
-        title: jobTitle,
-        county,
+        title: jobTitle.trim(),
+        county: county.trim() || undefined,
         opportunityType: oppType,
-        rawNotesOrDraft: 'Seeking experienced engineer to supervise off-grid solar microgrid construction and coordinate local technician crews.'
+        rawNotesOrDraft: jobNotes.trim()
       });
       setDraftResult(res);
       refreshAuditLogs();
     } catch (err) {
-      console.error('Error drafting job description:', err);
+      setDraftError(err instanceof Error ? err.message : 'The draft could not be generated. Please try again.');
     } finally {
       setIsDrafting(false);
     }
   };
 
-  const sampleCandidate = {
-    id: 'cand-001',
-    skills: ['Solar PV Installation', 'Electrical Circuitry', 'Project Management', 'Technical Logistics'],
-    county: 'Margibi',
-    experienceYears: 4,
-    summary: 'Experienced electrical systems supervisor directing off-grid energy installations in Margibi and Montserrado.',
-    workHistory: [
-      { title: 'Electrical Technician', company: 'SunPower Liberia', duration: '2021-Present', description: 'Supervised 6 technicians.' }
-    ],
-    education: [
-      { degree: 'BSc Electrical Engineering', institution: 'University of Liberia', year: '2020' }
-    ]
-  };
-
-  const sampleOpp = {
-    id: 'opp-001',
-    title: 'Off-Grid Solar Project Engineer',
-    organizationName: 'Margibi Rural Electrification Co-op',
-    county: 'Margibi',
-    opportunityType: 'Job',
-    skillsRequired: ['Solar PV Installation', 'Electrical Engineering', 'Project Management', 'Compliance'],
-    description: 'Direct field engineering and solar microgrid installations.'
+  const handleSaveCvToProfile = async () => {
+    if (!parsedCV) return;
+    setCvSaveState({ status: 'saving' });
+    try {
+      const current = myProfile ?? (await candidateService.getMyProfile()).data;
+      if (!current) throw new Error('Your profile could not be loaded. Please try again.');
+      const update = mergeParsedCvIntoProfile(current, parsedCV);
+      if (Object.keys(update).length === 0) {
+        setCvSaveState({ status: 'saved', message: 'Your profile already contains this information, so nothing was changed.' });
+        return;
+      }
+      const res = await candidateService.saveMyProfile(update);
+      if (res.error || !res.data) throw new Error(res.error?.message || 'Saving failed.');
+      setMyProfile(res.data);
+      setCvSaveState({ status: 'saved', message: 'Saved to your profile. Existing text, work history and education were not overwritten.' });
+    } catch (err) {
+      setCvSaveState({ status: 'error', message: err instanceof Error ? err.message : 'Saving failed. Please try again.' });
+    }
   };
 
   return (
@@ -308,22 +326,26 @@ export const AiStudioHub: React.FC<AiStudioHubProps> = ({ onOpenBilling }) => {
         </div>
       )}
 
-      {/* 2. Job Recommendations Demo */}
+      {/* 2. Job recommendations for the signed-in candidate */}
       {activeTab === 'recommendations' && allowed('recommendations') && (
         <div className="space-y-4">
           <div className="p-4 bg-[#F9F8F4] rounded-2xl border border-[#E8E4D9]">
-            <h3 className="text-sm font-bold text-[#132A13]">
-              Live Job Recommendations Widget Preview
-            </h3>
-            <p className="text-xs text-[#606C38]">
-              Simulating recommendations for candidate profile: Electrical & Solar Systems Engineer (Margibi County).
-            </p>
+            <h3 className="text-sm font-bold text-[#132A13]">Recommended opportunities for you</h3>
+            <p className="text-xs text-[#606C38]">Ranked from your own profile skills, experience and county against live opportunities.</p>
           </div>
 
-          <AiJobRecommendationsWidget
-            candidateProfile={sampleCandidate}
-            opportunities={previewOpportunities}
-          />
+          {profileState === 'loading' && <p className="text-xs text-stone-500 text-center py-6">Loading your profile…</p>}
+          {profileState === 'error' && (
+            <div role="alert" className="p-4 rounded-2xl bg-red-50 text-red-800 text-xs">Your profile could not be loaded, so recommendations are unavailable. Please refresh and try again.</div>
+          )}
+          {profileState === 'ready' && myProfile && candidateToRecommendationInput(myProfile).skills.length === 0 && (
+            <div className="p-5 rounded-2xl border border-dashed border-[#D9E3D5] text-center text-xs text-[#606C38]">
+              Add your skills to your candidate profile (or use the CV Parser tab) and recommendations will appear here.
+            </div>
+          )}
+          {profileState === 'ready' && myProfile && candidateToRecommendationInput(myProfile).skills.length > 0 && (
+            <AiJobRecommendationsWidget candidateProfile={candidateToRecommendationInput(myProfile)} opportunities={previewOpportunities} />
+          )}
         </div>
       )}
 
@@ -337,34 +359,12 @@ export const AiStudioHub: React.FC<AiStudioHubProps> = ({ onOpenBilling }) => {
         />
       )}
       {activeTab === 'match' && allowed('match') && entitlements.canUseAI && (
-        <div className="p-8 bg-white rounded-3xl border border-[#E8E4D9] text-center space-y-4">
-          <Award className="w-12 h-12 text-[#BC6C25] mx-auto" />
-          <div className="max-w-md mx-auto space-y-1">
-            <h3 className="text-lg font-serif font-bold text-[#132A13]">
-              Candidate Alignment Rationale Engine
-            </h3>
-            <p className="text-xs text-[#606C38]">
-              Evaluate candidate qualifications against the <strong>{sampleOpp.title}</strong> role in {sampleOpp.county} County.
-            </p>
+        <div className="p-6 bg-white rounded-3xl border border-[#E8E4D9] space-y-3">
+          <div className="flex items-center gap-2">
+            <Award className="w-6 h-6 text-[#BC6C25]" />
+            <h3 className="text-base font-serif font-bold text-[#132A13]">Candidate alignment analysis</h3>
           </div>
-
-          <button
-            onClick={() => setIsMatchModalOpen(true)}
-            className="px-6 py-3 bg-[#283618] hover:bg-[#132A13] text-white font-bold rounded-2xl text-xs shadow-md transition-all flex items-center gap-2 mx-auto"
-          >
-            <Sparkles className="w-4 h-4 text-[#DDA15E]" />
-            <span>Launch Explainable Match Analysis</span>
-          </button>
-
-          <AiCandidateMatchModal
-            isOpen={isMatchModalOpen}
-            onClose={() => {
-              setIsMatchModalOpen(false);
-              refreshAuditLogs();
-            }}
-            candidate={sampleCandidate}
-            opportunity={sampleOpp}
-          />
+          <ApplicantMatchPanel onAnalysisClosed={refreshAuditLogs} />
         </div>
       )}
 
@@ -397,15 +397,28 @@ export const AiStudioHub: React.FC<AiStudioHubProps> = ({ onOpenBilling }) => {
             }}
             onApplyParsedData={(data) => {
               setParsedCV(data);
+              setCvSaveState({ status: 'idle' });
             }}
           />
 
           {parsedCV && (
             <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-left space-y-2 max-w-xl mx-auto text-xs mt-4">
-              <span className="font-bold text-emerald-950">CV Profile Populated:</span>
-              <p><strong>Name:</strong> {parsedCV.candidateName}</p>
-              <p><strong>Location:</strong> {parsedCV.county} County</p>
-              <p><strong>Skills:</strong> {parsedCV.extractedSkills.join(', ')}</p>
+              <span className="font-bold text-emerald-950">Extracted from your CV (not saved yet):</span>
+              {parsedCV.candidateName && <p><strong>Name:</strong> {parsedCV.candidateName}</p>}
+              {parsedCV.county && <p><strong>Location:</strong> {parsedCV.county} County</p>}
+              <p><strong>Skills:</strong> {(parsedCV.extractedSkills || []).join(', ') || 'None found'}</p>
+              <button
+                onClick={handleSaveCvToProfile}
+                disabled={cvSaveState.status === 'saving' || cvSaveState.status === 'saved'}
+                className="mt-1 px-5 py-2.5 min-h-10 bg-[#4F772D] hover:bg-[#283618] disabled:opacity-60 text-white font-bold rounded-xl text-xs"
+              >
+                {cvSaveState.status === 'saving' ? 'Saving…' : cvSaveState.status === 'saved' ? 'Saved' : 'Save to my profile'}
+              </button>
+              {cvSaveState.message && (
+                <p role={cvSaveState.status === 'error' ? 'alert' : 'status'} className={cvSaveState.status === 'error' ? 'text-red-700 font-semibold' : 'text-emerald-900'}>
+                  {cvSaveState.message}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -472,6 +485,20 @@ export const AiStudioHub: React.FC<AiStudioHubProps> = ({ onOpenBilling }) => {
               </select>
             </div>
           </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#283618] mb-1">Your notes or rough draft (optional)</label>
+            <textarea
+              rows={4}
+              value={jobNotes}
+              onChange={(e) => setJobNotes(e.target.value)}
+              maxLength={5000}
+              placeholder="Key duties, must-have skills, salary range, anything the AI should include"
+              className="w-full p-3 bg-[#F9F8F4] rounded-xl border border-[#E8E4D9] text-xs outline-none"
+            />
+          </div>
+
+          {draftError && <p role="alert" className="p-3 rounded-xl bg-red-50 text-red-800 text-xs">{draftError}</p>}
 
           <button
             onClick={handleRunJobAssistant}

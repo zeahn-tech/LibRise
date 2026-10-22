@@ -18,6 +18,7 @@ export const AiSemanticSearchBar: React.FC<AiSemanticSearchBarProps> = ({
   const [isAiMode, setIsAiMode] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
   const [activeResponse, setActiveResponse] = useState<SemanticSearchResponse | null>(null);
 
   const handleSearch = async (e?: React.FormEvent) => {
@@ -28,6 +29,7 @@ export const AiSemanticSearchBar: React.FC<AiSemanticSearchBarProps> = ({
     }
 
     setIsSearching(true);
+    setSearchError('');
 
     if (isAiMode) {
       try {
@@ -60,6 +62,8 @@ export const AiSemanticSearchBar: React.FC<AiSemanticSearchBarProps> = ({
         onResultsUpdated(rankedOpps.length > 0 ? rankedOpps : opportunities, res);
       } catch (err) {
         console.error('Error running AI semantic search:', err);
+        setSearchError('AI search is unavailable right now. Showing all opportunities; try again in a moment.');
+        onResultsUpdated(opportunities);
       } finally {
         setIsSearching(false);
       }
@@ -147,6 +151,8 @@ export const AiSemanticSearchBar: React.FC<AiSemanticSearchBarProps> = ({
       </form>
 
       {/* AI Parsed Intent Chips */}
+      {searchError && <p role="alert" className="text-xs text-red-800 bg-red-50 rounded-xl p-3">{searchError}</p>}
+
       {activeResponse && (
         <div className="p-3 bg-[#ECF3E9] rounded-2xl border border-[#D9E3D5] space-y-2 animate-in fade-in">
           <div className="flex items-center justify-between text-xs font-bold text-[#283618]">

@@ -17,6 +17,7 @@ export const AiCvParserModal: React.FC<AiCvParserModalProps> = ({
   const [cvText, setCvText] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [parsedResult, setParsedResult] = useState<ParsedCVResult | null>(null);
+  const [parseError, setParseError] = useState('');
 
   if (!isOpen) return null;
 
@@ -24,12 +25,14 @@ export const AiCvParserModal: React.FC<AiCvParserModalProps> = ({
     if (!cvText.trim()) return;
     setIsParsing(true);
     setParsedResult(null);
+    setParseError('');
 
     try {
       const result = await aiService.parseCV({ cvText });
       setParsedResult(result);
     } catch (err) {
       console.error('Error parsing CV:', err);
+      setParseError(err instanceof Error ? err.message : 'The CV could not be analysed. Please try again.');
     } finally {
       setIsParsing(false);
     }
@@ -238,6 +241,10 @@ Certified Solar Installation Technician | Ministry of Mines & Energy (2020)`);
           >
             Cancel
           </button>
+          {parseError && (
+            <p role="alert" className="p-3 rounded-xl bg-red-50 text-red-800 text-xs">{parseError}</p>
+          )}
+
           {parsedResult && (
             <button
               onClick={handleApply}
