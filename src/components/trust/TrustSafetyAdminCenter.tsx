@@ -56,6 +56,7 @@ import {
 } from '../../types';
 import { db } from '../../db/dbClient';
 import { trustSafetyService } from '../../services/trustSafetyService';
+import { organizationService } from '../../services/organizationService';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { storageAdapter } from '../../db/storageAdapter';
@@ -119,7 +120,13 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
 
   // --- Dynamic State loaded directly from our unified DB client ---
   const [users, setUsers] = useState<User[]>(() => db.getUsers());
-  const [organizations, setOrganizations] = useState<Organization[]>(() => db.getOrganizations());
+  // Organizations come from Supabase (the system of record). The local demo dataset is only used when demo
+  // mode is explicitly enabled; in production it is empty, which is why this tab used to show no rows.
+  const DEMO_DATA_ENABLED = import.meta.env.VITE_ENABLE_DEMO_MODE === 'true';
+  const [organizations, setOrganizations] = useState<Organization[]>(() => (DEMO_DATA_ENABLED ? db.getOrganizations() : []));
+  const [orgsLoading, setOrgsLoading] = useState(true);
+  const [orgsError, setOrgsError] = useState('');
+  const [orgActionId, setOrgActionId] = useState<string | null>(null);
   const [opportunities, setOpportunities] = useState<Opportunity[]>(() => db.getOpportunities());
   const [businesses, setBusinesses] = useState<BusinessListing[]>(() => db.getBusinesses());
   const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
@@ -188,9 +195,25 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
   // businesses/users/anomalies/audit logs are later or already-migrated
   // services this admin dashboard doesn't yet read through their real
   // services either -- a pre-existing gap, not introduced by this pass).
+  const loadOrganizations = async () => {
+    setOrgsLoading(true);
+    setOrgsError('');
+    try {
+      setOrganizations(await organizationService.getAllOrganizationsForAdmin());
+    } catch (err) {
+      if (DEMO_DATA_ENABLED) {
+        setOrganizations(db.getOrganizations());
+      } else {
+        setOrgsError(err instanceof Error ? err.message : 'Could not load organizations.');
+      }
+    } finally {
+      setOrgsLoading(false);
+    }
+  };
+
   const refreshAllData = async (silent = false) => {
     setUsers(db.getUsers());
-    setOrganizations(db.getOrganizations());
+    await loadOrganizations();
     setOpportunities(db.getOpportunities());
     setBusinesses(db.getBusinesses());
     try {
@@ -266,27 +289,31 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
   };
 
   // 2. Organization verification
-  const toggleOrganizationVerification = (org: Organization) => {
-    const nextVerified = !org.isVerified;
-    const nextStatus = nextVerified ? 'verified' : 'unverified';
+  const toggleOrganizationVerification = async (org: Organization) => {
+    if (orgActionId) return;
+    setOrgActionId(org.id);
     try {
-      const updated = db.updateOrganization(org.id, {
-        isVerified: nextVerified,
-        verificationStatus: nextStatus,
-        verificationBadge: nextVerified ? 'verified_enterprise' : undefined
-      });
-      db.emitAuditLog({
-        actorUserId: user?.id || 'admin',
-        actorName: user?.fullName || 'Platform Admin',
-        action: 'organization.verify_toggle',
-        targetEntity: 'organization',
-        targetId: org.id,
-        details: { nextStatus }
-      });
-      refreshAllData();
-      showToast(`Organization verification toggled to ${nextVerified}`, 'success');
-    } catch (err: any) {
-      showToast('Failed to toggle organization verification', 'error');
+      if (org.isVerified) {
+        if (!window.confirm(`Revoke verification for ${org.name}? Their badge will be removed immediately.`)) return;
+        await organizationService.revokeVerification(org.id, 'Verification revoked by platform administrator');
+        showToast(`Verification revoked for ${org.name}`, 'success');
+      } else {
+        // Verification is only granted through the review workflow, never by flipping a flag.
+        const pending = verificationRequests.find(
+          (r) => r.entityType === 'organization' && r.entityId === org.id && r.status === 'pending'
+        );
+        if (!pending) {
+          showToast(`${org.name} has no pending verification request. Ask them to submit their LBR/TIN documents first.`, 'error');
+          return;
+        }
+        await trustSafetyService.reviewVerificationRequest(pending.id, 'verified', user?.id, 'Approved from organizations directory');
+        showToast(`${org.name} is now verified`, 'success');
+      }
+      await refreshAllData(true);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update organization verification', 'error');
+    } finally {
+      setOrgActionId(null);
     }
   };
 
@@ -919,60 +946,119 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-[#E8E4D9] bg-[#F9F8F6] text-stone-500 uppercase tracking-wider font-bold">
-                    <th className="py-3 px-4">Org Name</th>
-                    <th className="py-3 px-4">Industry Sector</th>
-                    <th className="py-3 px-4">Type</th>
-                    <th className="py-3 px-4">LBR No & TIN</th>
-                    <th className="py-3 px-4">Badge</th>
-                    <th className="py-3 px-4">Is Verified</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#E8E4D9]">
-                  {organizations
-                    .filter(o => o.name.toLowerCase().includes(orgQuery.toLowerCase()))
-                    .map((org) => (
-                      <tr key={org.id} className="hover:bg-stone-50/50">
-                        <td className="py-3.5 px-4 font-bold text-[#283618]">{org.name}</td>
-                        <td className="py-3.5 px-4 text-stone-600">{org.industry}</td>
-                        <td className="py-3.5 px-4 font-semibold capitalize text-stone-700">{org.type.replace('_', ' ')}</td>
-                        <td className="py-3.5 px-4 font-mono text-stone-500">
-                          <div>LBR: {org.registrationNumber || 'N/A'}</div>
-                          <div>TIN: {org.taxIdNumber || 'N/A'}</div>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-[10px] font-bold uppercase">
-                            {org.verificationBadge?.replace('_', ' ') || 'None'}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                            org.isVerified ? 'bg-green-100 text-green-800' : 'bg-stone-100 text-stone-600'
-                          }`}>
+            {(() => {
+              const filteredOrgs = organizations.filter((o) => {
+                const q = orgQuery.trim().toLowerCase();
+                if (!q) return true;
+                return [o.name, o.industry, o.registrationNumber, o.taxIdNumber, o.county].some((v) => (v || '').toLowerCase().includes(q));
+              });
+              const typeLabel = (t?: string) => (t || '').replace(/_/g, ' ') || 'N/A';
+              const badgeLabel = (b?: string) => (b || '').replace(/_/g, ' ') || 'None';
+              const actionLabel = (org: Organization) => (orgActionId === org.id ? 'Working…' : org.isVerified ? 'Revoke Badges' : 'Mark Verified');
+              const actionClass = (org: Organization) =>
+                `px-3 py-2 min-h-10 rounded-xl text-[11px] font-bold border transition-all cursor-pointer disabled:opacity-50 ${
+                  org.isVerified
+                    ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                    : 'bg-[#ECF3E9] text-[#4F772D] border-[#D9E3D5] hover:bg-[#ECF3E9]/80'
+                }`;
+
+              if (orgsLoading && organizations.length === 0) {
+                return <p className="py-10 text-center text-sm text-stone-500">Loading organizations…</p>;
+              }
+              if (orgsError) {
+                return (
+                  <div role="alert" className="p-4 rounded-2xl bg-red-50 text-red-800 text-sm flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+                    <span>{orgsError}</span>
+                    <button onClick={loadOrganizations} className="px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-bold self-start">Retry</button>
+                  </div>
+                );
+              }
+              if (filteredOrgs.length === 0) {
+                return (
+                  <p className="py-10 text-center text-sm text-stone-500">
+                    {organizations.length === 0 ? 'No organizations have registered yet.' : 'No organizations match your search.'}
+                  </p>
+                );
+              }
+
+              return (
+                <>
+                  <p className="text-[11px] text-stone-500 font-semibold">
+                    {filteredOrgs.length} of {organizations.length} organizations
+                  </p>
+
+                  {/* Phones: one card per organization, nothing to scroll sideways */}
+                  <div className="md:hidden space-y-3">
+                    {filteredOrgs.map((org) => (
+                      <div key={org.id} className="rounded-2xl border border-[#E8E4D9] bg-white p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-bold text-[#283618] text-sm break-words">{org.name}</p>
+                            <p className="text-xs text-stone-500">{org.industry || 'No industry'} · <span className="capitalize">{typeLabel(org.type)}</span></p>
+                          </div>
+                          <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${org.isVerified ? 'bg-green-100 text-green-800' : 'bg-stone-100 text-stone-600'}`}>
                             {org.isVerified ? 'Verified' : 'Unverified'}
                           </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <button
-                            onClick={() => toggleOrganizationVerification(org)}
-                            className={`px-3 py-1.5 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
-                              org.isVerified
-                                ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
-                                : 'bg-[#ECF3E9] text-[#4F772D] border-[#D9E3D5] hover:bg-[#ECF3E9]/80'
-                            }`}
-                          >
-                            {org.isVerified ? 'Revoke Badges' : 'Mark Verified'}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-[11px] font-mono text-stone-600">
+                          <div><span className="block text-[9px] uppercase tracking-wider text-stone-400 font-sans font-bold">LBR No</span>{org.registrationNumber || 'N/A'}</div>
+                          <div><span className="block text-[9px] uppercase tracking-wider text-stone-400 font-sans font-bold">TIN</span>{org.taxIdNumber || 'N/A'}</div>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-[10px] font-bold uppercase">{badgeLabel(org.verificationBadge)}</span>
+                          <button onClick={() => toggleOrganizationVerification(org)} disabled={orgActionId !== null} className={actionClass(org)}>
+                            {actionLabel(org)}
                           </button>
-                        </td>
-                      </tr>
+                        </div>
+                      </div>
                     ))}
-                </tbody>
-              </table>
-            </div>
+                  </div>
+
+                  {/* Tablets / desktop: full table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-[#E8E4D9] bg-[#F9F8F6] text-stone-500 uppercase tracking-wider font-bold whitespace-nowrap">
+                          <th className="py-3 px-4">Org Name</th>
+                          <th className="py-3 px-4">Industry Sector</th>
+                          <th className="py-3 px-4">Type</th>
+                          <th className="py-3 px-4">LBR No &amp; TIN</th>
+                          <th className="py-3 px-4">Badge</th>
+                          <th className="py-3 px-4">Is Verified</th>
+                          <th className="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E8E4D9]">
+                        {filteredOrgs.map((org) => (
+                          <tr key={org.id} className="hover:bg-stone-50/50">
+                            <td className="py-3.5 px-4 font-bold text-[#283618]">{org.name}</td>
+                            <td className="py-3.5 px-4 text-stone-600">{org.industry}</td>
+                            <td className="py-3.5 px-4 font-semibold capitalize text-stone-700">{typeLabel(org.type)}</td>
+                            <td className="py-3.5 px-4 font-mono text-stone-500 whitespace-nowrap">
+                              <div>LBR: {org.registrationNumber || 'N/A'}</div>
+                              <div>TIN: {org.taxIdNumber || 'N/A'}</div>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className="px-2 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-[10px] font-bold uppercase whitespace-nowrap">{badgeLabel(org.verificationBadge)}</span>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${org.isVerified ? 'bg-green-100 text-green-800' : 'bg-stone-100 text-stone-600'}`}>
+                                {org.isVerified ? 'Verified' : 'Unverified'}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-right">
+                              <button onClick={() => toggleOrganizationVerification(org)} disabled={orgActionId !== null} className={actionClass(org)}>
+                                {actionLabel(org)}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
 

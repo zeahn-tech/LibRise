@@ -279,6 +279,27 @@ export const organizationService = {
     return (data as OrganizationRow[]).map(rowToOrganization);
   },
 
+  /**
+   * Platform-admin directory: every organization (verified or not) with the private statutory fields
+   * (LBR registration no., TIN, contacts) merged in. Public columns come from the table; the private
+   * columns come from get_organization_private_fields, which only returns data to platform admins and
+   * org members, so a non-admin calling this simply gets the public view.
+   */
+  async getAllOrganizationsForAdmin(): Promise<Organization[]> {
+    const { data, error } = await client().from('organizations').select(ORG_PUBLIC_COLUMNS).order('name', { ascending: true }).limit(2000);
+    if (error) translateError(error);
+    return attachPrivateFields((data as OrganizationRow[]).map(rowToOrganization));
+  },
+
+  /** Platform admins only (enforced in the RPC): clears an organization's verified status and badge. */
+  async revokeVerification(organizationId: string, reason?: string): Promise<void> {
+    const { error } = await client().rpc('revoke_organization_verification', {
+      p_organization_id: organizationId,
+      p_reason: reason ?? null
+    });
+    if (error) translateError(error);
+  },
+
   async getOrganizationById(id: string): Promise<Organization | null> {
     const { data, error } = await client().from('organizations').select(ORG_PUBLIC_COLUMNS).eq('id', id).maybeSingle();
     if (error) translateError(error);
