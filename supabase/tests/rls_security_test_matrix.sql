@@ -481,10 +481,9 @@ reset role;
 
 -- verification_officer via the sanctioned RPC (review_verification_request) -- does the override actually work for officers?
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','d0113703-ef4a-437c-a2ca-e2333b0ea145',true);
-insert into test_log(line) select * from extensions.throws_ok(
+insert into test_log(line) select * from extensions.lives_ok(
   $$select public.review_verification_request('vreq-rlstest-a', 'verified', 'officer approving', null)$$,
-  NULL::char(5), NULL::text,
-  '[RPC review_verification_request][verification_officer] *** FINDING *** RPC raises "Only platform administrators..." for verification_officer -- app permissionMatrix.ts allows verification_officer here but the DB function does not, a real enforcement gap between layers'
+  '[RPC review_verification_request][verification_officer] officer can review/approve a request for an organization they do not belong to (closed by 20261023100000_verification_reviewer_role.sql)'
 );
 reset role;
 

@@ -18,3 +18,12 @@ do $$ begin if not exists (select 1 from pg_roles where rolname='authenticator')
 alter default privileges for role postgres in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges for role postgres in schema public grant all on functions to anon, authenticated, service_role;
 alter default privileges for role postgres in schema public grant all on sequences to anon, authenticated, service_role;
+
+-- Minimal Supabase Storage stand-in (the messaging-attachments migration needs storage.buckets/objects).
+create schema if not exists storage;
+create table if not exists storage.buckets(id text primary key, name text, public boolean default false, file_size_limit bigint, allowed_mime_types text[]);
+create table if not exists storage.objects(id uuid default gen_random_uuid() primary key, bucket_id text, name text, owner uuid);
+alter table storage.objects enable row level security;
+create or replace function storage.foldername(name text) returns text[] language sql immutable as $$ select string_to_array(name,'/') $$;
+grant usage on schema storage to anon, authenticated, service_role;
+grant all on storage.objects, storage.buckets to authenticated, service_role;

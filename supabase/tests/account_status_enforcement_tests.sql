@@ -361,7 +361,8 @@ insert into test_log(line) select * from extensions.is(
       and has_function_privilege('anon', p.oid, 'execute')
       and p.proname not in ('get_business_listing_public', 'list_business_listings_public', 'record_opportunity_view',
                             'priority_organization_ids', 'org_effective_tier', 'tier_limits',
-                            'normalize_momo_transaction_id', 'normalize_sender_phone')),
+                            'normalize_momo_transaction_id', 'normalize_sender_phone',
+                            'get_platform_pulse')),
   NULL, '[F-20][coverage] no other public function is executable by anon (a new function must be revoked or allow-listed here)');
 select set_config('role','anon',true), set_config('request.jwt.claim.sub','',true);
 insert into test_log(line) select * from extensions.throws_ok($$select public.is_platform_admin('0a0a0a0a-0000-4000-8000-000000000007')$$, '42501'::char(5), NULL::text, '[F-20][anon] can no longer ask whether a user is a platform administrator');

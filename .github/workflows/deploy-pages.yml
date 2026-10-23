@@ -16,8 +16,14 @@ name: Deploy to GitHub Pages
 # is ever accidentally switched back to "Deploy from a branch", this
 # same race can recur.
 
+# Audit fix: deploy ONLY after the CI workflow (type-check, tests, bundle scans, pgTAP/RLS suites)
+# has succeeded for the same commit. Previously a push deployed in parallel with CI, so a red CI
+# (failing database authorization tests) still shipped. Manual runs (workflow_dispatch) remain
+# available for emergencies and deploy the selected ref.
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -34,6 +40,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     # Scoped to the same "github-pages" environment as the deploy job
     # below. This matters: if SUPABASE_PAGES_URL / SUPABASE_PAGES_ANON_KEY
@@ -52,6 +59,9 @@ jobs:
       name: github-pages
     steps:
       - uses: actions/checkout@v4
+        with:
+          # For workflow_run this is the exact commit CI validated; empty (default ref) for manual runs.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -120,6 +130,20 @@ jobs:
             echo "Real Supabase secrets detected. Building against host: $(echo "${{ steps.mode.outputs.supabase_url }}" | sed -E 's#https?://##; s#/.*##')"
           fi
 
+      - name: Require a reachable API backend URL
+        # GitHub Pages is static. The AI endpoints and the auth-enforcement route live in the Express
+        # server (server.ts), which must be hosted elsewhere. With VITE_API_BASE_URL empty the browser
+        # calls /api on github.io, which does not exist. Fail loudly instead of shipping a broken app.
+        env:
+          API_URL: ${{ vars.VITE_API_BASE_URL }}
+          ALLOW_NO_BACKEND: ${{ vars.ALLOW_NO_BACKEND }}
+        run: |
+          if [ -z "$API_URL" ] && [ "$ALLOW_NO_BACKEND" != "true" ]; then
+            echo "::error title=No API backend configured::Set the repository variable VITE_API_BASE_URL to the https URL of the deployed Express backend (ending in /api), or set ALLOW_NO_BACKEND=true to deliberately ship without AI/enforcement features."
+            exit 1
+          fi
+          case "$API_URL" in ''|https://*) ;; *) echo "::error::VITE_API_BASE_URL must start with https://"; exit 1;; esac
+
       - name: Build static site for GitHub Pages
         # GitHub Pages serves static files only -- it cannot run server.ts
         # (no Node process, no Stripe webhooks, no Gemini proxy). This is a
@@ -165,9 +189,9 @@ jobs:
           # Public-by-design checkout details (see docs/PAYMENTS.md). Optional
           # repo Variables named VITE_MOMO_* override these defaults. NOTE: the
           # part after `vars.` must be a variable NAME -- never the value itself.
-          VITE_MOMO_MTN_NUMBER: ${{ vars.VITE_MOMO_MTN_NUMBER || '0880024653' }}
-          VITE_MOMO_ORANGE_NUMBER: ${{ vars.VITE_MOMO_ORANGE_NUMBER || '0776391531' }}
-          VITE_MOMO_ACCOUNT_NAME: ${{ vars.VITE_MOMO_ACCOUNT_NAME || 'Emmanuel Zeahn' }}
+          VITE_MOMO_MTN_NUMBER: ${{ secrets.VITE_MOMO_MTN_NUMBER || vars.VITE_MOMO_MTN_NUMBER }}
+          VITE_MOMO_ORANGE_NUMBER: ${{ secrets.VITE_MOMO_ORANGE_NUMBER || vars.VITE_MOMO_ORANGE_NUMBER }}
+          VITE_MOMO_ACCOUNT_NAME: ${{ secrets.VITE_MOMO_ACCOUNT_NAME || vars.VITE_MOMO_ACCOUNT_NAME }}
 
       - name: Verify no service-role key in the client bundle
         run: npm run check:no-service-key-leak
