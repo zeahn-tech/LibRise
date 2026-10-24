@@ -92,7 +92,12 @@ describe('application documents', () => {
     await expect(
       prepareDocuments(Array.from({ length: MAX_CREDENTIAL_FILES + 1 }, (_, i) => ({ kind: 'credential' as const, file: pdf(`c${i}.pdf`) })))
     ).rejects.toThrow(/up to/);
-    await expect(prepareDocuments([{ kind: 'cv', file: pdf('a.pdf') }, { kind: 'cv', file: pdf('b.pdf') }])).rejects.toThrow(/only one CV/i);
+    await expect(
+      prepareDocuments(Array.from({ length: 5 }, (_, i) => ({ kind: 'cv' as const, file: pdf(`cv${i}.pdf`) })))
+    ).rejects.toThrow(/up to 4/i);
+    await expect(
+      prepareDocuments(Array.from({ length: 4 }, (_, i) => ({ kind: 'cv' as const, file: pdf(`cv${i}.pdf`) })))
+    ).resolves.toHaveLength(4);
 
     const ok = await prepareDocuments([{ kind: 'cv', file: pdf() }]);
     expect(ok[0].fileName).toBe('cv.pdf');

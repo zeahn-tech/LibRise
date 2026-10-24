@@ -17,6 +17,7 @@ import type { ApplicationDocument, ApplicationDocumentKind } from '../types';
 
 export const APPLICATION_DOCUMENT_BUCKET = 'application-documents';
 export const MAX_CREDENTIAL_FILES = 5;
+export const MAX_CV_FILES = 4;
 export const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 export interface PendingDocument {
@@ -76,8 +77,8 @@ export async function prepareDocuments(pending: PendingDocument[]): Promise<Prep
   if (credentials > MAX_CREDENTIAL_FILES) {
     throw new ValidationError(`You can attach up to ${MAX_CREDENTIAL_FILES} supporting documents.`);
   }
-  if (pending.filter((p) => p.kind === 'cv').length > 1) {
-    throw new ValidationError('Attach only one CV.');
+  if (pending.filter((p) => p.kind === 'cv').length > MAX_CV_FILES) {
+    throw new ValidationError(`You can attach up to ${MAX_CV_FILES} CV / primary files.`);
   }
 
   const prepared: PreparedDocument[] = [];
