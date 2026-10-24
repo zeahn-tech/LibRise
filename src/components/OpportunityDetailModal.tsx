@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Application, CandidateProfile, Opportunity } from '../types';
 import { OPPORTUNITY_TYPES } from '../config/constants';
 
@@ -49,6 +49,8 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { formatSalaryRange } from '../lib/currency';
 import { applicationService } from '../services/applicationService';
+import { dataUrlToFile, type PendingDocument } from '../services/applicationDocumentService';
+import { ApplicationDocumentsPicker, type CvSource } from './applications/ApplicationDocumentsPicker';
 import { candidateService } from '../services/candidateService';
 import { useToast } from '../context/ToastContext';
 
@@ -79,6 +81,15 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
   const [screeningAnswers, setScreeningAnswers] = useState<Record<number, string>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [cvFile, setCvFile] = useState<File | null>(null);
+  const [cvSource, setCvSource] = useState<CvSource | null>(null);
+  const [credentialFiles, setCredentialFiles] = useState<File[]>([]);
+  const cvTouched = useRef(false);
+
+  // Jobs and internships need a CV; for proposals/inquiries the primary file is optional.
+  const cvRequired = opportunity.type === 'job' || opportunity.type === 'internship';
+  const isProposalLike = ['tender', 'contract', 'grant', 'partnership', 'business_sale', 'investment'].includes(opportunity.type);
+  const cvLabel = isProposalLike ? 'Proposal / Main Document' : 'Resume / CV';
 
   // Load candidate profile when user opens modal
   useEffect(() => {
@@ -89,6 +100,14 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
           if (res.data.fullName) setApplicantName(res.data.fullName);
           if (res.data.email) setApplicantEmail(res.data.email);
           if (res.data.phone) setApplicantPhone(res.data.phone);
+          // Pre-attach the CV saved on the profile (the applicant can replace or remove it).
+          if (!cvTouched.current && res.data.cv?.fileDataUrl) {
+            const file = dataUrlToFile(res.data.cv.fileDataUrl, res.data.cv.fileName || 'CV.pdf');
+            if (file) {
+              setCvFile(file);
+              setCvSource('profile');
+            }
+          }
         }
       });
     }
@@ -121,7 +140,16 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
 
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!applicantName || !applicantEmail) return;
+    if (!applicantName || !applicantEmail || isSubmitted) return;
+    if (cvRequired && !cvFile) {
+      showToast('Please attach your CV before submitting.', 'error');
+      return;
+    }
+
+    const files: PendingDocument[] = [
+      ...(cvFile ? [{ kind: 'cv' as const, file: cvFile }] : []),
+      ...credentialFiles.map((file) => ({ kind: 'credential' as const, file }))
+    ];
 
     setIsSubmitted(true);
     try {
@@ -137,11 +165,10 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
         applicantLocation: candidateProfile?.county || opportunity.county,
         coverNote: coverNote,
         screeningAnswers: screeningAnswers,
-        resumeUrl: candidateProfile?.cv?.fileDataUrl || undefined,
         matchScore: Math.floor(Math.random() * 15) + 85
       };
 
-      const res = await applicationService.submit(applicationPayload);
+      const res = await applicationService.submit(applicationPayload, { files, requireCv: cvRequired });
       if (res.data) {
         onApplySuccess(opportunity.id, applicantName);
         setIsApplying(false);
@@ -431,22 +458,25 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
                 ></textarea>
               </div>
 
-              <div className="p-3 bg-white rounded-xl border border-[#E8E4D9] flex items-center justify-between text-xs text-[#606C38]">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-[#4F772D]" />
-                  <span>
-                    Resume / CV Document:{' '}
-                    <strong>{candidateProfile?.cv?.fileName || 'Attached Liberian Standard CV'}</strong>
-                  </span>
-                </div>
-                <span className="text-[11px] text-[#4F772D] font-bold">
-                  {candidateProfile?.cv ? 'Attached from Profile' : 'Auto-generated'}
-                </span>
-              </div>
+              <ApplicationDocumentsPicker
+                cvLabel={cvLabel}
+                cvRequired={cvRequired}
+                cvFile={cvFile}
+                cvSource={cvSource}
+                onCvChange={(file, source) => {
+                  cvTouched.current = true;
+                  setCvFile(file);
+                  setCvSource(source);
+                }}
+                credentials={credentialFiles}
+                onCredentialsChange={setCredentialFiles}
+                disabled={isSubmitted}
+              />
 
               <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
+                  disabled={isSubmitted}
                   onClick={() => setIsApplying(false)}
                   className="px-4 py-2 text-xs font-semibold text-[#606C38] hover:text-[#283618] cursor-pointer"
                 >
@@ -455,7 +485,7 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
                 <button
                   type="submit"
                   disabled={isSubmitted}
-                  className="px-6 py-2.5 bg-[#4F772D] hover:bg-[#283618] text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="px-6 py-2.5 min-h-11 bg-[#4F772D] hover:bg-[#283618] disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   {isSubmitted ? (
                     <>

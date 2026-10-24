@@ -274,6 +274,18 @@ export interface ApplicationStatusLog {
   };
 }
 
+export type ApplicationDocumentKind = 'cv' | 'credential';
+
+export interface ApplicationDocument {
+  id: string;
+  kind: ApplicationDocumentKind;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  /** Storage object path: <applicant_user_id>/<application_id>/<document_id>-<file_name> */
+  path: string;
+}
+
 export interface Application {
   id: string;
   opportunityId: string;
@@ -292,6 +304,8 @@ export interface Application {
   resumeFileName?: string;
   resumeDataUrl?: string;
   resumeUrl?: string;
+  /** Files the applicant attached (CV + credentials), stored in the private 'application-documents' bucket. */
+  documents?: ApplicationDocument[];
   screeningAnswers?: Record<string, string>;
   matchScore?: number;
   matchNotes?: string;

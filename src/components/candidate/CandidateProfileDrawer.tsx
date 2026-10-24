@@ -21,6 +21,7 @@ import {
 import { useToast } from '../../context/ToastContext';
 import { authService } from '../../services/authService';
 import { subscriptionService } from '../../services/subscriptionService';
+import { ApplicationDocuments } from '../applications/ApplicationDocuments';
 
 interface CandidateProfileDrawerProps {
   profile: CandidateProfile | null;
@@ -76,7 +77,7 @@ export const CandidateProfileDrawer: React.FC<CandidateProfileDrawerProps> = ({
       document.body.removeChild(link);
       showToast('CV downloaded successfully.', 'success');
     } else if (profile?.cvFileName) {
-      showToast(`Downloading verified resume: ${profile.cvFileName}`, 'info');
+      showToast('No downloadable file is available on this profile. Check the documents attached to the application.', 'info');
     } else {
       showToast('CV document not provided or restricted by candidate privacy settings.', 'info');
     }
@@ -146,6 +147,17 @@ export const CandidateProfileDrawer: React.FC<CandidateProfileDrawerProps> = ({
               <p className="text-xs sm:text-sm text-[#2D2D2D] leading-relaxed bg-[#F9F8F4] p-4 rounded-2xl border border-[#E8E4D9]">
                 {profile.bio}
               </p>
+            </div>
+          )}
+
+          {/* Documents the candidate attached to this application (visible to the hiring team regardless of plan) */}
+          {application && (
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[#A3B18A] mb-3 flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5" />
+                <span>Application CV & Documents</span>
+              </h4>
+              <ApplicationDocuments application={application} />
             </div>
           )}
 

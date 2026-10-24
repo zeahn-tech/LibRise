@@ -38,7 +38,14 @@ import { apiClient, ApiResponse } from './apiClient';
 import { authService } from './authService';
 import { notificationService } from './notificationService';
 import { fireAndForget } from '../lib/fireAndForget';
-import type { Application, ApplicationStage, ApplicationStatusLog, InterviewScheduleDetails } from '../types';
+import {
+  getDocumentUrls,
+  prepareDocuments,
+  removeDocuments,
+  uploadDocuments,
+  type PendingDocument
+} from './applicationDocumentService';
+import type { Application, ApplicationDocument, ApplicationStage, ApplicationStatusLog, InterviewScheduleDetails } from '../types';
 import { toDbError, isGrantProblem } from './dbErrors';
 
 interface HiringOfferDetails {
@@ -83,6 +90,7 @@ interface ApplicationRow {
   resume_file_name: string | null;
   resume_data_url: string | null;
   resume_url: string | null;
+  documents?: ApplicationDocument[] | null;
   evaluation_strengths: string[] | null;
   evaluation_improvements: string[] | null;
   internal_notes: string | null;
@@ -116,7 +124,8 @@ function rowToApplication(row: ApplicationRow): Application {
     coverNote: row.cover_letter ?? undefined,
     resumeFileName: row.resume_file_name ?? undefined,
     resumeDataUrl: row.resume_data_url ?? undefined,
-    resumeUrl: row.resume_url || row.cv_url || undefined,
+    resumeUrl: row.resume_url || (row.cv_url && /^https?:\/\//i.test(row.cv_url) ? row.cv_url : undefined),
+    documents: Array.isArray(row.documents) ? row.documents : [],
     screeningAnswers: row.screening_answers ?? undefined,
     matchScore: row.match_score ?? undefined,
     matchNotes: row.match_notes ?? undefined,
@@ -231,8 +240,14 @@ export const applicationService = {
     });
   },
 
+  /** Signed, short-lived URLs (keyed by storage path) for an application's attached documents. */
+  async getDocumentUrls(documents: ApplicationDocument[]): Promise<Record<string, string>> {
+    return getDocumentUrls(documents);
+  },
+
   async submit(
-    data: Omit<Application, 'id' | 'appliedDate' | 'stage' | 'history'>
+    data: Omit<Application, 'id' | 'appliedDate' | 'stage' | 'history'>,
+    options: { files?: PendingDocument[]; requireCv?: boolean } = {}
   ): Promise<ApiResponse<Application>> {
     return apiClient.execute(async () => {
       const session = authService.getSession();
@@ -242,6 +257,13 @@ export const applicationService = {
       if (!data.applicantName?.trim()) throw new ValidationError('Applicant name is required.');
       if (!data.applicantEmail?.includes('@')) throw new ValidationError('Valid applicant email is required.');
       if (!data.opportunityId) throw new ValidationError('An opportunity must be specified.');
+
+      const files = options.files ?? [];
+      if (options.requireCv && !files.some((f) => f.kind === 'cv')) {
+        throw new ValidationError('Please attach your CV before submitting.');
+      }
+      // Validate every file up front (extension, MIME, size, magic bytes) so nothing is uploaded if one is bad.
+      const prepared = await prepareDocuments(files);
 
       const { data: oppRow, error: oppError } = await client()
         .from('opportunities')
@@ -266,6 +288,13 @@ export const applicationService = {
         }
       ];
 
+      // Upload files first (the application id is client-generated, so the paths are known), then insert the row.
+      // If the insert fails the uploaded files are removed again.
+      const documents = prepared.length > 0 ? await uploadDocuments(actorUserId, id, prepared) : [];
+      const cvDoc = documents.find((d) => d.kind === 'cv');
+      const externalResumeUrl =
+        data.resumeUrl && /^https?:\/\//i.test(data.resumeUrl) && data.resumeUrl.length <= 500 ? data.resumeUrl : null;
+
       const insertRow = {
         id,
         opportunity_id: data.opportunityId,
@@ -276,10 +305,12 @@ export const applicationService = {
         applicant_phone: data.applicantPhone ?? null,
         applicant_county: data.applicantLocation ?? null,
         cover_letter: data.coverNote ?? null,
-        cv_url: data.resumeUrl ?? null,
-        resume_file_name: data.resumeFileName ?? null,
-        resume_data_url: data.resumeDataUrl ?? null,
-        resume_url: data.resumeUrl ?? null,
+        cv_url: cvDoc?.path ?? externalResumeUrl,
+        resume_file_name: cvDoc?.fileName ?? data.resumeFileName ?? null,
+        resume_data_url: null,
+        resume_url: externalResumeUrl,
+        // Omitted when empty so submits keep working until the documents migration has been run.
+        ...(documents.length > 0 ? { documents } : {}),
         screening_answers: data.screeningAnswers ?? [],
         stage: 'applied',
         status: 'active',
@@ -291,7 +322,10 @@ export const applicationService = {
         .insert(insertRow)
         .select(SELECT_WITH_JOINS)
         .maybeSingle();
-      if (error) translateError(error);
+      if (error) {
+        await removeDocuments(documents.map((d) => d.path));
+        translateError(error);
+      }
       const app = rowToApplication(created as ApplicationRow);
 
       // Notify the hiring side (the person who posted the opportunity plus the

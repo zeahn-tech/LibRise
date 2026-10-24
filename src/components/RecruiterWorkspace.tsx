@@ -35,6 +35,7 @@ import { useToast } from '../context/ToastContext';
 import { applicationService } from '../services/applicationService';
 import { candidateService } from '../services/candidateService';
 import { CandidateProfileDrawer } from './candidate/CandidateProfileDrawer';
+import { ApplicationDocuments } from './applications/ApplicationDocuments';
 import { OrganizationTeamModal } from './organization/OrganizationTeamModal';
 import { OrganizationWizardModal } from './organization/OrganizationWizardModal';
 import { useEntitlements } from '../hooks/useEntitlements';
@@ -458,6 +459,12 @@ export const RecruiterWorkspace: React.FC<RecruiterWorkspaceProps> = ({
                     "{app.coverNote}"
                   </p>
                 )}
+
+                {/* CV & credentials attached by the applicant */}
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#A3B18A]">CV & Documents</div>
+                  <ApplicationDocuments application={app} compact />
+                </div>
 
                 {/* Screening Answers */}
                 {app.screeningAnswers && Object.keys(app.screeningAnswers).length > 0 && (

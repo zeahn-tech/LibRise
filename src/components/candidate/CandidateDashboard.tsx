@@ -1,3 +1,4 @@
+import { ApplicationDocuments } from '../applications/ApplicationDocuments';
 import React, { useState, useEffect } from 'react';
 import {
   Application,
@@ -520,6 +521,12 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({
                   </p>
                 </div>
               )}
+
+              {/* Submitted CV & documents */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#A3B18A] mb-2">Submitted Documents</h4>
+                <ApplicationDocuments application={activeAppDetails} compact />
+              </div>
 
               {/* Chronological Status Audit Log / History */}
               <div>
