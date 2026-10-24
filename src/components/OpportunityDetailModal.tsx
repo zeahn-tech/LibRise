@@ -50,7 +50,7 @@ import { useAuth } from '../context/AuthContext';
 import { formatSalaryRange } from '../lib/currency';
 import { applicationService } from '../services/applicationService';
 import { dataUrlToFile, type PendingDocument } from '../services/applicationDocumentService';
-import { ApplicationDocumentsPicker, type CvSource } from './applications/ApplicationDocumentsPicker';
+import { ApplicationDocumentsPicker, type CvEntry } from './applications/ApplicationDocumentsPicker';
 import { candidateService } from '../services/candidateService';
 import { useToast } from '../context/ToastContext';
 
@@ -81,10 +81,18 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
   const [screeningAnswers, setScreeningAnswers] = useState<Record<number, string>>({});
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
-  const [cvFile, setCvFile] = useState<File | null>(null);
-  const [cvSource, setCvSource] = useState<CvSource | null>(null);
+  const [cvFiles, setCvFiles] = useState<CvEntry[]>([]);
   const [credentialFiles, setCredentialFiles] = useState<File[]>([]);
   const cvTouched = useRef(false);
+
+  // Lock the page behind the dialog so only the dialog body scrolls.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
   // Jobs and internships need a CV; for proposals/inquiries the primary file is optional.
   const cvRequired = opportunity.type === 'job' || opportunity.type === 'internship';
@@ -103,10 +111,7 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
           // Pre-attach the CV saved on the profile (the applicant can replace or remove it).
           if (!cvTouched.current && res.data.cv?.fileDataUrl) {
             const file = dataUrlToFile(res.data.cv.fileDataUrl, res.data.cv.fileName || 'CV.pdf');
-            if (file) {
-              setCvFile(file);
-              setCvSource('profile');
-            }
+            if (file) setCvFiles([{ file, source: 'profile' }]);
           }
         }
       });
@@ -141,13 +146,13 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!applicantName || !applicantEmail || isSubmitted) return;
-    if (cvRequired && !cvFile) {
+    if (cvRequired && cvFiles.length === 0) {
       showToast('Please attach your CV before submitting.', 'error');
       return;
     }
 
     const files: PendingDocument[] = [
-      ...(cvFile ? [{ kind: 'cv' as const, file: cvFile }] : []),
+      ...cvFiles.map(({ file }) => ({ kind: 'cv' as const, file })),
       ...credentialFiles.map((file) => ({ kind: 'credential' as const, file }))
     ];
 
@@ -185,8 +190,8 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 overflow-y-auto">
-      <div className="bg-white w-full max-w-3xl rounded-[32px] sm:rounded-[40px] border border-[#E8E4D9] shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 overflow-hidden overscroll-contain">
+      <div className="bg-white w-full max-w-3xl rounded-[32px] sm:rounded-[40px] border border-[#E8E4D9] shadow-2xl overflow-hidden max-h-[90dvh] flex flex-col">
         {/* Header Bar */}
         <div className="p-6 sm:p-8 bg-[#ECF3E9] border-b border-[#D9E3D5] relative flex-none">
           <button
@@ -248,7 +253,7 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
         </div>
 
         {/* Scrollable Content */}
-        <div className="p-6 sm:p-8 overflow-y-auto flex-1 space-y-6 text-[#2D2D2D]">
+        <div className="p-6 sm:p-8 overflow-y-auto overscroll-contain flex-1 min-h-0 space-y-6 text-[#2D2D2D]">
           {/* Lifecycle Warning Banner if Expired, Closed, or Draft */}
           {effectiveStatus === 'expired' && (
             <div className="p-4 bg-red-50 rounded-2xl border border-red-200 flex items-start gap-3">
@@ -461,12 +466,10 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
               <ApplicationDocumentsPicker
                 cvLabel={cvLabel}
                 cvRequired={cvRequired}
-                cvFile={cvFile}
-                cvSource={cvSource}
-                onCvChange={(file, source) => {
+                cvFiles={cvFiles}
+                onCvFilesChange={(files) => {
                   cvTouched.current = true;
-                  setCvFile(file);
-                  setCvSource(source);
+                  setCvFiles(files);
                 }}
                 credentials={credentialFiles}
                 onCredentialsChange={setCredentialFiles}
