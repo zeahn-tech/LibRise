@@ -1,4 +1,5 @@
 # LibRise
+Liberian developer built 
 
 A multi-tenant digital opportunity marketplace for Liberia — jobs, internships,
 scholarships, tenders, and a confidential business-for-sale (M&A) exchange — built as
