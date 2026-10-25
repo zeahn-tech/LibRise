@@ -42,7 +42,7 @@ vi.mock('../db/dbClient', () => ({
 
 function chain(result: { data: unknown; error: unknown }) {
   const builder: any = {};
-  const methods = ['select', 'eq', 'update', 'insert'];
+  const methods = ['select', 'eq', 'neq', 'limit', 'update', 'insert'];
   for (const m of methods) {
     builder[m] = vi.fn(() => builder);
   }
@@ -111,10 +111,14 @@ describe('applicationService', () => {
   });
 
   it('submit(): looks up the opportunity, inserts with an initial history entry, and maps the joined row back', async () => {
+    let applicationCalls = 0;
     mockFrom.mockImplementation((table: string) => {
       if (table === 'opportunities') {
         return chain({ data: { id: 'opp-1', organization_id: 'org-1' }, error: null });
       }
+      if (table === 'organization_memberships') return chain({ data: null, error: null });
+      // 1st applications call = duplicate check (none yet); 2nd = the insert.
+      if (table === 'applications' && applicationCalls++ === 0) return chain({ data: null, error: null });
       return chain({ data: sampleAppRow(), error: null });
     });
 

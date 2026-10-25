@@ -35,7 +35,7 @@ const pdf = (name = 'cv.pdf', size = 64) =>
 
 function chain(result: { data: unknown; error: unknown }) {
   const b: any = {};
-  for (const m of ['select', 'eq', 'update', 'insert']) b[m] = vi.fn(() => b);
+  for (const m of ['select', 'eq', 'neq', 'limit', 'update', 'insert']) b[m] = vi.fn(() => b);
   b.maybeSingle = vi.fn(() => Promise.resolve(result));
   b.then = (resolve: (v: unknown) => unknown) => Promise.resolve(result).then(resolve);
   return b;
@@ -114,8 +114,11 @@ describe('application documents', () => {
 
   it('submit(): uploads files under <user>/<application>/ and stores only metadata + path (never a data URL)', async () => {
     const inserted: any[] = [];
+    let appCalls = 0;
     mockFrom.mockImplementation((table: string) => {
       if (table === 'opportunities') return chain({ data: { id: 'opp-1', organization_id: 'org-1' }, error: null });
+      if (table === 'organization_memberships') return chain({ data: null, error: null });
+      if (table === 'applications' && appCalls++ === 0) return chain({ data: null, error: null });
       const b = chain({ data: baseApp, error: null });
       b.insert = vi.fn((row: any) => {
         inserted.push(row);
@@ -143,8 +146,11 @@ describe('application documents', () => {
   });
 
   it('submit(): removes uploaded files if the application insert fails', async () => {
+    let appCalls = 0;
     mockFrom.mockImplementation((table: string) => {
       if (table === 'opportunities') return chain({ data: { id: 'opp-1', organization_id: 'org-1' }, error: null });
+      if (table === 'organization_memberships') return chain({ data: null, error: null });
+      if (table === 'applications' && appCalls++ === 0) return chain({ data: null, error: null });
       return chain({ data: null, error: { code: '23505', message: 'boom' } });
     });
     const { applicationService } = await import('../services/applicationService');
@@ -157,8 +163,11 @@ describe('application documents', () => {
 
   it('submit(): a failed upload cleans up earlier uploads and does not insert', async () => {
     mockUpload.mockResolvedValueOnce({ error: null }).mockResolvedValueOnce({ error: { message: 'Bucket not found' } });
-    const b = chain({ data: { id: 'opp-1', organization_id: 'org-1' }, error: null });
-    mockFrom.mockReturnValue(b);
+    const oppB = chain({ data: { id: 'opp-1', organization_id: 'org-1' }, error: null });
+    const b = chain({ data: null, error: null }); // applications: no duplicate; insert must never be reached
+    mockFrom.mockImplementation((table: string) =>
+      table === 'opportunities' ? oppB : table === 'applications' ? b : chain({ data: null, error: null })
+    );
 
     const { applicationService } = await import('../services/applicationService');
     const res = await applicationService.submit(submitInput, {
@@ -184,5 +193,41 @@ describe('application documents', () => {
       { id: '2', kind: 'credential', fileName: '2.pdf', fileType: 'application/pdf', fileSize: 1, path: 'u/a/2.pdf' }
     ]);
     expect(urls).toEqual({ 'u/a/1.pdf': 'https://signed/1' });
+  });
+
+  it('submit(): blocks the poster and members of the posting organization from applying to their own vacancy', async () => {
+    // member of the organization
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'opportunities') return chain({ data: { id: 'opp-1', organization_id: 'org-1', created_by_user_id: 'someone-else' }, error: null });
+      if (table === 'organization_memberships') return chain({ data: { id: 'mem-1' }, error: null });
+      return chain({ data: null, error: null });
+    });
+    let { applicationService } = await import('../services/applicationService');
+    let res = await applicationService.submit(submitInput, { files: [{ kind: 'cv', file: pdf() }] });
+    expect(res.error?.message).toMatch(/own organization/i);
+    expect(mockUpload).not.toHaveBeenCalled();
+
+    // the user who created the posting
+    vi.resetModules();
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'opportunities') return chain({ data: { id: 'opp-1', organization_id: 'org-1', created_by_user_id: 'user-1' }, error: null });
+      return chain({ data: null, error: null });
+    });
+    ({ applicationService } = await import('../services/applicationService'));
+    res = await applicationService.submit(submitInput);
+    expect(res.error?.message).toMatch(/own organization/i);
+  });
+
+  it('submit(): rejects a second active application to the same opportunity', async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'opportunities') return chain({ data: { id: 'opp-1', organization_id: 'org-1', created_by_user_id: 'other' }, error: null });
+      if (table === 'organization_memberships') return chain({ data: null, error: null });
+      if (table === 'applications') return chain({ data: { id: 'app-existing' }, error: null });
+      return chain({ data: null, error: null });
+    });
+    const { applicationService } = await import('../services/applicationService');
+    const res = await applicationService.submit(submitInput, { files: [{ kind: 'cv', file: pdf() }] });
+    expect(res.error?.message).toMatch(/already applied/i);
+    expect(mockUpload).not.toHaveBeenCalled();
   });
 });

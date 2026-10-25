@@ -235,6 +235,7 @@ export function rowToOpportunity(row: OpportunityRow): Opportunity {
   return {
     id: row.id,
     organizationId: row.organization_id,
+    createdByUserId: row.created_by_user_id,
     organization: fallbackOrg,
     title: row.title,
     slug: row.slug,

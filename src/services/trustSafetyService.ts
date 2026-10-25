@@ -28,6 +28,13 @@
  */
 
 import {
+  prepareVerificationDocuments,
+  removeVerificationDocuments,
+  uploadVerificationDocuments,
+  getVerificationDocumentUrls,
+  type PendingVerificationDocument
+} from './verificationDocumentService';
+import {
   AccountRestriction,
   AccountRestrictionType,
   ContentReport,
@@ -201,6 +208,11 @@ function rowToRestriction(row: AccountRestrictionRow): AccountRestriction {
 }
 
 export class TrustSafetyService {
+  /** Signed URLs (by storage path) for verification evidence; readable by the submitter, platform admins and verification officers. */
+  getEvidenceUrls(docs: { path?: string }[]): Promise<Record<string, string>> {
+    return getVerificationDocumentUrls(docs);
+  }
+
   /** Returns whatever the caller's RLS grants: their own submissions, or every request for a platform admin's review queue. */
   async getVerificationRequests(): Promise<VerificationRequest[]> {
     const { data, error } = await client().from('verification_requests').select('*').order('submitted_at', { ascending: false });
@@ -233,13 +245,18 @@ export class TrustSafetyService {
     taxIdNumber?: string;
     licenseNumber?: string;
     county: string;
-    evidenceDocuments: unknown[];
+    evidenceDocuments?: unknown[];
+    /** Files to validate and upload to the private verification-documents bucket. */
+    files?: PendingVerificationDocument[];
     evidenceNotes?: string;
   }): Promise<VerificationRequest> {
     const session = authService.getSession();
     if (!session.user) throw new UnauthorizedError('Sign in required to submit verification evidence.');
 
     const id = `vreq-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    // Validate everything first so nothing is uploaded if one file is bad; upload under <uid>/<request id>/.
+    const prepared = await prepareVerificationDocuments(data.files ?? []);
+    const stored = prepared.length > 0 ? await uploadVerificationDocuments(session.user.id, id, prepared) : [];
     const { data: created, error } = await client()
       .from('verification_requests')
       .insert({
@@ -255,13 +272,16 @@ export class TrustSafetyService {
         tax_id_number: data.taxIdNumber ?? null,
         license_number: data.licenseNumber ?? null,
         county: data.county,
-        evidence_documents: data.evidenceDocuments || [],
+        evidence_documents: stored.length > 0 ? stored : data.evidenceDocuments || [],
         evidence_notes: data.evidenceNotes ?? null,
         status: 'pending_review'
       })
       .select('*')
       .maybeSingle();
-    if (error) translateError(error);
+    if (error) {
+      await removeVerificationDocuments(stored.map((d) => d.path!));
+      translateError(error);
+    }
     return rowToVerificationRequest(created as VerificationRequestRow);
   }
 

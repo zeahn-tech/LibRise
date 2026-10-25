@@ -160,6 +160,9 @@ function client() {
 }
 
 function translateError(error: { code?: string; message: string }): never {
+  // Messages raised by the guard_application_insert trigger are meant for the applicant; pass them through.
+  if (/posted by your own organization/i.test(error.message)) throw new ForbiddenError(error.message);
+  if (error.code === '23505' && /already applied/i.test(error.message)) throw new ValidationError(error.message);
   if (error.code === '42501') {
     if (isGrantProblem(error)) throw toDbError('applicationService', error);
     throw new ForbiddenError(
@@ -272,6 +275,34 @@ export const applicationService = {
         .maybeSingle();
       if (oppError) translateError(oppError);
       if (!oppRow) throw new NotFoundError('Opportunity', data.opportunityId);
+
+      // Posters and members of the posting organization cannot apply to their own vacancy (also enforced by a DB trigger).
+      const opp = oppRow as { organization_id: string; created_by_user_id: string | null };
+      let isOwnPosting = opp.created_by_user_id === actorUserId;
+      if (!isOwnPosting) {
+        const { data: membership } = await client()
+          .from('organization_memberships')
+          .select('id')
+          .eq('organization_id', opp.organization_id)
+          .eq('user_id', actorUserId)
+          .eq('status', 'active')
+          .maybeSingle();
+        isOwnPosting = !!membership;
+      }
+      if (isOwnPosting) {
+        throw new ForbiddenError('You cannot apply to an opportunity posted by your own organization.');
+      }
+
+      // One active application per opportunity.
+      const { data: existing } = await client()
+        .from('applications')
+        .select('id')
+        .eq('opportunity_id', data.opportunityId)
+        .eq('applicant_user_id', actorUserId)
+        .neq('stage', 'withdrawn')
+        .limit(1)
+        .maybeSingle();
+      if (existing) throw new ValidationError('You have already applied to this opportunity.');
 
       const now = new Date().toISOString();
       const id = `app-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;

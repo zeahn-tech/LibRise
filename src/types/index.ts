@@ -139,6 +139,8 @@ export interface Opportunity {
   title: string;
   slug: string;
   type: OpportunityType;
+  /** User who posted it (used to stop posters applying to their own vacancy). */
+  createdByUserId?: string;
   employmentType?: EmploymentType;
   workplaceModel: WorkplaceModel;
   county: County;
@@ -349,7 +351,10 @@ export interface VerificationAudit {
   badgeRequested: VerificationBadge;
   submissionDate: string;
   status: 'pending' | 'under_review' | 'approved' | 'rejected';
+  /** File names, for compact display. */
   documents: string[];
+  /** Stored evidence files (private Storage) that reviewers can open. */
+  documentFiles?: VerificationEvidenceDocument[];
 }
 
 export type SystemRole =
@@ -912,13 +917,25 @@ export interface AppNotification {
 
 export type VerificationEntityType = 'organization' | 'recruiter' | 'business';
 
+export type VerificationDocumentType =
+  | 'lbr_certificate'
+  | 'tax_clearance'
+  | 'mofa_accreditation'
+  | 'hr_license'
+  | 'ownership_proof'
+  | 'national_id'
+  | 'other';
+
 export interface VerificationEvidenceDocument {
   id: string;
   fileName: string;
   fileType: string;
-  documentType: 'lbr_certificate' | 'tax_clearance' | 'mofa_accreditation' | 'hr_license' | 'ownership_proof' | 'national_id' | 'other';
+  documentType: VerificationDocumentType;
   fileSize: number;
+  /** Legacy: browser blob/data URL from before uploads were stored (not viewable later). Empty for stored files. */
   urlOrData: string;
+  /** Private Storage object path in bucket `verification-documents`. */
+  path?: string;
   uploadedAt: string;
 }
 

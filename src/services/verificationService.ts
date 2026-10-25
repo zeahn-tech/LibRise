@@ -28,7 +28,7 @@
  *     migrations compose correctly with each other.
  */
 
-import { VerificationAudit } from '../types';
+import { VerificationAudit, VerificationEvidenceDocument } from '../types';
 import { getSupabaseClient } from '../lib/supabaseClient';
 import type { OrganizationPrivateRow } from './orgColumns';
 import { apiClient, ApiResponse } from './apiClient';
@@ -44,7 +44,7 @@ interface VerificationAuditRow {
   requested_by_user_id: string;
   status: string;
   requested_badge: string;
-  documents_submitted: string[] | null;
+  documents_submitted: Array<string | VerificationEvidenceDocument> | null;
   reviewer_user_id: string | null;
   reviewer_notes: string | null;
   reviewed_at: string | null;
@@ -78,7 +78,10 @@ function rowToAudit(row: VerificationAuditRow): VerificationAudit {
     badgeRequested: row.requested_badge as VerificationAudit['badgeRequested'],
     submissionDate: row.created_at ? row.created_at.split('T')[0] : '',
     status: row.status as VerificationAudit['status'],
-    documents: row.documents_submitted || []
+    documents: (row.documents_submitted || []).map((d) => (typeof d === 'string' ? d : d.fileName)),
+    documentFiles: (row.documents_submitted || []).filter(
+      (d): d is VerificationEvidenceDocument => typeof d === 'object' && d !== null && !!(d as VerificationEvidenceDocument).path
+    )
   };
 }
 
@@ -114,7 +117,7 @@ export const verificationService = {
   },
 
   async submit(
-    audit: Omit<VerificationAudit, 'id' | 'submissionDate' | 'status'> & { organizationId?: string }
+    audit: Omit<VerificationAudit, 'id' | 'submissionDate' | 'status'> & { organizationId?: string; linkedRequestId?: string }
   ): Promise<ApiResponse<VerificationAudit>> {
     return apiClient.execute(async () => {
       const session = authService.getSession();
@@ -127,7 +130,8 @@ export const verificationService = {
         throw new ValidationError('An organization must be selected to request verification.');
       }
 
-      const id = `audit-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      // Reuse the evidence request's id so the two review queues can be kept in sync (see migration 20261024150000).
+      const id = audit.linkedRequestId || `audit-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const { data, error } = await client()
         .from('verification_audits')
         .insert({
@@ -135,7 +139,7 @@ export const verificationService = {
           organization_id: organizationId,
           requested_by_user_id: session.user.id,
           requested_badge: audit.badgeRequested,
-          documents_submitted: audit.documents || [],
+          documents_submitted: audit.documentFiles && audit.documentFiles.length > 0 ? audit.documentFiles : audit.documents || [],
           status: 'pending'
         })
         .select(SELECT_WITH_ORG)

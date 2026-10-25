@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Building2,
   X,
@@ -23,6 +23,9 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { organizationService } from '../../services/organizationService';
 import { verificationService } from '../../services/verificationService';
+import { trustSafetyService } from '../../services/trustSafetyService';
+import { VerificationDocumentsPicker } from '../verification/VerificationDocumentsPicker';
+import type { PendingVerificationDocument } from '../../services/verificationDocumentService';
 import { Button } from '../../design-system/Button';
 
 interface OrganizationWizardModalProps {
@@ -46,6 +49,16 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
 }) => {
   const { user, switchOrganization, refreshOrganizations } = useAuth();
   const { showToast } = useToast();
+
+  // Lock the page behind the dialog so only the dialog body scrolls.
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
 
   const [currentStep, setCurrentStep] = useState<WizardStep>('foundation');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -72,6 +85,7 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
   const [taxIdNumber, setTaxIdNumber] = useState('');
   const [documentNotes, setDocumentNotes] = useState('');
   const [requestVerificationNow, setRequestVerificationNow] = useState(true);
+  const [verificationDocs, setVerificationDocs] = useState<PendingVerificationDocument[]>([]);
 
   // Step 4: Team Invitations
   const [invites, setInvites] = useState<InviteEntry[]>([]);
@@ -268,9 +282,28 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
         }
       }
 
-      // 2. If verification requested with notes, submit a verification audit
-      if (requestVerificationNow && (registrationNumber.trim() || taxIdNumber.trim())) {
+      // 2. If verification was requested, upload the evidence and submit it for review. The workspace already exists,
+      // so a failure here is reported (not hidden) but never blocks creating the workspace.
+      let verificationWarning: string | null = null;
+      if (requestVerificationNow && (registrationNumber.trim() || taxIdNumber.trim() || verificationDocs.length > 0)) {
         try {
+          let linkedRequestId: string | undefined;
+          let documentFiles: Awaited<ReturnType<typeof trustSafetyService.submitVerificationRequest>>['evidenceDocuments'] | undefined;
+          if (verificationDocs.length > 0) {
+            const request = await trustSafetyService.submitVerificationRequest({
+              entityType: 'organization',
+              entityId: newOrg.id,
+              entityName: newOrg.name,
+              badgeRequested: 'verified_business',
+              registrationNumber: registrationNumber.trim() || undefined,
+              taxIdNumber: taxIdNumber.trim() || undefined,
+              county: newOrg.county,
+              files: verificationDocs,
+              evidenceNotes: documentNotes.trim() || undefined
+            });
+            linkedRequestId = request.id;
+            documentFiles = request.evidenceDocuments;
+          }
           await verificationService.submit({
             organizationId: newOrg.id,
             organizationName: newOrg.name,
@@ -279,10 +312,12 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
             registryNumber: registrationNumber.trim() || 'SUBMITTED',
             taxIdNumber: taxIdNumber.trim() || 'SUBMITTED',
             badgeRequested: 'verified_business',
-            documents: documentNotes.trim() ? [documentNotes.trim()] : []
+            documents: documentFiles ? documentFiles.map((d) => d.fileName) : documentNotes.trim() ? [documentNotes.trim()] : [],
+            documentFiles,
+            linkedRequestId
           });
-        } catch {
-          // Non-blocking
+        } catch (verifyErr) {
+          verificationWarning = verifyErr instanceof Error ? verifyErr.message : 'unknown error';
         }
       }
 
@@ -319,6 +354,12 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
       } else {
         showToast(`Workspace "${newOrg.name}" established successfully!`, 'success');
       }
+      if (verificationWarning) {
+        showToast(
+          `Verification documents were not submitted: ${verificationWarning}. You can resubmit from the Verification tab.`,
+          'error'
+        );
+      }
 
       if (onCreated) {
         onCreated(newOrg);
@@ -335,8 +376,8 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#132A13]/70 backdrop-blur-xs overflow-y-auto">
-      <div className="relative w-full max-w-3xl bg-white rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden my-auto flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#132A13]/70 backdrop-blur-xs overflow-hidden overscroll-contain">
+      <div className="relative w-full max-w-3xl bg-white rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden flex flex-col max-h-[92dvh]">
         {/* Header */}
         <div className="px-6 sm:px-8 pt-6 pb-4 border-b border-[#E8E4D9] bg-[#F9F8F6] relative flex-none">
           <button
@@ -706,6 +747,15 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
                   <span className="font-bold">Submit for Verification Review immediately.</span> Verification officers will review statutory credentials.
                 </label>
               </div>
+
+              {requestVerificationNow && (
+                <div>
+                  <div className="block text-xs font-bold text-[#132A13] uppercase tracking-wider mb-1.5">
+                    Statutory Proof Documents
+                  </div>
+                  <VerificationDocumentsPicker documents={verificationDocs} onChange={setVerificationDocs} disabled={isSubmitting} />
+                </div>
+              )}
             </div>
           )}
 
