@@ -20,7 +20,7 @@ export const openedFromRecoveryLink: boolean = params.get('type') === 'recovery'
 /** Set when the reset link was rejected (expired / already used). */
 export const recoveryLinkError: string | null = params.get('error')
   ? params.get('error_code') === 'otp_expired'
-    ? 'This password reset link has expired or was already used. Request a new one below.'
+    ? 'This email link has expired or was already used. For a password reset, request a new one below. For email verification, sign in and tap "Resend email".'
     : (params.get('error_description') || 'This password reset link is not valid. Request a new one below.').replace(/\+/g, ' ')
   : null;
 

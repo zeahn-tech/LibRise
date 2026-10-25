@@ -461,6 +461,8 @@ class AuthService {
         email: params.email,
         password: params.password,
         options: {
+          // Send the confirmation link back to this app (incl. a GitHub Pages sub-path), not the project's default Site URL.
+          emailRedirectTo: this.emailRedirectUrl(),
           data: {
             fullName: params.fullName,
             primaryRole: params.primaryRole,
@@ -683,12 +685,66 @@ class AuthService {
     return await db.resetPassword(token, newPassword);
   }
 
+  /** Where Supabase should send people after they click the confirmation link: this app, at its current base path. */
+  private emailRedirectUrl(): string {
+    return typeof window === 'undefined' ? '' : appBaseUrl();
+  }
+
+  /** Sends a fresh confirmation email to the signed-in account's address. */
+  public async resendVerificationEmail(): Promise<void> {
+    const supabase = getSupabaseClient();
+    const email = this.currentSession.user?.email;
+    if (!supabase || !email) {
+      throw new Error('Sign in with your account to request a verification email.');
+    }
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: this.emailRedirectUrl() }
+    });
+    if (error) {
+      if (/rate|seconds|too many|limit/i.test(error.message)) {
+        throw new Error('Please wait a minute before requesting another email.');
+      }
+      throw new Error(error.message || 'Could not send the verification email. Please try again.');
+    }
+  }
+
+  /**
+   * Re-checks the account with the server (after the person clicked the link, possibly on another device) and
+   * refreshes the local session. Returns true once the email address is confirmed.
+   */
+  public async refreshEmailVerification(): Promise<boolean> {
+    const supabase = getSupabaseClient();
+    if (!supabase || !this.currentSession.user) return !!this.currentSession.user?.isEmailVerified;
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data.user) return !!this.currentSession.user.isEmailVerified;
+    const confirmed = !!data.user.email_confirmed_at;
+    if (confirmed && !this.currentSession.user.isEmailVerified) {
+      const { data: sessionData } = await supabase.auth.refreshSession();
+      await this.hydrateSessionFromSupabase(data.user, sessionData?.session || null);
+      if (this.currentSession.user && !this.currentSession.user.isEmailVerified) {
+        // Confirmed by Supabase Auth; the profile row can lag a moment behind, so reflect the confirmed state now.
+        this.currentSession.user = { ...this.currentSession.user, isEmailVerified: true };
+        storageAdapter.setItem(SESSION_STORAGE_KEY, this.currentSession);
+      }
+    }
+    return confirmed;
+  }
+
+  /** Completes a confirmation link that arrives as ?token_hash=...&type=... (custom email template). */
   public async verifyEmail(token: string): Promise<User | null> {
     const supabase = getSupabaseClient();
     if (supabase) {
-      const { data, error } = await supabase.auth.verifyOtp({ token_hash: token, type: 'email' });
+      let result = await supabase.auth.verifyOtp({ token_hash: token, type: 'email' });
+      if (result.error) result = await supabase.auth.verifyOtp({ token_hash: token, type: 'signup' });
+      const { data, error } = result;
       if (error) {
-        throw new Error(error.message || 'Email verification failed.');
+        throw new Error(
+          /expired|invalid/i.test(error.message)
+            ? 'This verification link is invalid or has expired. Request a new email and use the newest link.'
+            : error.message || 'Email verification failed.'
+        );
       }
       if (data.user) {
         const updated = await this.hydrateSessionFromSupabase(data.user, data.session || null);
