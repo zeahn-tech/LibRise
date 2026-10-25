@@ -97,6 +97,7 @@ begin
     select 1 from public.applications a
      where a.opportunity_id = new.opportunity_id
        and a.applicant_user_id = new.applicant_user_id
+       and a.id <> new.id
        and a.stage is distinct from 'withdrawn'
   ) then
     raise exception 'You have already applied to this opportunity.' using errcode = '23505';
@@ -108,7 +109,10 @@ $$;
 
 revoke all on function public.guard_application_insert() from public, anon, authenticated;
 
+-- AFTER INSERT (not BEFORE) on purpose: Postgres evaluates RLS WITH CHECK before AFTER triggers, so an account that
+-- is not allowed to apply at all (suspended, applications_disabled, ...) still gets the standard 42501 permission
+-- denial rather than a misleading "already applied" error. Raising here rolls the insert back.
 drop trigger if exists trg_guard_application_insert on public.applications;
 create trigger trg_guard_application_insert
-  before insert on public.applications
+  after insert on public.applications
   for each row execute function public.guard_application_insert();
