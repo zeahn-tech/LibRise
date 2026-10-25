@@ -36,7 +36,7 @@ import { convertAmount } from './lib/currency';
 import { ToastProvider, useToast } from './context/ToastContext';
 import { RouterProvider, useRouter } from './routes/router';
 import { ErrorBoundary } from './core/errors/ErrorBoundary';
-import { OfflineBanner } from './pwa/OfflineBanner';
+import { EmailVerificationBanner } from './components/auth/EmailVerificationBanner';
 import { AuthModal } from './components/auth/AuthModal';
 import { DemoModeBanner } from './components/auth/DemoModeBanner';
 import { OnboardingModal } from './components/auth/OnboardingModal';
@@ -79,7 +79,7 @@ const TabLoadingFallback = () => (
 
 function AppContent() {
   const { currency, setCurrency } = useConfig();
-  const { activeRole, switchRole, user, verifyEmail, session, authContext, openAuthModal, activeOrganization } = useAuth();
+  const { activeRole, switchRole, user, session, authContext, openAuthModal, activeOrganization } = useAuth();
   const { showToast } = useToast();
   const { route, navigate } = useRouter();
 
@@ -483,7 +483,6 @@ function AppContent() {
     <div className="min-h-screen bg-[#F9F8F6] text-[#2D2D2D] font-sans flex flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] xl:pb-0">
       {/* Offline Status Alert */}
       <DemoModeBanner />
-      <OfflineBanner />
 
       {/* Main Navigation with Natural Tones palette */}
       <Navbar
@@ -497,30 +496,8 @@ function AppContent() {
         notificationCount={applications.length}
       />
 
-      {/* Account Verification Prompt if pending */}
-      {user && !user.isEmailVerified && (
-        <div className="bg-[#FEFAE0] border-b border-[#E8E4D9] px-4 py-2.5 text-xs text-[#283618] flex items-center justify-between">
-          <div className="flex items-center gap-2 max-w-4xl mx-auto w-full">
-            <AlertCircle className="w-4 h-4 text-[#BC6C25] shrink-0" />
-            <span>
-              <strong>Action Recommended:</strong> Your account (<em>{user.email}</em>) has not yet confirmed email verification.
-            </span>
-            <button
-              onClick={async () => {
-                try {
-                  await verifyEmail('eml_demo_instant');
-                  showToast('Email verified successfully! Full account capabilities unlocked.');
-                } catch (err) {
-                  showToast(err instanceof Error ? err.message : 'Could not verify your email. Please try again.', 'error');
-                }
-              }}
-              className="ml-auto underline font-bold text-[#BC6C25] hover:text-[#9A551A] cursor-pointer whitespace-nowrap"
-            >
-              Verify Now
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Account email verification prompt (resend / re-check) */}
+      <EmailVerificationBanner />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
