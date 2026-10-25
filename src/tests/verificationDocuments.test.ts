@@ -91,4 +91,20 @@ describe('verification documents', () => {
     const { getVerificationDocumentUrls } = await import('../services/verificationDocumentService');
     expect(await getVerificationDocumentUrls([{ path: 'u/r/1.pdf' }, { path: 'u/r/2.pdf' }, {}])).toEqual({ 'u/r/1.pdf': 'https://signed/1' });
   });
+
+  it('verificationService.submit reuses the evidence request id and stores file metadata on the audit', async () => {
+    const inserted: any[] = [];
+    mockFrom.mockImplementation(() =>
+      insertChain({ data: { id: 'vreq-9', organization_id: 'org-1', requested_by_user_id: 'user-1', status: 'pending', requested_badge: 'verified_company', documents_submitted: [], created_at: new Date().toISOString(), organizations: { name: 'Acme', type: 'ngo', county: 'Montserrado' } }, error: null }, inserted)
+    );
+    const { verificationService } = await import('../services/verificationService');
+    const doc = { id: 'vdoc-1', fileName: 'lbr.pdf', fileType: 'application/pdf', documentType: 'lbr_certificate' as const, fileSize: 10, urlOrData: '', path: 'user-1/vreq-9/vdoc-1-lbr.pdf', uploadedAt: new Date().toISOString() };
+    await verificationService.submit({
+      organizationId: 'org-1', organizationName: 'Acme', organizationType: 'ngo', county: 'Montserrado' as any,
+      registryNumber: 'LBR-1', taxIdNumber: 'TIN-1', badgeRequested: 'verified_company',
+      documents: ['lbr.pdf'], documentFiles: [doc], linkedRequestId: 'vreq-9'
+    });
+    expect(inserted[0].id).toBe('vreq-9');
+    expect(inserted[0].documents_submitted[0].path).toBe(doc.path);
+  });
 });

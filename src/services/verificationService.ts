@@ -117,7 +117,7 @@ export const verificationService = {
   },
 
   async submit(
-    audit: Omit<VerificationAudit, 'id' | 'submissionDate' | 'status'> & { organizationId?: string }
+    audit: Omit<VerificationAudit, 'id' | 'submissionDate' | 'status'> & { organizationId?: string; linkedRequestId?: string }
   ): Promise<ApiResponse<VerificationAudit>> {
     return apiClient.execute(async () => {
       const session = authService.getSession();
@@ -130,7 +130,8 @@ export const verificationService = {
         throw new ValidationError('An organization must be selected to request verification.');
       }
 
-      const id = `audit-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      // Reuse the evidence request's id so the two review queues can be kept in sync (see migration 20261024150000).
+      const id = audit.linkedRequestId || `audit-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const { data, error } = await client()
         .from('verification_audits')
         .insert({

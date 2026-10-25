@@ -445,7 +445,7 @@ function AppContent() {
   };
 
   const handleNewAuditSubmit = async (newAudit: VerificationAudit) => {
-    const res = await verificationService.submit(newAudit);
+    const res = await verificationService.submit({ ...newAudit, linkedRequestId: newAudit.id.startsWith('vreq-') ? newAudit.id : undefined });
     if (res.data) {
       setAudits([res.data, ...audits]);
       showToast('Verification documents submitted to auditor queue.');
