@@ -1,3 +1,4 @@
+import { useEmailVerification } from './EmailVerificationBanner';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { County, UserProfile, UserSession, OrganizationMembership } from '../../types';
@@ -27,7 +28,8 @@ interface UserProfileModalProps {
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onClose }) => {
-  const { user, updateProfile, changePassword, verifyEmail, logout } = useAuth();
+  const { user, updateProfile, changePassword, logout } = useAuth();
+  const emailVerification = useEmailVerification();
 
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'sessions' | 'organizations'>('profile');
 
@@ -47,7 +49,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
   const [confirmPassword, setConfirmPassword] = useState('');
 
   // Email verification token input
-  const [verificationTokenInput, setVerificationTokenInput] = useState('');
 
   // Sessions and Memberships
   const [sessions, setSessions] = useState<UserSession[]>([]);
@@ -135,22 +136,16 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
     }
   };
 
-  const handleManualEmailVerification = async () => {
-    setIsLoading(true);
+  const handleResendVerification = async () => {
     setFeedback(null);
-    try {
-      // In dev/prototype, if no token entered, pass a demo verification or simulate token
-      const token = verificationTokenInput.trim() || 'eml_auto_verify';
-      await verifyEmail(token);
-      setFeedback({ type: 'success', message: 'Email verified successfully! Account is now fully active.' });
-    } catch (err: unknown) {
-      setFeedback({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Verification failed. Please check the token.'
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    const r = await emailVerification.resend();
+    setFeedback({ type: r.ok ? 'success' : 'error', message: r.message });
+  };
+
+  const handleCheckVerification = async () => {
+    setFeedback(null);
+    const r = await emailVerification.check();
+    if (r.message) setFeedback({ type: r.ok ? 'success' : 'error', message: r.message });
   };
 
   const handleRevokeOtherSessions = () => {
@@ -433,21 +428,18 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
 
                 {!user.isEmailVerified && (
                   <div className="flex flex-col sm:flex-row gap-2">
-                    <input
-                      type="text"
-                      placeholder="Paste verification token or click verify"
-                      value={verificationTokenInput}
-                      onChange={(e) => setVerificationTokenInput(e.target.value)}
-                      className="flex-1 px-3 py-1.5 bg-white border border-[#E8E4D9] rounded-xl text-xs"
-                    />
                     <Button
                       type="button"
                       variant="ochre"
                       size="sm"
-                      onClick={handleManualEmailVerification}
-                      isLoading={isLoading}
+                      onClick={handleResendVerification}
+                      isLoading={emailVerification.sending}
+                      disabled={emailVerification.cooldown > 0}
                     >
-                      Confirm Verification
+                      {emailVerification.cooldown > 0 ? `Resend in ${emailVerification.cooldown}s` : 'Resend verification email'}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={handleCheckVerification} isLoading={emailVerification.checking}>
+                      I've verified my email
                     </Button>
                   </div>
                 )}

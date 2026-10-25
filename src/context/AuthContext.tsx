@@ -40,6 +40,8 @@ interface AuthContextType {
   requestPasswordReset: (email: string) => Promise<{ success: boolean; resetToken?: string }>;
   resetPassword: (token: string, newPass: string) => Promise<void>;
   verifyEmail: (token: string) => Promise<void>;
+  resendVerificationEmail: () => Promise<void>;
+  refreshEmailVerification: () => Promise<boolean>;
   updateProfile: (updates: Partial<UserProfile> & { fullName?: string; phoneNumber?: string }) => Promise<void>;
   completeOnboarding: (capabilities: UserCapability[]) => Promise<void>;
   changePassword: (currentPass: string, newPass: string) => Promise<void>;
@@ -142,6 +144,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const verifyEmail = useCallback(async (token: string) => {
     await authService.verifyEmail(token);
     setSession({ ...authService.getSession() });
+  }, []);
+
+  const resendVerificationEmail = useCallback(async () => {
+    await authService.resendVerificationEmail();
+  }, []);
+
+  const refreshEmailVerification = useCallback(async () => {
+    const confirmed = await authService.refreshEmailVerification();
+    setSession({ ...authService.getSession() });
+    return confirmed;
   }, []);
 
   const updateProfile = useCallback(
@@ -275,6 +287,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         requestPasswordReset,
         resetPassword,
         verifyEmail,
+        resendVerificationEmail,
+        refreshEmailVerification,
         updateProfile,
         completeOnboarding,
         changePassword,
