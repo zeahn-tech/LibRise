@@ -723,7 +723,7 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
       {/* Modal: New Message Inquiry */}
       {showNewMsgModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[32px] border border-[#E8E4D9] max-w-lg w-full p-6 space-y-4">
+          <div className="max-h-[90dvh] overflow-y-auto overscroll-contain bg-white rounded-[32px] border border-[#E8E4D9] max-w-lg w-full p-6 space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-bold text-[#283618] font-display">New Platform Inquiry</h3>
               <button onClick={() => setShowNewMsgModal(false)} className="text-stone-400 hover:text-stone-600 min-w-11 min-h-11 flex items-center justify-center">
@@ -813,7 +813,7 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConvers
       {/* Modal: Report Conversation */}
       {showReportModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[32px] border border-[#E8E4D9] max-w-md w-full p-6 space-y-4">
+          <div className="max-h-[90dvh] overflow-y-auto overscroll-contain bg-white rounded-[32px] border border-[#E8E4D9] max-w-md w-full p-6 space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-base font-bold text-[#283618] font-display flex items-center gap-2">
                 <ShieldAlert className="w-5 h-5 text-amber-600" />

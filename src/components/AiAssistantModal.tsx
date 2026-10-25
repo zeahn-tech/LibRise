@@ -122,7 +122,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({ isOpen, onCl
   const inputClass = 'w-full p-3 bg-[#F9F8F4] rounded-xl border border-[#E8E4D9] outline-none text-sm focus:border-[#A3B18A]';
 
   return (
-    <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-label="LibRise AI Copilot">
+    <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 overflow-y-auto overscroll-contain" role="dialog" aria-modal="true" aria-label="LibRise AI Copilot">
       <div className="bg-white w-full max-w-2xl rounded-[32px] sm:rounded-[40px] border border-[#E8E4D9] shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col">
         <div className="p-6 bg-[#ECF3E9] border-b border-[#D9E3D5] relative flex-none">
           <button onClick={onClose} aria-label="Close" className="absolute top-6 right-6 w-11 h-11 bg-white/80 hover:bg-white rounded-full flex items-center justify-center text-[#283618] border border-[#D9E3D5]">

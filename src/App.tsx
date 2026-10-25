@@ -1,3 +1,4 @@
+import { ModalScrollLock } from './components/common/ModalScrollLock';
 import { logger } from './core/logging/logger';
 import { openedFromRecoveryLink, recoveryLinkError } from './lib/recoveryLink';
 import React, { useState, useEffect, Suspense, lazy } from 'react';
@@ -481,6 +482,9 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-[#F9F8F6] text-[#2D2D2D] font-sans flex flex-col pb-[calc(4rem+env(safe-area-inset-bottom))] xl:pb-0">
+      {/* Keeps the page behind any open modal from scrolling */}
+      <ModalScrollLock />
+
       {/* Offline Status Alert */}
       <DemoModeBanner />
 
