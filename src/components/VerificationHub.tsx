@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { validateUploadedFile } from '../core/security/fileValidator';
 import { VerificationAudit, VerificationBadge } from '../types';
-import { ShieldCheck, FileCheck, CheckCircle2, XCircle, Clock, UploadCloud, Building2, AlertCircle, FileText, Lock } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, AlertCircle } from 'lucide-react';
 import { LIBERIAN_COUNTIES } from '../data/seedData';
 import { trustSafetyService } from '../services/trustSafetyService';
 import { useAuth } from '../context/AuthContext';
+import { DocumentList } from './common/DocumentList';
+import { VerificationDocumentsPicker } from './verification/VerificationDocumentsPicker';
+import type { PendingVerificationDocument } from '../services/verificationDocumentService';
 
 interface VerificationHubProps {
   audits: VerificationAudit[];
@@ -19,7 +21,7 @@ export const VerificationHub: React.FC<VerificationHubProps> = ({
   onSubmitAudit,
   currentUserId: propCurrentUserId
 }) => {
-  const { user, can } = useAuth();
+  const { user, can, activeOrganization } = useAuth();
   const currentUserId = propCurrentUserId || user?.id || '';
   const canDecide = can('verification.decide') || user?.systemRole === 'verification_officer' || user?.systemRole === 'platform_admin' || user?.primaryRole === 'platform_admin';
 
@@ -32,35 +34,27 @@ export const VerificationHub: React.FC<VerificationHubProps> = ({
   const [licenseNumber, setLicenseNumber] = useState('');
   const [badgeRequested, setBadgeRequested] = useState<VerificationBadge>('verified_company');
   const [evidenceNotes, setEvidenceNotes] = useState('');
-  const [uploadedFiles, setUploadedFiles] = useState<Array<{ fileName: string; urlOrData: string }>>([]);
+  const [pendingDocs, setPendingDocs] = useState<PendingVerificationDocument[]>([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submissionError, setSubmissionError] = useState('');
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const validation = validateUploadedFile(file, 'document');
-      if (!validation.valid) {
-        setSubmissionError(validation.error || 'File validation failed.');
-        return;
-      }
-      setSubmissionError('');
-      const newDoc = {
-        fileName: validation.cleanFileName,
-        urlOrData: URL.createObjectURL(file)
-      };
-      setUploadedFiles((prev) => [...prev, newDoc]);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitted) return;
     if (!currentUserId) {
       setSubmissionError('Please sign in with your enterprise account to submit verification documents.');
       return;
     }
-    if (!orgName || !registryNumber) {
+    if (!activeOrganization?.id) {
+      setSubmissionError('Create or select your organization first, then request verification for it.');
+      return;
+    }
+    if (!orgName.trim() || !registryNumber.trim()) {
       setSubmissionError('Please fill out the organization name and LBR registration number.');
+      return;
+    }
+    if (pendingDocs.length === 0) {
+      setSubmissionError('Please attach at least one statutory document (for example your LBR business certificate).');
       return;
     }
 
@@ -68,53 +62,45 @@ export const VerificationHub: React.FC<VerificationHubProps> = ({
     setIsSubmitted(true);
 
     try {
-      await trustSafetyService.submitVerificationRequest({
-        entityType: orgType === 'Recruitment Agency' ? 'recruiter' : 'organization',
-        entityId: `org-${Date.now()}`,
-        entityName: orgName,
-        submitterUserId: currentUserId,
+      // Validates, uploads to private storage and records the request for the platform-admin / officer review queue.
+      const request = await trustSafetyService.submitVerificationRequest({
+        entityType: 'organization',
+        entityId: activeOrganization.id,
+        entityName: orgName.trim(),
         badgeRequested,
-        registrationNumber: registryNumber,
-        taxIdNumber,
-        licenseNumber,
-        county: county as any,
-        evidenceDocuments: uploadedFiles.map((f, i) => ({
-          id: `doc-${Date.now()}-${i}`,
-          fileName: f.fileName,
-          fileType: 'application/pdf',
-          documentType: 'lbr_certificate',
-          fileSize: 1200000,
-          urlOrData: f.urlOrData,
-          uploadedAt: new Date().toISOString()
-        })),
+        registrationNumber: registryNumber.trim(),
+        taxIdNumber: taxIdNumber.trim() || undefined,
+        licenseNumber: licenseNumber.trim() || undefined,
+        county,
+        files: pendingDocs,
         evidenceNotes
       });
 
       const audit: VerificationAudit = {
-        id: `verif-${Date.now()}`,
-        organizationName: orgName,
+        id: request.id,
+        organizationName: orgName.trim(),
         organizationType: orgType,
         county: county as any,
-        registryNumber,
-        taxIdNumber: taxIdNumber || 'TIN-Pending',
+        registryNumber: registryNumber.trim(),
+        taxIdNumber: taxIdNumber.trim() || 'TIN-Pending',
         badgeRequested,
         submissionDate: new Date().toISOString().split('T')[0],
         status: 'pending',
-        documents: uploadedFiles.length > 0 ? uploadedFiles.map((f) => f.fileName) : ['Liberia Business Registry Certificate.pdf']
+        documents: request.evidenceDocuments.map((d) => d.fileName),
+        documentFiles: request.evidenceDocuments
       };
-
       onSubmitAudit(audit);
 
-      setTimeout(() => {
-        setIsSubmitted(false);
-        setActiveSubTab('queue');
-        setOrgName('');
-        setRegistryNumber('');
-        setUploadedFiles([]);
-        setEvidenceNotes('');
-      }, 1200);
+      setOrgName('');
+      setRegistryNumber('');
+      setTaxIdNumber('');
+      setLicenseNumber('');
+      setPendingDocs([]);
+      setEvidenceNotes('');
+      setActiveSubTab('queue');
     } catch (err: any) {
-      setSubmissionError(err.message || 'Failed to submit verification request.');
+      setSubmissionError(err?.message || 'Failed to submit verification request.');
+    } finally {
       setIsSubmitted(false);
     }
   };
@@ -211,13 +197,30 @@ export const VerificationHub: React.FC<VerificationHubProps> = ({
                     <span>TIN: <strong>{item.taxIdNumber}</strong></span>
                   </div>
 
-                  <div className="flex items-center gap-2 pt-1 flex-wrap">
-                    <span className="text-[11px] font-semibold text-[#A3B18A]">Uploaded Filings:</span>
-                    {item.documents.map((doc, idx) => (
-                      <span key={idx} className="text-[11px] px-2 py-0.5 bg-[#F9F8F4] border border-[#E8E4D9] rounded-md text-[#606C38]">
-                        📄 {doc}
-                      </span>
-                    ))}
+                  <div className="pt-2 space-y-1.5">
+                    <span className="text-[11px] font-semibold text-[#A3B18A]">Uploaded Filings</span>
+                    {item.documentFiles && item.documentFiles.length > 0 ? (
+                      <DocumentList
+                        compact
+                        documents={item.documentFiles.map((d) => ({
+                          id: d.id,
+                          fileName: d.fileName,
+                          fileType: d.fileType,
+                          fileSize: d.fileSize,
+                          path: d.path,
+                          label: d.documentType.replace(/_/g, ' ')
+                        }))}
+                        resolveUrls={(docs) => trustSafetyService.getEvidenceUrls(docs)}
+                      />
+                    ) : (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {item.documents.map((doc, idx) => (
+                          <span key={idx} className="text-[11px] px-2 py-0.5 bg-[#F9F8F4] border border-[#E8E4D9] rounded-md text-[#606C38]">
+                            📄 {doc} <span className="text-[#A3B18A]">(file not stored)</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -336,43 +339,15 @@ export const VerificationHub: React.FC<VerificationHubProps> = ({
             </div>
           )}
 
-          <div className="p-4 border-2 border-dashed border-[#D9E3D5] rounded-2xl bg-[#F9F8F4] text-center space-y-2 relative">
-            <input
-              type="file"
-              accept=".pdf,.png,.jpg,.jpeg"
-              onChange={handleFileUpload}
-              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-            />
-            <UploadCloud className="w-6 h-6 text-[#A3B18A] mx-auto" />
-            <div className="text-xs font-semibold text-[#283618]">
-              Click or drag to attach statutory proof documents (PDF or Scanned Images)
-            </div>
-            <div className="text-[11px] text-[#A3B18A]">
-              Supported: LBR Business Certificate, LRA Tax Clearance, MOFA accreditation letter, Ministry of Labour HR Permit
-            </div>
+          <div>
+            <div className="block text-xs font-semibold text-[#283618] mb-2">Statutory Proof Documents *</div>
+            <VerificationDocumentsPicker documents={pendingDocs} onChange={setPendingDocs} disabled={isSubmitted} />
           </div>
-
-          {uploadedFiles.length > 0 && (
-            <div className="space-y-1">
-              <span className="text-xs font-bold text-[#283618]">Attached Dossier Documents:</span>
-              <div className="flex flex-wrap gap-2">
-                {uploadedFiles.map((file, idx) => (
-                  <span
-                    key={idx}
-                    className="px-3 py-1.5 bg-[#ECF3E9] border border-[#D9E3D5] rounded-xl text-xs font-semibold text-[#4F772D] flex items-center gap-1.5"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>{file.fileName}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
 
           <button
             type="submit"
             disabled={isSubmitted}
-            className="w-full py-3 bg-[#4F772D] hover:bg-[#283618] text-white rounded-xl font-bold text-xs sm:text-sm shadow-md transition-all"
+            className="w-full min-h-11 py-3 bg-[#4F772D] hover:bg-[#283618] disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl font-bold text-xs sm:text-sm shadow-md transition-all"
           >
             {isSubmitted ? 'Transmitting to Auditor Queue...' : 'Submit Documents for Verification'}
           </button>

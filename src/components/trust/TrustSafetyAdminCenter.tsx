@@ -57,6 +57,7 @@ import {
 } from '../../types';
 import { db } from '../../db/dbClient';
 import { trustSafetyService } from '../../services/trustSafetyService';
+import { DocumentList } from '../common/DocumentList';
 import { organizationService } from '../../services/organizationService';
 import { adminService } from '../../services/adminService';
 import { useAuth } from '../../context/AuthContext';
@@ -183,21 +184,10 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
     'Retail', 'Supermarkets', 'Logistics & Supply', 'Real Estate', 'Mining Services', 'Rubber Production'
   ]);
 
-  // --- Document Review & Download State ---
-  const [selectedDocForReview, setSelectedDocForReview] = useState<VerificationEvidenceDocument | null>(null);
-
-  const handleDownloadDoc = (doc: VerificationEvidenceDocument) => {
-    const blob = new Blob([doc.urlOrData || `Statutory proof document: ${doc.fileName}`], { type: doc.fileType || 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = doc.fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast(`Downloading verified document ${doc.fileName}...`, 'success');
-  };
+  // --- Verification review dialog (decision + reviewer notes) ---
+  const [reviewTarget, setReviewTarget] = useState<{ req: VerificationRequest; decision: 'verified' | 'rejected' } | null>(null);
+  const [reviewNotes, setReviewNotes] = useState('');
+  const [reviewBusy, setReviewBusy] = useState(false);
 
   // --- Content & Announcement Management States ---
   const [announcementBanner, setAnnouncementBanner] = useState('🚨 ALERT: The Ministry of Labour requires all private enterprise recruiters to attach a valid business registry document.');
@@ -372,7 +362,7 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
       } else {
         // Verification is only granted through the review workflow, never by flipping a flag.
         const pending = verificationRequests.find(
-          (r) => r.entityType === 'organization' && r.entityId === org.id && r.status === 'pending'
+          (r) => r.entityType === 'organization' && r.entityId === org.id && r.status === 'pending_review'
         );
         if (!pending) {
           showToast(`${org.name} has no pending verification request. Ask them to submit their LBR/TIN documents first.`, 'error');
@@ -419,28 +409,41 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
     }
   };
 
-  // 5. Verification Badge decision
-  const handleVerificationRequestAction = async (reqId: string, decision: 'verified' | 'rejected') => {
+  // 5. Verification Badge decision: opens a dialog so the reviewer records real notes / a rejection reason.
+  const handleVerificationRequestAction = (req: VerificationRequest, decision: 'verified' | 'rejected') => {
+    setReviewNotes('');
+    setReviewTarget({ req, decision });
+  };
+
+  const submitVerificationReview = async () => {
+    if (!reviewTarget || reviewBusy) return;
+    const { req, decision } = reviewTarget;
+    const notes = reviewNotes.trim();
+    if (decision === 'rejected' && !notes) return;
+    setReviewBusy(true);
     try {
       await trustSafetyService.reviewVerificationRequest(
-        reqId,
+        req.id,
         decision,
         user?.id || 'admin',
-        'Approved after reviewing statutory business registry files',
-        decision === 'rejected' ? 'Provided tax clearance papers do not match official entities' : ''
+        notes || undefined,
+        decision === 'rejected' ? notes : undefined
       );
       db.emitAuditLog({
         actorUserId: user?.id || 'admin',
         actorName: user?.fullName || 'Platform Admin',
         action: 'verification.request_decision',
         targetEntity: 'verification_request',
-        targetId: reqId,
+        targetId: req.id,
         details: { decision }
       });
+      setReviewTarget(null);
       refreshAllData();
-      showToast(`Verification request ${decision} successfully`, 'success');
+      showToast(`Verification request ${decision === 'verified' ? 'approved' : 'rejected'} successfully`, 'success');
     } catch (err: any) {
       showToast(err.message || 'Failed to action verification request', 'error');
+    } finally {
+      setReviewBusy(false);
     }
   };
 
@@ -653,7 +656,7 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
   // Calculated Metrics for Analytics Tab
   const totalVerifiedOrgs = organizations.filter(o => o.isVerified).length;
   const activeVacancyRatio = opportunities.filter(o => o.status === 'published').length;
-  const pendingEvidenceCount = verificationRequests.filter(r => r.status === 'pending').length;
+  const pendingEvidenceCount = verificationRequests.filter(r => r.status === 'pending_review').length;
   const activeReportsCount = reports.filter(r => r.status === 'pending').length;
 
   return (
@@ -1379,55 +1382,39 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
                     </div>
                   </div>
 
-                  {req.evidenceDocuments && req.evidenceDocuments.length > 0 && (
-                    <div className="space-y-1.5">
-                      <span className="text-xs font-bold text-stone-700 block">Attached Proof Dossier Files:</span>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {req.evidenceDocuments.map((doc, dIdx) => (
-                          <div key={dIdx} className="flex items-center justify-between gap-3 p-3 bg-[#F9F8F6] border border-[#E8E4D9] rounded-xl text-xs text-stone-700">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <div className="w-8 h-8 rounded-lg bg-[#ECF3E9] border border-[#D9E3D5] flex items-center justify-center shrink-0">
-                                <FileText className="w-4 h-4 text-[#4F772D]" />
-                              </div>
-                              <div className="min-w-0">
-                                <span className="font-bold block truncate">{doc.fileName}</span>
-                                <span className="text-[10px] text-stone-400 uppercase">{(doc.fileSize ? (doc.fileSize / 1024).toFixed(1) + ' KB' : 'PDF Document')} • {doc.documentType?.replace('_', ' ') || 'Official'}</span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <button
-                                onClick={() => setSelectedDocForReview(doc)}
-                                className="px-2.5 py-1 bg-white hover:bg-[#ECF3E9] text-[#283618] border border-[#E8E4D9] rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
-                                title="Review / Preview Document"
-                              >
-                                <Eye className="w-3.5 h-3.5 text-[#606C38]" />
-                                <span className="hidden sm:inline">Review</span>
-                              </button>
-                              <button
-                                onClick={() => handleDownloadDoc(doc)}
-                                className="px-2.5 py-1 bg-[#283618] hover:bg-[#386641] text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
-                                title="Download Document"
-                              >
-                                <Download className="w-3.5 h-3.5 text-white" />
-                                <span className="hidden sm:inline">Download</span>
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  <div className="space-y-1.5">
+                    <span className="text-xs font-bold text-stone-700 block">Attached Proof Dossier Files:</span>
+                    <DocumentList
+                      compact
+                      documents={(req.evidenceDocuments || []).map((doc) => ({
+                        id: doc.id,
+                        fileName: doc.fileName,
+                        fileType: doc.fileType,
+                        fileSize: doc.fileSize,
+                        path: doc.path,
+                        label: (doc.documentType || 'other').replace(/_/g, ' ')
+                      }))}
+                      resolveUrls={(docs) => trustSafetyService.getEvidenceUrls(docs)}
+                      emptyText="The applicant did not attach any documents."
+                      unavailableText="File not stored (submitted before uploads were supported)"
+                    />
+                    {req.evidenceNotes && (
+                      <p className="text-xs text-stone-600 bg-[#F9F8F6] border border-[#E8E4D9] rounded-xl p-3">
+                        <strong>Applicant notes:</strong> {req.evidenceNotes}
+                      </p>
+                    )}
+                  </div>
 
                   {req.status === 'pending_review' && (
                     <div className="flex gap-2 pt-2 border-t border-stone-100">
                       <button
-                        onClick={() => handleVerificationRequestAction(req.id, 'verified')}
+                        onClick={() => handleVerificationRequestAction(req, 'verified')}
                         className="px-4 py-2 bg-[#ECF3E9] text-[#4F772D] border border-[#D9E3D5] text-xs font-extrabold rounded-xl hover:bg-[#ECF3E9]/80 transition-all cursor-pointer"
                       >
                         Approve statutory badge
                       </button>
                       <button
-                        onClick={() => handleVerificationRequestAction(req.id, 'rejected')}
+                        onClick={() => handleVerificationRequestAction(req, 'rejected')}
                         className="px-4 py-2 bg-red-50 text-red-700 border border-red-200 text-xs font-extrabold rounded-xl hover:bg-red-100 transition-all cursor-pointer"
                       >
                         Reject proof dossier
@@ -1858,64 +1845,55 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
       </div>
 
       {/* Document Review & Preview Modal */}
-      {selectedDocForReview && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-[#E8E4D9] space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-[#E8E4D9] pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-[#ECF3E9] border border-[#D9E3D5] flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-[#4F772D]" />
-                </div>
-                <div>
-                  <h3 className="font-serif font-bold text-lg text-[#132A13]">{selectedDocForReview.fileName}</h3>
-                  <p className="text-xs text-stone-500 uppercase tracking-wide">
-                    {selectedDocForReview.documentType?.replace('_', ' ')} • {selectedDocForReview.fileSize ? (selectedDocForReview.fileSize / 1024).toFixed(1) + ' KB' : 'Standard PDF'}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedDocForReview(null)}
-                className="w-11 h-11 rounded-full bg-stone-100 hover:bg-stone-200 flex items-center justify-center text-stone-600 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
+      {reviewTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Verification decision"
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-hidden overscroll-contain"
+        >
+          <div className="bg-white w-full max-w-lg rounded-3xl border border-[#E8E4D9] shadow-2xl p-6 space-y-4 max-h-[90dvh] overflow-y-auto">
+            <div>
+              <h3 className="font-serif font-bold text-lg text-[#132A13]">
+                {reviewTarget.decision === 'verified' ? 'Approve verification' : 'Reject verification'}
+              </h3>
+              <p className="text-xs text-stone-500 mt-0.5">{reviewTarget.req.entityName}</p>
             </div>
-
-            {/* Document Preview Area */}
-            <div className="bg-[#F9F8F6] border border-[#E8E4D9] rounded-2xl p-6 space-y-4 font-mono text-xs text-stone-700 max-h-96 overflow-y-auto">
-              <div className="flex items-center justify-between pb-3 border-b border-stone-200">
-                <span className="font-bold text-[#283618]">Dossier Security Verification & Preview Header</span>
-                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px]">AUTHENTICATED REGISTRY RECORD</span>
-              </div>
-              <div className="space-y-2 text-stone-600 leading-relaxed">
-                <p><strong>Document ID:</strong> {selectedDocForReview.id}</p>
-                <p><strong>Upload Timestamp:</strong> {new Date(selectedDocForReview.uploadedAt).toLocaleString()}</p>
-                <p><strong>MIME Type:</strong> {selectedDocForReview.fileType || 'application/pdf'}</p>
-                <div className="p-4 bg-white border border-[#E8E4D9] rounded-xl space-y-2 mt-4 text-stone-800">
-                  <p className="font-bold text-[#132A13]">// REPUBLIC OF LIBERIA - OFFICIAL REGULATORY FILING RECORD</p>
-                  <p className="text-[11px] text-stone-600">
-                    This statutory document has been uploaded for compliance review against the Ministry of Labour and Liberia Business Registry (LBR) records. All authenticity seals, TIN records, and employer permits are validated upon approval.
-                  </p>
-                  <p className="text-[11px] font-mono text-[#4F772D] pt-2">
-                    [SHA-256 HASH: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855]
-                  </p>
-                </div>
-              </div>
+            <div>
+              <label htmlFor="review-notes" className="block text-xs font-bold text-[#283618] mb-1">
+                {reviewTarget.decision === 'verified' ? 'Reviewer notes (optional)' : 'Reason for rejection *'}
+              </label>
+              <textarea
+                id="review-notes"
+                rows={4}
+                value={reviewNotes}
+                onChange={(e) => setReviewNotes(e.target.value)}
+                placeholder={
+                  reviewTarget.decision === 'verified'
+                    ? 'e.g. LBR certificate and TIN match the registry.'
+                    : 'Tell the applicant what is missing or does not match so they can resubmit.'
+                }
+                className="w-full p-3 text-sm bg-[#F9F8F4] rounded-xl border border-[#E8E4D9] outline-none focus:border-[#4F772D] resize-none"
+              />
             </div>
-
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex justify-end gap-3">
               <button
-                onClick={() => setSelectedDocForReview(null)}
-                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                type="button"
+                disabled={reviewBusy}
+                onClick={() => setReviewTarget(null)}
+                className="min-h-11 px-4 text-xs font-bold text-stone-600 hover:bg-stone-100 rounded-xl cursor-pointer"
               >
-                Close Preview
+                Cancel
               </button>
               <button
-                onClick={() => handleDownloadDoc(selectedDocForReview)}
-                className="px-5 py-2 bg-[#283618] hover:bg-[#386641] text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-md"
+                type="button"
+                disabled={reviewBusy || (reviewTarget.decision === 'rejected' && !reviewNotes.trim())}
+                onClick={submitVerificationReview}
+                className={`min-h-11 px-5 text-xs font-bold text-white rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                  reviewTarget.decision === 'verified' ? 'bg-[#4F772D] hover:bg-[#283618]' : 'bg-red-700 hover:bg-red-800'
+                }`}
               >
-                <Download className="w-4 h-4" />
-                <span>Download Document File</span>
+                {reviewBusy ? 'Saving…' : reviewTarget.decision === 'verified' ? 'Approve' : 'Reject'}
               </button>
             </div>
           </div>

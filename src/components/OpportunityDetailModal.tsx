@@ -52,6 +52,7 @@ import { applicationService } from '../services/applicationService';
 import { dataUrlToFile, type PendingDocument } from '../services/applicationDocumentService';
 import { ApplicationDocumentsPicker, type CvEntry } from './applications/ApplicationDocumentsPicker';
 import { candidateService } from '../services/candidateService';
+import { organizationService } from '../services/organizationService';
 import { useToast } from '../context/ToastContext';
 
 interface OpportunityDetailModalProps {
@@ -118,10 +119,45 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
     }
   }, [user?.id]);
 
+  // Who may apply? Never the poster or anyone on the posting organization's team (in any of their organizations),
+  // and not someone who already has an active application. Enforced again in applicationService and by a DB trigger.
+  const [memberOrgIds, setMemberOrgIds] = useState<string[]>([]);
+  const [existingApplication, setExistingApplication] = useState<Application | null>(null);
+  const [eligibilityLoading, setEligibilityLoading] = useState(!!user?.id);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setEligibilityLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setEligibilityLoading(true);
+    Promise.allSettled([organizationService.getMembershipsByUserId(user.id), applicationService.listMyApplications()]).then(
+      ([memberships, apps]) => {
+        if (cancelled) return;
+        if (memberships.status === 'fulfilled') {
+          setMemberOrgIds(memberships.value.filter((m) => m.status === 'active').map((m) => m.organizationId));
+        }
+        if (apps.status === 'fulfilled' && apps.value.data) {
+          setExistingApplication(apps.value.data.find((a) => a.opportunityId === opportunity.id && a.stage !== 'withdrawn') ?? null);
+        }
+        setEligibilityLoading(false);
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, opportunity.id]);
+
   const isOwner =
     session?.activeOrganization?.id === opportunity.organizationId ||
     activeRole === 'platform_admin' ||
     session?.user?.systemRole === 'platform_admin';
+
+  const isOwnPosting =
+    isOwner ||
+    (!!user?.id && opportunity.createdByUserId === user.id) ||
+    memberOrgIds.includes(opportunity.organizationId);
 
   const isTodayExpired =
     opportunity.deadline && new Date(opportunity.deadline) < new Date();
@@ -145,7 +181,7 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
 
   const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!applicantName || !applicantEmail || isSubmitted) return;
+    if (!applicantName || !applicantEmail || isSubmitted || isOwnPosting || existingApplication) return;
     if (cvRequired && cvFiles.length === 0) {
       showToast('Please attach your CV before submitting.', 'error');
       return;
@@ -389,7 +425,7 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
           )}
 
           {/* Application Inline Form */}
-          {isApplying && isAcceptingApplications && user && (
+          {isApplying && isAcceptingApplications && user && !isOwnPosting && !existingApplication && (
             <form onSubmit={handleApply} className="mt-6 p-5 sm:p-6 bg-[#F9F8F4] rounded-3xl border border-[#E8E4D9] space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-[#132A13] text-base">Submit Application & Credentials</h3>
@@ -547,10 +583,21 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
             >
               Close
             </button>
-            {!isApplying && isAcceptingApplications && (
+            {isAcceptingApplications && user && isOwnPosting && (
+              <span className="text-xs font-semibold text-[#606C38] bg-[#F9F8F6] border border-[#E8E4D9] rounded-full px-4 py-2">
+                Your organization's posting · applicants appear in Recruiter Workspace
+              </span>
+            )}
+            {isAcceptingApplications && user && !isOwnPosting && existingApplication && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#4F772D] bg-[#ECF3E9] border border-[#D9E3D5] rounded-full px-4 py-2">
+                <Check className="w-3.5 h-3.5" /> Applied · track it in your dashboard
+              </span>
+            )}
+            {!isApplying && isAcceptingApplications && !(user && (isOwnPosting || existingApplication)) && (
               <button
+                disabled={!!user && eligibilityLoading}
                 onClick={() => setIsApplying(true)}
-                className="px-6 py-2.5 bg-[#283618] hover:bg-[#132A13] text-white rounded-full text-xs sm:text-sm font-bold shadow-md transition-transform active:scale-95 flex items-center gap-2 cursor-pointer"
+                className="px-6 py-2.5 min-h-11 bg-[#283618] hover:bg-[#132A13] disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-full text-xs sm:text-sm font-bold shadow-md transition-transform active:scale-95 flex items-center gap-2 cursor-pointer"
               >
                 <span>{getCtaText(opportunity.type)}</span>
                 <ArrowRight className="w-4 h-4" />
