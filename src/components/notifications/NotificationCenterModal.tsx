@@ -142,7 +142,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
         aria-modal="true"
         aria-label="Notifications"
         onClick={(e) => e.stopPropagation()}
-        className="bg-white w-full sm:max-w-md max-h-[100dvh] sm:max-h-[85vh] h-full sm:h-auto shadow-2xl flex flex-col rounded-t-3xl sm:rounded-3xl overflow-hidden"
+        className="bg-white w-full sm:max-w-md max-h-[100dvh] sm:max-h-[85dvh] h-full sm:h-auto shadow-2xl flex flex-col rounded-t-3xl sm:rounded-3xl overflow-hidden"
       >
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-[#E8E4D9] flex items-center justify-between gap-2 bg-[#F9F8F6] shrink-0">

@@ -155,12 +155,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#132A13]/60 backdrop-blur-xs overflow-y-auto overscroll-contain">
-      <div className="relative w-full max-w-2xl bg-white rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#132A13]/60 backdrop-blur-xs overflow-hidden overscroll-contain">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="My account"
+        className="relative w-full max-w-2xl bg-white rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden max-h-[92dvh] flex flex-col"
+      >
         {/* Header */}
-        <div className="px-6 sm:px-8 py-5 border-b border-[#E8E4D9] flex items-center justify-between bg-[#F9F8F6] gap-3">
+        <div className="flex-none relative px-5 sm:px-8 pt-5 pb-4 pr-16 sm:pr-20 border-b border-[#E8E4D9] flex items-center bg-[#F9F8F6] gap-3">
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className="w-11 h-11 rounded-2xl bg-[#283618] text-white flex items-center justify-center font-bold text-base shadow-sm">
+            <div className="w-11 h-11 shrink-0 rounded-2xl bg-[#283618] text-white flex items-center justify-center font-bold text-base shadow-sm">
               {user.fullName.substring(0, 2).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
@@ -185,15 +190,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
           </div>
 
           <button
+            type="button"
             onClick={onClose}
-            className="w-11 h-11 rounded-full bg-[#E8E4D9]/60 hover:bg-[#E8E4D9] flex items-center justify-center text-[#283618] transition-colors cursor-pointer"
+            aria-label="Close"
+            className="absolute top-3 right-3 sm:top-4 sm:right-5 w-11 h-11 rounded-full bg-[#E8E4D9]/60 hover:bg-[#E8E4D9] flex items-center justify-center text-[#283618] transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-[#E8E4D9] px-6 sm:px-8 bg-[#FDFCF9] text-xs font-semibold overflow-x-auto">
+        <div className="flex-none flex border-b border-[#E8E4D9] px-5 sm:px-8 bg-[#FDFCF9] text-xs font-semibold overflow-x-auto">
           <button
             onClick={() => {
               setActiveTab('profile');
@@ -258,7 +265,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
         {/* Feedback Alert */}
         {feedback && (
           <div
-            className={`mx-6 sm:mx-8 mt-5 p-3.5 rounded-2xl flex items-start gap-3 text-xs ${
+            className={`flex-none mx-5 sm:mx-8 mt-4 p-3.5 rounded-2xl flex items-start gap-3 text-xs ${
               feedback.type === 'success'
                 ? 'bg-[#ECF3E9] text-[#283618] border border-[#4F772D]/30'
                 : 'bg-[#FCF0E8] text-[#BC6C25] border border-[#BC6C25]/30'
@@ -274,7 +281,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
         )}
 
         {/* Modal Tab Body */}
-        <div className="p-6 sm:p-8 max-h-[65vh] overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 sm:p-8">
           {/* TAB: PROFILE */}
           {activeTab === 'profile' && (
             <form onSubmit={handleProfileSubmit} className="space-y-4">
@@ -606,14 +613,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
         </div>
 
         {/* Footer */}
-        <div className="px-6 sm:px-8 py-4 bg-[#F9F8F6] border-t border-[#E8E4D9] flex items-center justify-between">
+        <div className="flex-none px-5 sm:px-8 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-[#F9F8F6] border-t border-[#E8E4D9] flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={() => {
               logout();
               onClose();
             }}
-            className="text-xs font-bold text-[#BC6C25] hover:text-[#9A551A] flex items-center gap-1.5 cursor-pointer"
+            className="min-h-11 text-xs font-bold text-[#BC6C25] hover:text-[#9A551A] flex items-center gap-1.5 cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
             Sign Out of Account

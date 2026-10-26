@@ -219,13 +219,13 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 overflow-y-auto overscroll-contain">
-      <div className="bg-white w-full max-w-3xl rounded-[32px] sm:rounded-[40px] border border-[#E8E4D9] shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 overflow-hidden overscroll-contain">
+      <div className="bg-white w-full max-w-3xl rounded-[32px] sm:rounded-[40px] border border-[#E8E4D9] shadow-2xl overflow-hidden max-h-[92dvh] flex flex-col">
         {/* Header */}
-        <div className="p-4 sm:p-6 bg-[#ECF3E9] border-b border-[#D9E3D5] relative flex-none">
+        <div className="p-4 sm:p-6 bg-[#ECF3E9] border-b border-[#D9E3D5] relative pr-16 sm:pr-20 flex-none">
           <button
             onClick={onClose}
-            className="absolute top-3 right-3 sm:top-6 sm:right-6 w-11 h-11 bg-white/80 hover:bg-white rounded-full flex items-center justify-center text-[#283618] border border-[#D9E3D5] cursor-pointer"
+            className="absolute top-3 right-3 sm:top-5 sm:right-5 w-11 h-11 bg-white/80 hover:bg-white rounded-full flex items-center justify-center text-[#283618] border border-[#D9E3D5] cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>

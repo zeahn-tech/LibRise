@@ -370,10 +370,11 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#132A13]/70 backdrop-blur-xs overflow-hidden overscroll-contain">
       <div className="relative w-full max-w-3xl bg-white rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden flex flex-col max-h-[92dvh]">
         {/* Header */}
-        <div className="px-6 sm:px-8 pt-6 pb-4 border-b border-[#E8E4D9] bg-[#F9F8F6] relative flex-none">
+        <div className="px-6 sm:px-8 pt-6 pb-4 pr-16 sm:pr-20 border-b border-[#E8E4D9] bg-[#F9F8F6] relative flex-none">
           <button
             onClick={onClose}
-            className="absolute top-6 right-6 w-11 h-11 rounded-full bg-white border border-[#E8E4D9] flex items-center justify-center text-[#606C38] hover:text-[#132A13] hover:bg-[#F2F2EC] transition-colors cursor-pointer"
+            aria-label="Close"
+            className="absolute top-3 right-3 sm:top-5 sm:right-5 w-11 h-11 rounded-full bg-white border border-[#E8E4D9] flex items-center justify-center text-[#606C38] hover:text-[#132A13] hover:bg-[#F2F2EC] transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>

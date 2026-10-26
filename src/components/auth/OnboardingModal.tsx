@@ -72,10 +72,10 @@ export const OnboardingModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#132A13]/70 backdrop-blur-xs overflow-y-auto overscroll-contain">
-      <div className="relative w-full max-w-2xl bg-white rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#132A13]/70 backdrop-blur-xs overflow-hidden overscroll-contain">
+      <div role="dialog" aria-modal="true" className="relative w-full max-w-2xl bg-white rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden max-h-[92dvh] flex flex-col">
         {/* Header */}
-        <div className="px-6 sm:px-8 pt-8 pb-6 border-b border-[#E8E4D9] bg-[#F9F8F6]">
+        <div className="flex-none px-5 sm:px-8 pt-6 pb-5 border-b border-[#E8E4D9] bg-[#F9F8F6]">
           <div className="flex items-center gap-2 text-[#BC6C25] text-xs font-bold uppercase tracking-wider mb-2">
             <Sparkles className="w-4 h-4" />
             <span>Welcome to LibRise</span>
@@ -87,7 +87,8 @@ export const OnboardingModal: React.FC = () => {
         </div>
 
         {/* Options */}
-        <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-4 max-h-[60vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 sm:p-8 space-y-4">
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs rounded-xl">
               {error}
@@ -128,7 +129,9 @@ export const OnboardingModal: React.FC = () => {
             })}
           </div>
 
-          <div className="pt-4 border-t border-[#E8E4D9] flex items-center justify-end gap-3">
+          </div>
+
+          <div className="flex-none px-5 sm:px-8 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-[#E8E4D9] bg-white flex items-center justify-end gap-3">
             <Button
               type="submit"
               disabled={isSubmitting || selectedCapabilities.length === 0}
