@@ -52,7 +52,7 @@ export const APP_METADATA = {
   name: 'LibRise',
   shortName: 'LibRise',
   tagline: "Liberia's Digital Opportunity Marketplace",
-  supportEmail: 'info.tracenetlib@gmail.com',
+  supportEmail: 'ezeahna@gmail.com',
   version: '1.0.0-foundation',
   defaultPageSize: 10
 };
