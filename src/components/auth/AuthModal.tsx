@@ -180,7 +180,7 @@ export const AuthModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#132A13]/60 backdrop-blur-xs overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#132A13]/60 backdrop-blur-xs overflow-y-auto overscroll-contain">
       <div className="relative w-full max-w-lg bg-white rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden my-8">
         {/* Header */}
         <div className="px-6 sm:px-8 pt-6 pb-4 border-b border-[#E8E4D9] flex items-center justify-between bg-[#F9F8F6]">

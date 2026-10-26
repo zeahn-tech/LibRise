@@ -615,7 +615,7 @@ export const RecruiterWorkspace: React.FC<RecruiterWorkspaceProps> = ({
       {/* MODAL: SCHEDULE INTERVIEW */}
       {interviewModalApp && (
         <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50">
-          <div className="bg-white w-full max-w-lg rounded-3xl border border-[#E8E4D9] shadow-2xl p-6 space-y-4">
+          <div className="max-h-[90dvh] overflow-y-auto overscroll-contain bg-white w-full max-w-lg rounded-3xl border border-[#E8E4D9] shadow-2xl p-6 space-y-4">
             <div className="flex items-center gap-2 text-emerald-800">
               <Calendar className="w-6 h-6" />
               <h3 className="font-bold text-lg text-[#132A13]">Schedule Candidate Interview</h3>
@@ -705,7 +705,7 @@ export const RecruiterWorkspace: React.FC<RecruiterWorkspaceProps> = ({
       {/* MODAL: EXTEND FORMAL OFFER */}
       {offerModalApp && (
         <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50">
-          <div className="bg-white w-full max-w-lg rounded-3xl border border-[#E8E4D9] shadow-2xl p-6 space-y-4">
+          <div className="max-h-[90dvh] overflow-y-auto overscroll-contain bg-white w-full max-w-lg rounded-3xl border border-[#E8E4D9] shadow-2xl p-6 space-y-4">
             <div className="flex items-center gap-2 text-green-800">
               <DollarSign className="w-6 h-6" />
               <h3 className="font-bold text-lg text-[#132A13]">Issue Formal Job Offer</h3>
@@ -769,7 +769,7 @@ export const RecruiterWorkspace: React.FC<RecruiterWorkspaceProps> = ({
       {/* MODAL: REJECT CANDIDATE */}
       {rejectionModalApp && (
         <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50">
-          <div className="bg-white w-full max-w-md rounded-3xl border border-[#E8E4D9] shadow-2xl p-6 space-y-4">
+          <div className="max-h-[90dvh] overflow-y-auto overscroll-contain bg-white w-full max-w-md rounded-3xl border border-[#E8E4D9] shadow-2xl p-6 space-y-4">
             <div className="flex items-center gap-2 text-red-700">
               <XCircle className="w-6 h-6" />
               <h3 className="font-bold text-base text-[#132A13]">Archive / Reject Application</h3>
@@ -810,7 +810,7 @@ export const RecruiterWorkspace: React.FC<RecruiterWorkspaceProps> = ({
       {/* MODAL: EVALUATE & SCORE CANDIDATE */}
       {evalModalApp && (
         <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50">
-          <div className="bg-white w-full max-w-md rounded-3xl border border-[#E8E4D9] shadow-2xl p-6 space-y-4">
+          <div className="max-h-[90dvh] overflow-y-auto overscroll-contain bg-white w-full max-w-md rounded-3xl border border-[#E8E4D9] shadow-2xl p-6 space-y-4">
             <div className="flex items-center gap-2 text-[#BC6C25]">
               <Star className="w-6 h-6" />
               <h3 className="font-bold text-base text-[#132A13]">Candidate Evaluation</h3>

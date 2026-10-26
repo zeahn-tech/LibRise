@@ -43,15 +43,6 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
     bodyRef.current?.scrollTo({ top: 0 });
   }, [step]);
 
-  // Lock the page behind the dialog so only the dialog body scrolls.
-  useEffect(() => {
-    if (!isOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [isOpen]);
 
   // Step 1: Basic Info & Industry
   const [title, setTitle] = useState('');

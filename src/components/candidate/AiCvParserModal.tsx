@@ -75,7 +75,7 @@ Certified Solar Installation Technician | Ministry of Mines & Energy (2020)`);
   };
 
   return (
-    <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 overflow-y-auto overscroll-contain">
       <div className="bg-white w-full max-w-2xl rounded-[32px] border border-[#E8E4D9] shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="p-6 bg-[#ECF3E9] border-b border-[#D9E3D5] relative flex-none">

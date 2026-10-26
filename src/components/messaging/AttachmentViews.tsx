@@ -57,12 +57,9 @@ export const AttachmentLightbox: React.FC<{ attachment: MessageAttachment; onClo
       else if (e.key === '-') zoomOut();
     };
     document.addEventListener('keydown', onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     closeRef.current?.focus();
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prevOverflow;
     };
   }, [onClose, zoomIn, zoomOut]);
 

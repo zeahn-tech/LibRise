@@ -50,15 +50,6 @@ export const OrganizationWizardModal: React.FC<OrganizationWizardModalProps> = (
   const { user, switchOrganization, refreshOrganizations } = useAuth();
   const { showToast } = useToast();
 
-  // Lock the page behind the dialog so only the dialog body scrolls.
-  useEffect(() => {
-    if (!isOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [isOpen]);
 
   const [currentStep, setCurrentStep] = useState<WizardStep>('foundation');
   const [isSubmitting, setIsSubmitting] = useState(false);

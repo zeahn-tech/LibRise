@@ -473,7 +473,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({
 
       {/* MODAL: APPLICATION HISTORY & STATUS TIMELINE */}
       {activeAppDetails && (
-        <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 overflow-y-auto">
+        <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 overflow-y-auto overscroll-contain">
           <div className="bg-white w-full max-w-2xl rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col">
             <div className="p-6 bg-[#ECF3E9] border-b border-[#D9E3D5] flex items-start justify-between">
               <div>
@@ -580,7 +580,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({
       {/* MODAL: CONFIRM WITHDRAW APPLICATION */}
       {appToWithdraw && (
         <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50">
-          <div className="bg-white w-full max-w-md rounded-3xl border border-[#E8E4D9] shadow-2xl p-6 space-y-4">
+          <div className="max-h-[90dvh] overflow-y-auto overscroll-contain bg-white w-full max-w-md rounded-3xl border border-[#E8E4D9] shadow-2xl p-6 space-y-4">
             <div className="flex items-center gap-3 text-amber-700">
               <AlertTriangle className="w-6 h-6" />
               <h3 className="font-bold text-base text-[#132A13]">Withdraw Application?</h3>
