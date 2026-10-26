@@ -1,3 +1,5 @@
+import { LEGAL_NAV, legalPath } from '../legal/legalConfig';
+import { openCookieSettings } from '../lib/consent';
 import React from 'react';
 import { UserRole } from '../types';
 import { BrandLogo } from './common/BrandLogo';
@@ -164,7 +166,17 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ onEnterPortal }) =
       {/* Footer */}
       <footer className="bg-white border-t border-[#E8E4D9] py-8 px-6 text-center text-xs text-stone-500 space-y-2">
         <p>© 2026 LibRise. All rights reserved.</p>
-        <p className="text-stone-400">Powered by Ministry of Labour & Liberia Business Registry (LBR) Compliance Standards.</p>
+        <p className="text-stone-400">Organisation verification is based on documents such as Liberia Business Registry (LBR) certificates and tax clearance. LibRise is an independent platform and is not a government service.</p>
+        <nav aria-label="Legal" className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 pt-2">
+          {LEGAL_NAV.map((n) => (
+            <a key={n.slug} href={`#${legalPath(n.slug)}`} className="min-h-11 inline-flex items-center font-semibold text-[#606C38] hover:text-[#283618] underline-offset-2 hover:underline">
+              {n.label}
+            </a>
+          ))}
+          <button type="button" onClick={openCookieSettings} className="min-h-11 inline-flex items-center font-semibold text-[#606C38] hover:text-[#283618] underline-offset-2 hover:underline cursor-pointer">
+            Cookie settings
+          </button>
+        </nav>
       </footer>
     </div>
   );

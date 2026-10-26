@@ -1,3 +1,4 @@
+import { consentAllows, PREF_CURRENCY_KEY, PREF_LOW_BANDWIDTH_KEY, useConsent } from '../lib/consent';
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { EXCHANGE_RATES } from '../config/constants';
 import { envConfig } from '../config/env';
@@ -16,14 +17,22 @@ const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
 
 export const ConfigProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currency, setCurrencyState] = useState<'USD' | 'LRD'>(() => {
-    const saved = localStorage.getItem('opphub_currency');
+    const saved = consentAllows('preferences') ? localStorage.getItem(PREF_CURRENCY_KEY) : null;
     return saved === 'LRD' ? 'LRD' : envConfig.defaultCurrency;
   });
 
   const [isLowBandwidthMode, setIsLowBandwidthMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('opphub_low_bandwidth');
+    const saved = consentAllows('preferences') ? localStorage.getItem(PREF_LOW_BANDWIDTH_KEY) : null;
     return saved === 'true' || envConfig.enableLowBandwidthMode;
   });
+
+  // Preferences are only written to the device with consent; if consent arrives later, save the current choices.
+  const { consent } = useConsent();
+  useEffect(() => {
+    if (!consent?.preferences) return;
+    localStorage.setItem(PREF_CURRENCY_KEY, currency);
+    localStorage.setItem(PREF_LOW_BANDWIDTH_KEY, String(isLowBandwidthMode));
+  }, [consent?.preferences, currency, isLowBandwidthMode]);
 
   const [isOnline, setIsOnline] = useState<boolean>(
     typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -50,13 +59,13 @@ export const ConfigProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const setCurrency = (c: 'USD' | 'LRD') => {
     setCurrencyState(c);
-    localStorage.setItem('opphub_currency', c);
+    if (consentAllows('preferences')) localStorage.setItem(PREF_CURRENCY_KEY, c);
   };
 
   const toggleLowBandwidthMode = () => {
     setIsLowBandwidthMode((prev) => {
       const next = !prev;
-      localStorage.setItem('opphub_low_bandwidth', String(next));
+      if (consentAllows('preferences')) localStorage.setItem(PREF_LOW_BANDWIDTH_KEY, String(next));
       logger.info('CONFIG', `Low-Bandwidth Data Saver mode: ${next ? 'ENABLED' : 'DISABLED'}`);
       return next;
     });

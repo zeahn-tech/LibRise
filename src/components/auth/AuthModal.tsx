@@ -1,3 +1,4 @@
+import { LEGAL } from '../../legal/legalConfig';
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { County, UserRole } from '../../types';
@@ -61,6 +62,7 @@ export const AuthModal: React.FC = () => {
   // An expired/used reset link shows its reason once, on the request-a-new-link form.
   const [errorMessage, setErrorMessage] = useState<string | null>(recoveryLinkError);
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   if (!isAuthModalOpen) return null;
@@ -91,7 +93,8 @@ export const AuthModal: React.FC = () => {
         primaryRole: regRole,
         phoneNumber: regPhone,
         primaryCounty: regCounty,
-        organizationName: regOrgName || undefined
+        organizationName: regOrgName || undefined,
+        acceptedTermsVersion: LEGAL.documentVersion
       });
       setSuccessMessage('Registration successful! Please verify your email.');
       setTimeout(() => closeAuthModal(), 1200);
@@ -418,6 +421,23 @@ export const AuthModal: React.FC = () => {
                     className="w-full pl-10 pr-4 py-2.5 bg-[#F9F8F6] border border-[#E8E4D9] rounded-xl text-sm focus:outline-none focus:border-[#283618]"
                   />
                 </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <input
+                  id="accept-terms"
+                  type="checkbox"
+                  required
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  className="mt-0.5 w-5 h-5 shrink-0 accent-[#4F772D] cursor-pointer"
+                />
+                <label htmlFor="accept-terms" className="text-xs leading-relaxed text-[#606C38]">
+                  I am {LEGAL.minimumAge} or older and I agree to the{' '}
+                  <a href="#/legal/terms" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#4F772D] underline">Terms of Service</a>
+                  {' '}and{' '}
+                  <a href="#/legal/privacy" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#4F772D] underline">Privacy Policy</a>.
+                </label>
               </div>
 
               <div className="pt-2">
