@@ -183,10 +183,10 @@ export const AuthModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#132A13]/60 backdrop-blur-xs overflow-y-auto overscroll-contain">
-      <div className="relative w-full max-w-lg bg-white rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#132A13]/60 backdrop-blur-xs overflow-hidden overscroll-contain">
+      <div role="dialog" aria-modal="true" className="relative w-full max-w-lg bg-white rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden max-h-[92dvh] flex flex-col">
         {/* Header */}
-        <div className="px-6 sm:px-8 pt-6 pb-4 border-b border-[#E8E4D9] flex items-center justify-between bg-[#F9F8F6]">
+        <div className="flex-none relative px-5 sm:px-8 pt-5 pb-4 pr-16 sm:pr-20 border-b border-[#E8E4D9] flex items-center bg-[#F9F8F6]">
           <div>
             <BrandLogo />
             <h2 className="text-xl font-serif font-bold text-[#132A13] mt-3">
@@ -197,15 +197,17 @@ export const AuthModal: React.FC = () => {
             </h2>
           </div>
           <button
+            type="button"
             onClick={closeAuthModal}
-            className="w-11 h-11 rounded-full bg-[#E8E4D9]/60 hover:bg-[#E8E4D9] flex items-center justify-center text-[#283618] transition-colors cursor-pointer"
+            aria-label="Close"
+            className="absolute top-3 right-3 sm:top-4 sm:right-5 w-11 h-11 rounded-full bg-[#E8E4D9]/60 hover:bg-[#E8E4D9] flex items-center justify-center text-[#283618] transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="p-6 sm:p-8 max-h-[80vh] overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 sm:p-8">
           {errorMessage && (
             <div className="mb-5 p-3.5 bg-[#FCF0E8] border border-[#BC6C25]/30 rounded-2xl flex items-start gap-3 text-xs text-[#BC6C25]">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />

@@ -200,7 +200,7 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-label={isSubscription ? 'Upgrade subscription' : 'Pay to publish vacancy'}>
-      <div className="bg-white w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl shadow-2xl">
+      <div className="bg-white w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl shadow-2xl">
         <div className="flex items-start justify-between gap-3 p-5 border-b border-[#E8E4D9]">
           <div className="min-w-0 flex-1">
             <h2 className="font-serif font-bold text-xl text-[#132A13] break-words">{title || (isListing ? 'Promote your listing' : isSubscription ? 'Upgrade your subscription' : alreadyPublished ? 'Promote your vacancy' : 'Publish your vacancy')}</h2>

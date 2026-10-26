@@ -133,13 +133,13 @@ export const OrganizationTeamModal: React.FC<OrganizationTeamModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#132A13]/70 backdrop-blur-xs overflow-y-auto overscroll-contain">
-      <div className="relative w-full max-w-2xl bg-white rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden my-auto flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#132A13]/70 backdrop-blur-xs overflow-hidden overscroll-contain">
+      <div className="relative w-full max-w-2xl bg-white rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden flex flex-col max-h-[90dvh]">
         {/* Header */}
-        <div className="p-6 border-b border-[#E8E4D9] bg-[#F9F8F6] relative flex-none">
+        <div className="p-6 border-b border-[#E8E4D9] bg-[#F9F8F6] relative pr-16 sm:pr-20 flex-none">
           <button
             onClick={onClose}
-            className="absolute top-6 right-6 w-11 h-11 rounded-full bg-white border border-[#E8E4D9] flex items-center justify-center text-[#606C38] hover:text-[#132A13] hover:bg-[#F2F2EC] transition-colors cursor-pointer"
+            className="absolute top-3 right-3 sm:top-5 sm:right-5 w-11 h-11 rounded-full bg-white border border-[#E8E4D9] flex items-center justify-center text-[#606C38] hover:text-[#132A13] hover:bg-[#F2F2EC] transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>

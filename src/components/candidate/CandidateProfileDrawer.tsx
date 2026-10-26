@@ -85,7 +85,7 @@ export const CandidateProfileDrawer: React.FC<CandidateProfileDrawerProps> = ({
 
   return (
     <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 overflow-hidden">
-      <div className="bg-white w-full sm:max-w-2xl h-full sm:h-auto sm:max-h-[90vh] shadow-2xl flex flex-col rounded-t-3xl sm:rounded-3xl overflow-hidden">
+      <div className="bg-white w-full sm:max-w-2xl h-full sm:h-auto sm:max-h-[90dvh] shadow-2xl flex flex-col rounded-t-3xl sm:rounded-3xl overflow-hidden">
         {/* Header */}
         <div className="p-6 bg-[#ECF3E9] border-b border-[#D9E3D5] flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0 flex-1">

@@ -755,8 +755,8 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
 
       {/* NDA SIGNATURE MODAL */}
       {ndaModalListing && (
-        <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto overscroll-contain">
-          <div className="bg-white w-full max-w-xl rounded-[32px] border border-[#E8E4D9] shadow-2xl p-6 sm:p-8 space-y-5">
+        <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-hidden overscroll-contain">
+          <div className="max-h-[92dvh] overflow-y-auto overscroll-contain bg-white w-full max-w-xl rounded-[32px] border border-[#E8E4D9] shadow-2xl p-6 sm:p-8 space-y-5">
             <div className="flex items-center justify-between border-b border-[#E8E4D9] pb-4">
               <div>
                 <span className="text-[10px] uppercase font-bold text-[#BC6C25] tracking-wider">
