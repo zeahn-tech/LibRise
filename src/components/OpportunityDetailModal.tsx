@@ -86,14 +86,6 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
   const [credentialFiles, setCredentialFiles] = useState<File[]>([]);
   const cvTouched = useRef(false);
 
-  // Lock the page behind the dialog so only the dialog body scrolls.
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
 
   // Jobs and internships need a CV; for proposals/inquiries the primary file is optional.
   const cvRequired = opportunity.type === 'job' || opportunity.type === 'internship';

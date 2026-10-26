@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { validateUploadedFile } from '../../core/security/fileValidator';
 import { BusinessListing, County } from '../../types';
 import { LIBERIAN_COUNTIES } from '../../data/seedData';
-import { Building, Lock, Unlock, Plus, Trash2, ShieldCheck, Image as ImageIcon, DollarSign, MapPin, Tag, FileText, Upload } from 'lucide-react';
+import { Building, Lock, Unlock, Plus, Trash2, ShieldCheck, Image as ImageIcon, DollarSign, MapPin, Tag, FileText, Upload, X } from 'lucide-react';
 
 interface CreateBusinessModalProps {
   isOpen: boolean;
@@ -36,6 +36,13 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
   currency = 'USD'
 }) => {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  // Each step starts at the top of the form body.
+  useEffect(() => {
+    bodyRef.current?.scrollTo({ top: 0 });
+  }, [step]);
+
 
   // Step 1: Basic Info & Industry
   const [title, setTitle] = useState('');
@@ -163,39 +170,44 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white w-full max-w-2xl rounded-[32px] border border-[#E8E4D9] shadow-2xl p-6 sm:p-8 space-y-6 my-8">
-        {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-[#E8E4D9] pb-4">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#4F772D]">
-              <Building className="w-4 h-4" />
-              <span>Liberia Enterprise M&A Marketplace</span>
-            </div>
-            <h3 className="text-xl sm:text-2xl font-serif font-bold text-[#132A13] mt-0.5">
-              List Your Business For Sale
-            </h3>
-          </div>
+    <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 overflow-hidden overscroll-contain">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="List your business for sale"
+        className="bg-white w-full max-w-2xl rounded-[32px] sm:rounded-[40px] border border-[#E8E4D9] shadow-2xl overflow-hidden max-h-[92dvh] flex flex-col"
+      >
+        {/* Header (fixed) */}
+        <div className="p-4 sm:p-6 bg-[#ECF3E9] border-b border-[#D9E3D5] relative flex-none">
           <button
+            type="button"
             onClick={onClose}
-            className="text-[#606C38] hover:text-[#132A13] text-sm font-bold w-11 h-11 rounded-full bg-[#F9F8F4] flex items-center justify-center"
+            aria-label="Close"
+            className="absolute top-3 right-3 sm:top-5 sm:right-5 w-11 h-11 bg-white/80 hover:bg-white rounded-full flex items-center justify-center text-[#283618] border border-[#D9E3D5] cursor-pointer"
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#4F772D] mb-1 pr-12">
+            <Building className="w-4 h-4 shrink-0" />
+            <span>Liberia Enterprise M&A Marketplace</span>
+          </div>
+          <h3 className="text-xl sm:text-2xl font-serif font-bold text-[#132A13] pr-12">List Your Business For Sale</h3>
         </div>
 
-        {/* Step Indicator */}
-        <div className="grid grid-cols-4 gap-2">
+        {/* Step indicator (fixed, so progress is always visible) */}
+        <div className="grid grid-cols-4 gap-2 px-4 sm:px-6 py-3 border-b border-[#E8E4D9] bg-white flex-none">
           {[
             { num: 1, label: 'Overview' },
-            { num: 2, label: 'Location & Confidentiality' },
+            { num: 2, label: 'Location' },
             { num: 3, label: 'Financials' },
-            { num: 4, label: 'Assets & Verification' }
+            { num: 4, label: 'Assets' }
           ].map((s) => (
-            <div
+            <button
+              type="button"
               key={s.num}
               onClick={() => setStep(s.num as any)}
-              className={`p-2 rounded-xl text-center cursor-pointer transition-all border ${
+              aria-current={step === s.num ? 'step' : undefined}
+              className={`p-2 min-h-11 rounded-xl text-center cursor-pointer transition-all border ${
                 step === s.num
                   ? 'bg-[#283618] text-white border-[#283618] font-bold shadow-2xs'
                   : step > s.num
@@ -205,11 +217,13 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
             >
               <div className="text-[10px] uppercase tracking-wider">Step {s.num}</div>
               <div className="text-xs truncate">{s.label}</div>
-            </div>
+            </button>
           ))}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          {/* Scrollable body */}
+          <div ref={bodyRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-5">
           {/* STEP 1: Basic Info & Industry */}
           {step === 1 && (
             <div className="space-y-4">
@@ -616,32 +630,40 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
             </div>
           )}
 
-          {/* Navigation Buttons */}
-          <div className="flex items-center justify-between pt-4 border-t border-[#E8E4D9]">
+          </div>
+
+          {/* Navigation (fixed footer) */}
+          <div className="flex-none flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-t border-[#E8E4D9] bg-white">
             {step > 1 ? (
               <button
                 type="button"
                 onClick={() => setStep((step - 1) as any)}
-                className="px-5 py-2.5 rounded-xl border border-[#E8E4D9] text-xs font-semibold text-[#606C38] hover:bg-[#F9F8F4]"
+                className="px-5 min-h-11 rounded-xl border border-[#E8E4D9] text-xs font-semibold text-[#606C38] hover:bg-[#F9F8F4] cursor-pointer"
               >
                 Back
               </button>
             ) : (
-              <div />
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 min-h-11 rounded-xl text-xs font-semibold text-[#606C38] hover:bg-[#F9F8F4] cursor-pointer"
+              >
+                Cancel
+              </button>
             )}
 
             {step < 4 ? (
               <button
                 type="button"
                 onClick={() => setStep((step + 1) as any)}
-                className="px-6 py-2.5 bg-[#283618] text-white rounded-xl text-xs font-bold shadow-md hover:bg-[#132A13]"
+                className="px-6 min-h-11 bg-[#283618] text-white rounded-xl text-xs font-bold shadow-md hover:bg-[#132A13] cursor-pointer"
               >
                 Continue to Step {step + 1}
               </button>
             ) : (
               <button
                 type="submit"
-                className="px-8 py-3 bg-[#4F772D] text-white rounded-xl text-xs font-bold shadow-lg hover:bg-[#283618] transition-all"
+                className="px-6 min-h-11 bg-[#4F772D] text-white rounded-xl text-xs font-bold shadow-lg hover:bg-[#283618] transition-all cursor-pointer"
               >
                 Publish Business Listing
               </button>

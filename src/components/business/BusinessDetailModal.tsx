@@ -68,7 +68,7 @@ export const BusinessDetailModal: React.FC<BusinessDetailModalProps> = ({
   const isOwner = listing.ownerUserId === currentUserId;
 
   return (
-    <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto overscroll-contain">
       <div className="bg-white w-full max-w-3xl rounded-[32px] border border-[#E8E4D9] shadow-2xl p-6 sm:p-8 space-y-6 my-8 max-h-[90vh] overflow-y-auto">
         {/* Header Bar */}
         <div className="flex items-start justify-between border-b border-[#E8E4D9] pb-4 gap-4">

@@ -133,7 +133,7 @@ export const OrganizationTeamModal: React.FC<OrganizationTeamModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#132A13]/70 backdrop-blur-xs overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-[#132A13]/70 backdrop-blur-xs overflow-y-auto overscroll-contain">
       <div className="relative w-full max-w-2xl bg-white rounded-3xl border border-[#E8E4D9] shadow-2xl overflow-hidden my-auto flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="p-6 border-b border-[#E8E4D9] bg-[#F9F8F6] relative flex-none">
