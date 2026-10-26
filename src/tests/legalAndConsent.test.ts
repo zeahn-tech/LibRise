@@ -162,3 +162,16 @@ describe('storage stays in sync with the Cookie Policy', () => {
     expect(readFileSync('index.html', 'utf8')).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
   });
 });
+
+describe('operator details', () => {
+  it('names the operator and a real support address in every document', async () => {
+    const { LEGAL } = await import('../legal/legalConfig');
+    expect(LEGAL.operatorName).toBe('Zeahn Inc.');
+    expect(LEGAL.supportEmail).toBe('info.tracenetlib@gmail.com');
+    for (const d of Object.values(LEGAL_DOCUMENTS)) {
+      const text = d.sections.flatMap((s) => s.blocks.map((b) => (b.t === 'ul' ? b.items.join(' ') : b.t === 'table' ? b.rows.flat().join(' ') : b.text))).join('\n');
+      expect(text).toContain('info.tracenetlib@gmail.com');
+      expect(text).not.toContain('opportunityhub');
+    }
+  });
+});

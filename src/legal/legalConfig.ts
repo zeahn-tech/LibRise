@@ -14,7 +14,7 @@ export const LEGAL = {
   /** Brand shown to users. */
   productName: APP_METADATA.name,
   /** The legal person that operates LibRise (company name as registered). Set VITE_LEGAL_ENTITY_NAME. */
-  operatorName: env.VITE_LEGAL_ENTITY_NAME || APP_METADATA.name,
+  operatorName: env.VITE_LEGAL_ENTITY_NAME || 'Zeahn Inc.',
   /** Optional registered/postal address; shown only when set. Set VITE_LEGAL_ADDRESS. */
   postalAddress: env.VITE_LEGAL_ADDRESS || '',
   /** Where privacy requests, refund requests, appeals and legal notices go. Set VITE_SUPPORT_EMAIL. */

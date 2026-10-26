@@ -26,7 +26,7 @@ If the cookie categories change, increase `CONSENT_VERSION` so everyone is asked
 
 ## Decisions the operator must confirm (defaults are in `legalConfig.ts`)
 
-- Legal entity name and a real support email (the default email in `constants.ts` is a placeholder from an earlier brand).
+- Legal entity name and support email: confirmed as **Zeahn Inc.** and **info.tracenetlib@gmail.com** (set in `legalConfig.ts` / `constants.ts`). Add `VITE_LEGAL_ADDRESS` if you want a postal address shown.
 - Response commitments: privacy requests 30 days, refund requests within 14 days of payment, refund decision within 7 business days.
 - Annual plans are not refunded part-way; "Switch to Free now" is not refunded.
 - Liability cap (greater of 12 months of fees or USD 100) and governing law/courts (Republic of Liberia).

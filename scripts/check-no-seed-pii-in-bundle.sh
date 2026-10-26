@@ -25,6 +25,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# NOTE: info.tracenetlib@gmail.com (the demo admin's email in SEED_USERS) is deliberately NOT in this list any more:
+# the operator chose it as the PUBLIC support address shown in the legal pages and billing screen, so it is expected
+# in the bundle. A leak of the seed dataset is still caught by the other seed emails and by the admin password hash
+# below, which sits in the same SEED_USERS entry.
+#
 # Known seed PII, extracted directly from src/db/dbClient.ts's
 # SEED_USERS array. Keep this list in sync with that file -- if a new
 # seed user is added there, add their email here too.
@@ -32,7 +37,6 @@ SEED_STRINGS=(
   "tamba.kollie@gmail.com"
   "hiring@savethechildren.lr"
   "agency@liberiaworkforce.com"
-  "info.tracenetlib@gmail.com"
   "investor@capitolhill.lr"
   "nathaniel.sherman@capitolhillcapital.lr"
   "patrick@gantacivil.lr"
