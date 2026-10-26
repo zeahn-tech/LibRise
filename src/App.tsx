@@ -1,3 +1,4 @@
+import { LegalPage } from './components/legal/LegalPage';
 import { ModalScrollLock } from './components/common/ModalScrollLock';
 import { logger } from './core/logging/logger';
 import { openedFromRecoveryLink, recoveryLinkError } from './lib/recoveryLink';
@@ -82,7 +83,7 @@ function AppContent() {
   const { currency, setCurrency } = useConfig();
   const { activeRole, switchRole, user, session, authContext, openAuthModal, activeOrganization } = useAuth();
   const { showToast } = useToast();
-  const { route, navigate } = useRouter();
+  const { route, navigate, goBack } = useRouter();
 
   // All useState hooks at the top in strict consistent order
   const [hasEnteredApp, setHasEnteredApp] = useState(openedFromRecoveryLink || !!recoveryLinkError);
@@ -254,6 +255,17 @@ function AppContent() {
   useEffect(() => {
     setVisibleFeedCount(FEED_PAGE_SIZE);
   }, [selectedCounty, selectedCategory, selectedEmploymentType, selectedWorkplaceModel, minSalary, searchQuery, opportunities]);
+
+  // Legal pages are public: reachable from the landing screen, the sign-up form and the footer, signed in or not.
+  if (route.path === '/legal' || route.path.startsWith('/legal/')) {
+    return (
+      <LegalPage
+        slug={route.path.slice('/legal'.length).replace(/^\//, '')}
+        onNavigate={navigate}
+        onBack={() => (window.history.length > 1 ? goBack() : navigate('/'))}
+      />
+    );
+  }
 
   if (!hasEnteredApp) {
     return (

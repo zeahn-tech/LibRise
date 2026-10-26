@@ -2,6 +2,8 @@ import React from 'react';
 import { ShieldCheck, MapPin } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getFeatureAccess } from '../core/auth/featureAccess';
+import { LEGAL_NAV, legalPath } from '../legal/legalConfig';
+import { openCookieSettings } from '../lib/consent';
 
 interface FooterProps {
   onOpenSafetyModal: () => void;
@@ -12,7 +14,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSafetyModal, onOpenVerific
   const { authContext } = useAuth();
   const canSeeVerification = getFeatureAccess(authContext).tabs.verification.allowed;
   return (
-    <footer className="bg-[#F2F2EC] border-t border-[#E8E4D9] px-4 sm:px-10 py-3 sm:py-0 sm:h-14 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 text-[11px] font-bold text-[#A3B18A] uppercase tracking-wider shrink-0 mt-auto">
+    <footer className="bg-[#F2F2EC] border-t border-[#E8E4D9] px-4 sm:px-10 py-3 sm:py-0 sm:min-h-14 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 text-[11px] font-bold text-[#A3B18A] uppercase tracking-wider shrink-0 mt-auto">
       <div className="text-center sm:text-left">
         © 2026 Lib<span className="text-[#4F772D]">Rise</span> • ALL 15 COUNTIES
       </div>
@@ -33,6 +35,17 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSafetyModal, onOpenVerific
           </button>
         )}
       </div>
+
+      <nav aria-label="Legal" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs normal-case tracking-normal">
+        {LEGAL_NAV.map((n) => (
+          <a key={n.slug} href={`#${legalPath(n.slug)}`} className="min-h-11 inline-flex items-center text-[#606C38] hover:text-[#283618] transition-colors">
+            {n.label}
+          </a>
+        ))}
+        <button type="button" onClick={openCookieSettings} className="min-h-11 inline-flex items-center text-[#606C38] hover:text-[#283618] transition-colors cursor-pointer">
+          Cookie settings
+        </button>
+      </nav>
 
       <div className="flex items-center gap-2 text-[10px] text-[#283618] font-semibold">
         <div className="w-2 h-2 bg-[#4F772D] rounded-full animate-pulse"></div>

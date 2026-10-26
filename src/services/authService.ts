@@ -448,6 +448,8 @@ class AuthService {
     phoneNumber?: string;
     primaryCounty?: User['primaryCounty'];
     organizationName?: string;
+    /** Version of the Terms/Privacy Policy the person agreed to at sign-up (stored with the account as evidence). */
+    acceptedTermsVersion?: string;
   }): Promise<AuthSession> {
     logger.info('AUTH', `Registration initiated for ${params.email} as [${params.primaryRole}]`);
 
@@ -467,7 +469,9 @@ class AuthService {
             fullName: params.fullName,
             primaryRole: params.primaryRole,
             phoneNumber: params.phoneNumber,
-            primaryCounty: params.primaryCounty
+            primaryCounty: params.primaryCounty,
+            termsVersion: params.acceptedTermsVersion,
+            termsAcceptedAt: params.acceptedTermsVersion ? new Date().toISOString() : undefined
           }
         }
       });

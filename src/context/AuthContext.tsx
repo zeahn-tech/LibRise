@@ -35,6 +35,7 @@ interface AuthContextType {
     phoneNumber?: string;
     primaryCounty?: User['primaryCounty'];
     organizationName?: string;
+    acceptedTermsVersion?: string;
   }) => Promise<void>;
   logout: () => void | Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ success: boolean; resetToken?: string }>;
