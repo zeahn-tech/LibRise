@@ -319,6 +319,7 @@ const terms: LegalDocument = {
           'Payments are made by MTN Mobile Money or Orange Money to our account. After you send the money you submit the transaction ID, and a member of our team checks it by hand against our mobile-money records. Confirmation is not instant, and we do not promise a turnaround time.',
           `An unsubmitted payment request expires after ${LEGAL.paymentWindowHours} hours.`,
           'Your vacancy or plan is activated only after we approve the payment. If we cannot confirm it, we will reject it with a reason and you can try again.',
+          'Nothing renews automatically. Each paid period is prepaid and ends on its date, and we never charge you without you sending a payment.',
           'You pay any mobile-money network charges. Prices may change for future purchases; we will not change what you have already paid for.',
           'Refunds and cancellations are covered by our [Refund Policy](#/legal/refunds).'
         )
@@ -414,7 +415,8 @@ const refunds: LegalDocument = {
       id: 'when-we-refund',
       heading: 'When we refund',
       blocks: [
-        p(`Ask for a refund within ${LEGAL.refundRequestWindowDays} days of the payment. We will refund the amount you paid to us in these cases:`),
+        p(`Ask for a refund within ${LEGAL.refundRequestWindowDays} days of the payment. For something we did wrong (a payment we approved but did not deliver, or a listing or plan we removed by mistake), the ${LEGAL.refundRequestWindowDays} days start from when the problem happened, and we will still consider requests up to ${LEGAL.refundFaultClaimMaxDays} days after payment.`),
+        p('We will always return money we received but did not approve (a duplicate payment, an overpayment, or a payment we rejected after the money reached us), whenever you tell us. We will refund the amount you paid to us in these cases:'),
         ul(
           'Duplicate payment: you paid twice for the same vacancy, package or plan period.',
           'Overpayment: you sent more than the price shown at checkout (we refund the difference).',
@@ -443,12 +445,13 @@ const refunds: LegalDocument = {
       id: 'cancelling',
       heading: 'Cancelling a plan',
       blocks: [
-        p('You can cancel a paid plan from the Billing page.'),
+        p('You can cancel a paid plan from the Subscriptions page.'),
         ul(
           '**Cancel at the end of the period:** you keep the paid features until the end of the period you paid for, and the plan does not continue. This is the default.',
           '**Switch to Free now:** your plan ends immediately and the remaining time is **not refunded**.',
           'After cancelling you stay on the Free plan with its limits. Your data is kept. Vacancies already published remain subject to the limits of the plan you are on.'
         ),
+        p('**Plans do not renew automatically.** Every paid period is prepaid. When it ends you move to the Free plan and your data is kept, and you choose whether to pay again. We never charge you automatically.'),
         p('Annual plans are paid for the whole year and are not refunded part-way through, except where the “When we refund” list applies.')
       ]
     },
@@ -469,7 +472,8 @@ const refunds: LegalDocument = {
       id: 'how-we-refund',
       heading: 'How we pay you back',
       blocks: [
-        p('Approved refunds are sent by mobile money to the same number and network the payment came from, for the amount being refunded, less any network charges we cannot avoid. It is sent manually, so the time it takes to arrive depends on us and the mobile-money network. We will tell you when it has been sent.'),
+        p(`Approved refunds are sent by mobile money to the same number and network the payment came from, within ${LEGAL.refundPayoutBusinessDays} business days of approval. We will tell you when it has been sent. Because it is sent by hand, the time it takes to arrive also depends on the mobile-money network.`),
+        p('When the refund is our responsibility (every case in “When we refund”), we pay the cost of sending it, so you receive the full amount you paid us. The charge your own network took when you sent the original payment is not refunded.'),
         p('If a refund is refused you will get the reason. You can reply to ask us to look again.')
       ]
     },

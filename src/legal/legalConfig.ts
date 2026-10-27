@@ -21,8 +21,8 @@ export const LEGAL = {
   supportEmail: env.VITE_SUPPORT_EMAIL || APP_METADATA.supportEmail,
 
   /** Human-readable date and a machine version; bump the version when the meaning of a document changes. */
-  lastUpdated: '25 October 2026',
-  documentVersion: '2026-10-25',
+  lastUpdated: '26 October 2026',
+  documentVersion: '2026-10-26',
 
   /** Minimum age to hold an account. */
   minimumAge: 18,
@@ -31,6 +31,10 @@ export const LEGAL = {
   privacyRequestResponseDays: 30,
   refundRequestWindowDays: 14,
   refundDecisionBusinessDays: 7,
+  /** Longest we will still consider a refund where something we promised was not delivered. */
+  refundFaultClaimMaxDays: 60,
+  /** Time to send an approved refund. */
+  refundPayoutBusinessDays: 5,
   paymentWindowHours: 48,
 
   /** Law and courts that govern the Terms. */
