@@ -122,6 +122,13 @@ describe('legal documents', () => {
     expect(refunds).toContain('OHL-XXXX-XXXX');
     expect(refunds).toMatch(/not refunded/i);
     expect(refunds).toContain('48 hours');
+    expect(refunds).toMatch(/do not renew automatically/i);
+    expect(refunds).toContain('60 days');
+    expect(refunds).toContain('5 business days');
+    expect(refunds).toMatch(/whenever you tell us/i);
+    expect(refunds).toMatch(/we pay the cost of sending it/i);
+    expect(refunds).toContain('Subscriptions page');
+    expect(terms).toMatch(/Nothing renews automatically/);
     const cookies = fullText('cookies');
     expect(cookies).toMatch(/does not use advertising/i);
   });
