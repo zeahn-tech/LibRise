@@ -39,7 +39,7 @@ import { AnalyticsPanel } from './admin/AnalyticsPanel';
 import { OpportunityModerationPanel } from './admin/OpportunityModerationPanel';
 import { RevenueLedgerPanel } from './admin/RevenueLedgerPanel';
 import { SubscriptionsPanel } from './admin/SubscriptionsPanel';
-import { AnnouncementPanel, ExchangeRatePanel, IndustriesPanel } from './admin/PlatformSettingsPanels';
+import { AnnouncementPanel, ExchangeRatePanel, IndustriesPanel, MaxJobExpiryPanel } from './admin/PlatformSettingsPanels';
 import { organizationService } from '../../services/organizationService';
 import { adminService } from '../../services/adminService';
 import { useAuth } from '../../context/AuthContext';
@@ -1082,7 +1082,14 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
         {/* VIEWS 10-12: industries, announcement and exchange rate: real, saved to the database and used by the app */}
         {adminTab === 'categories' && <IndustriesPanel />}
         {adminTab === 'content' && <AnnouncementPanel />}
-        {adminTab === 'settings' && <ExchangeRatePanel />}
+        {adminTab === 'settings' && (
+          <div className="space-y-12">
+            <ExchangeRatePanel />
+            <div className="border-t border-[#E8E4D9] pt-10">
+              <MaxJobExpiryPanel />
+            </div>
+          </div>
+        )}
 
         {/* VIEW 13: IMMUTABLE AUDIT TRAIL LOG */}
         {adminTab === 'audit' && (

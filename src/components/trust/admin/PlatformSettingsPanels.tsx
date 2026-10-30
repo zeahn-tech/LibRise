@@ -3,9 +3,23 @@ import { Megaphone, Plus, Trash2 } from 'lucide-react';
 import { BUSINESS_INDUSTRIES } from '../../../config/constants';
 import { useToast } from '../../../context/ToastContext';
 import { formatConverted, getUsdToLrdRate } from '../../../lib/currency';
-import { mergeIndustries, refreshPlatformSettings, usePlatformSettings } from '../../../lib/platformSettingsStore';
+import { mergeIndustries, refreshPlatformSettings, useMaxJobDays, usePlatformSettings } from '../../../lib/platformSettingsStore';
+import { DEFAULT_MAX_JOB_DAYS, describeLimit, MAX_MAX_JOB_DAYS, MIN_MAX_JOB_DAYS } from '../../../lib/jobExpiry';
 import { platformSettingsService } from '../../../services/platformSettingsService';
 import { EXCHANGE_RATES } from '../../../config/constants';
+
+type SettingKey = Parameters<typeof platformSettingsService.set>[0];
+
+/** Saves a setting, then reads settings back so a save that visitors cannot actually see is reported, not hidden. */
+async function saveSetting(key: SettingKey, value: unknown): Promise<void> {
+  await platformSettingsService.set(key, value);
+  try {
+    await refreshPlatformSettings(true);
+  } catch (err) {
+    const why = err instanceof Error ? err.message : 'unknown error';
+    throw new Error(`Saved, but it could not be read back (${why}). Visitors will not see it until this is fixed. Check that the latest database migration has been run.`);
+  }
+}
 
 const input = 'w-full min-h-11 px-3 text-sm bg-[#F9F8F6] rounded-xl border border-[#E8E4D9] outline-none focus:border-[#4F772D]';
 const primaryBtn = 'inline-flex items-center justify-center gap-2 min-h-11 px-5 rounded-xl bg-[#283618] hover:bg-[#132A13] text-white text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
@@ -20,8 +34,7 @@ export const IndustriesPanel: React.FC = () => {
   const save = async (next: string[], success: string) => {
     setBusy(true);
     try {
-      await platformSettingsService.set('extra_industries', next);
-      await refreshPlatformSettings();
+      await saveSetting('extra_industries', next);
       showToast(success, 'success');
       return true;
     } catch (err) {
@@ -113,8 +126,7 @@ export const AnnouncementPanel: React.FC = () => {
     if (invalid || busy) return;
     setBusy(true);
     try {
-      await platformSettingsService.set('announcement', { enabled, message: message.trim() });
-      await refreshPlatformSettings();
+      await saveSetting('announcement', { enabled, message: message.trim() });
       showToast(enabled ? 'Announcement is now live for all visitors.' : 'Announcement saved and switched off.', 'success');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not save the announcement.', 'error');
@@ -177,8 +189,7 @@ export const ExchangeRatePanel: React.FC = () => {
   const save = async (rate: number, message: string) => {
     setBusy(true);
     try {
-      await platformSettingsService.set('usd_to_lrd', rate);
-      await refreshPlatformSettings();
+      await saveSetting('usd_to_lrd', rate);
       showToast(message, 'success');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Could not save the exchange rate.', 'error');
@@ -207,6 +218,64 @@ export const ExchangeRatePanel: React.FC = () => {
         {usdToLrd !== null && usdToLrd !== EXCHANGE_RATES.USD_TO_LRD && (
           <button type="button" disabled={busy} onClick={() => save(EXCHANGE_RATES.USD_TO_LRD, `Rate reset to the built-in 1 USD = ${EXCHANGE_RATES.USD_TO_LRD} LRD.`)} className="min-h-11 px-5 rounded-xl border border-[#E8E4D9] text-xs font-bold text-[#283618] hover:bg-[#F9F8F6] cursor-pointer">
             Reset to {EXCHANGE_RATES.USD_TO_LRD}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/** Maximum job expiry: how far ahead an employer may set a vacancy's application deadline. */
+export const MaxJobExpiryPanel: React.FC = () => {
+  const { showToast } = useToast();
+  const maxJobDays = useMaxJobDays();
+  const [value, setValue] = useState(String(maxJobDays));
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => setValue(String(maxJobDays)), [maxJobDays]);
+
+  const parsed = Number(value);
+  const valid = Number.isInteger(parsed) && parsed >= MIN_MAX_JOB_DAYS && parsed <= MAX_MAX_JOB_DAYS;
+  const dirty = valid && parsed !== maxJobDays;
+
+  const save = async (days: number, message: string) => {
+    setBusy(true);
+    try {
+      await saveSetting('max_job_days', days);
+      showToast(message, 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save the limit.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 max-w-xl">
+      <div className="space-y-1">
+        <h3 className="font-serif font-bold text-2xl text-[#132A13]">Maximum Job Expiry</h3>
+        <p className="text-stone-500 text-sm">The longest an employer may keep a vacancy open. Applications close on the deadline, so this stops vacancies from staying listed for months or years.</p>
+      </div>
+
+      <div>
+        <label htmlFor="max-job-days" className="block text-xs font-bold text-[#283618] mb-1">Longest allowed deadline (days from today)</label>
+        <input id="max-job-days" type="number" inputMode="numeric" min={MIN_MAX_JOB_DAYS} max={MAX_MAX_JOB_DAYS} step="1" value={value} onChange={(e) => setValue(e.target.value)} className={input} aria-invalid={!valid} />
+        <p className={`text-[11px] mt-1 ${valid ? 'text-stone-400' : 'text-red-700 font-semibold'}`}>
+          {valid ? `Live limit: ${maxJobDays} days. Employers will see: ${describeLimit(parsed)}` : `Enter a whole number from ${MIN_MAX_JOB_DAYS} to ${MAX_MAX_JOB_DAYS}.`}
+        </p>
+      </div>
+
+      <ul className="text-xs text-stone-600 space-y-1 list-disc pl-5">
+        <li>Checked when a vacancy is created, when its deadline changes, or when it is published again.</li>
+        <li>Existing vacancies are not changed, and editing something else on an older vacancy is never blocked.</li>
+        <li>Platform administrators can override the limit.</li>
+      </ul>
+
+      <div className="flex flex-wrap gap-3">
+        <button type="button" disabled={!dirty || busy} onClick={() => save(parsed, `Vacancies can now stay open for up to ${parsed} days.`)} className={primaryBtn}>{busy ? 'Saving…' : 'Save limit'}</button>
+        {maxJobDays !== DEFAULT_MAX_JOB_DAYS && (
+          <button type="button" disabled={busy} onClick={() => save(DEFAULT_MAX_JOB_DAYS, `Limit reset to the default of ${DEFAULT_MAX_JOB_DAYS} days.`)} className="min-h-11 px-5 rounded-xl border border-[#E8E4D9] text-xs font-bold text-[#283618] hover:bg-[#F9F8F6] cursor-pointer">
+            Reset to {DEFAULT_MAX_JOB_DAYS}
           </button>
         )}
       </div>
