@@ -31,6 +31,12 @@ create policy "Anyone can read platform settings"
 revoke all on public.platform_settings from anon, authenticated;
 grant select on public.platform_settings to anon, authenticated;
 
+-- Suspended accounts are blocked on every RLS table (repo-wide invariant, see 20261012150000_enforce_account_status).
+drop policy if exists "restrict_suspended_accounts" on public.platform_settings;
+create policy "restrict_suspended_accounts" on public.platform_settings
+  as restrictive for all to authenticated
+  using ((select not public.is_account_suspended())) with check ((select not public.is_account_suspended()));
+
 create or replace function public.admin_set_platform_setting(p_key character varying, p_value jsonb)
 returns void
 language plpgsql
@@ -429,6 +435,7 @@ as $$
 declare
   v_uid character varying := auth.uid()::character varying;
 begin
+  perform public.assert_account_active();
   if v_uid is null or not exists (
     select 1 from public.users u
      where u.id = v_uid and coalesce(u.account_status, 'active') = 'active'
