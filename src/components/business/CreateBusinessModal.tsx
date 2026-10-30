@@ -1,3 +1,5 @@
+import { BUSINESS_INDUSTRIES } from '../../config/constants';
+import { useBusinessIndustries } from '../../lib/platformSettingsStore';
 import React, { useEffect, useRef, useState } from 'react';
 import { validateUploadedFile } from '../../core/security/fileValidator';
 import { BusinessListing, County } from '../../types';
@@ -12,21 +14,6 @@ interface CreateBusinessModalProps {
   currency?: 'USD' | 'LRD';
 }
 
-const INDUSTRIES = [
-  'Agriculture & Forestry',
-  'Food Processing & Cold Chain Logistics',
-  'Hospitality & Tourism',
-  'Healthcare & Pharmaceuticals',
-  'Retail & Supermarket Chains',
-  'Transport, Logistics & Fleet Services',
-  'Mining, Energy & Gold Processing',
-  'Construction & Building Materials',
-  'Financial Services & Fintech',
-  'Technology & Telecom',
-  'Education & Training Institutions',
-  'Manufacturing & Industrial',
-  'Commercial Services & Real Estate'
-];
 
 export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
   isOpen,
@@ -46,7 +33,8 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
 
   // Step 1: Basic Info & Industry
   const [title, setTitle] = useState('');
-  const [industry, setIndustry] = useState(INDUSTRIES[0]);
+  const INDUSTRIES = useBusinessIndustries();
+  const [industry, setIndustry] = useState<string>(BUSINESS_INDUSTRIES[0]);
   const [customIndustry, setCustomIndustry] = useState('');
   const [establishedYear, setEstablishedYear] = useState<number>(new Date().getFullYear() - 5);
   const [employeeCount, setEmployeeCount] = useState<number>(8);

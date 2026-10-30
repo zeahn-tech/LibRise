@@ -9,10 +9,21 @@ import { EXCHANGE_RATES } from '../config/constants';
 
 export type Currency = 'USD' | 'LRD';
 
-/** Convert an amount between currencies using the platform benchmark rate. */
+// The platform's USD->LRD display rate. Starts at the built-in benchmark and is replaced by the rate an administrator
+// sets in Platform Settings (loaded once at start-up, see ConfigContext).
+let usdToLrd = EXCHANGE_RATES.USD_TO_LRD;
+
+export const getUsdToLrdRate = (): number => usdToLrd;
+
+/** Ignores anything outside the range the database accepts (50 to 1000), so a bad value can never break prices. */
+export const setUsdToLrdRate = (rate: number): void => {
+  if (Number.isFinite(rate) && rate >= 50 && rate <= 1000) usdToLrd = rate;
+};
+
+/** Convert an amount between currencies using the platform rate. */
 export const convertAmount = (amount: number, from: Currency, to: Currency): number => {
   if (from === to) return amount;
-  return from === 'USD' ? amount * EXCHANGE_RATES.USD_TO_LRD : amount * EXCHANGE_RATES.LRD_TO_USD;
+  return from === 'USD' ? amount * usdToLrd : amount / usdToLrd;
 };
 
 /** Format an amount that is ALREADY in `currency` (no conversion). */
@@ -26,7 +37,7 @@ export const formatConverted = (amount: number, source: Currency, display: Curre
   formatMoney(convertAmount(amount, source, display), display);
 
 /** Human-readable rate note, e.g. "1 USD = 195 LRD". */
-export const rateNote = (): string => `1 USD = ${EXCHANGE_RATES.USD_TO_LRD} LRD`;
+export const rateNote = (): string => `1 USD = ${usdToLrd} LRD`;
 
 /**
  * Format a salary range authored in `source`, shown in the `display` currency.

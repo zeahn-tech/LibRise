@@ -1,3 +1,4 @@
+import { AnnouncementBanner } from './common/AnnouncementBanner';
 import { LEGAL_NAV, legalPath } from '../legal/legalConfig';
 import { openCookieSettings } from '../lib/consent';
 import React from 'react';
@@ -60,6 +61,8 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ onEnterPortal }) =
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] text-[#283618] flex flex-col selection:bg-[#4F772D] selection:text-white">
+      <AnnouncementBanner />
+
       {/* Top Navigation Bar */}
       <header className="h-16 sm:h-20 w-full max-w-full bg-white border-b border-[#E8E4D9] sticky top-0 z-40 flex items-center px-3 sm:px-6 2xl:px-10">
         <div className="w-full max-w-7xl mx-auto flex items-center justify-between gap-2">

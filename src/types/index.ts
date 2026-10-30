@@ -167,6 +167,9 @@ export interface Opportunity {
   applicationsCount: number;
   status: 'published' | 'draft' | 'closed' | 'expired' | 'archived' | 'payment_required' | 'payment_pending' | 'payment_failed' | 'payment_expired';
   moderationStatus?: 'published' | 'pending_review' | 'flagged' | 'quarantined' | 'rejected';
+  /** Reason a moderator gave when quarantining/rejecting. */
+  moderationNote?: string;
+  moderatedAt?: string;
   reportCount?: number;
 }
 

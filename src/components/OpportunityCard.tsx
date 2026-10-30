@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Opportunity } from '../types';
-import { MapPin, Calendar, CheckCircle2, Building, ShieldCheck, Sparkles, Bookmark, AlertCircle, Clock, ShieldAlert } from 'lucide-react';
+import { MapPin, Calendar, Bookmark, ShieldAlert } from 'lucide-react';
 import { OPPORTUNITY_TYPES } from '../config/constants';
 import { ReportModal } from './trust/ReportModal';
 import { useAuth } from '../context/AuthContext';
@@ -73,6 +73,46 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({
         effectiveStatus === 'expired' ? 'opacity-85 border-red-200' : 'border-[#E8E4D9]'
       }`}
     >
+      {/* Org tag, save and report: pinned to the card's upper-right corner so they never crowd the title */}
+      <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10 flex items-center gap-1.5">
+        <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider whitespace-nowrap ${getBadgeStyle()}`}>
+          {getBadgeLabel()}
+        </span>
+
+        {onToggleSave && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSave(opportunity.id);
+            }}
+            aria-label={isSaved ? 'Remove from saved opportunities' : 'Save opportunity to your profile'}
+            aria-pressed={isSaved}
+            className={`w-10 h-10 flex items-center justify-center rounded-full border transition-colors ${
+              isSaved
+                ? 'text-[#BC6C25] bg-[#FEFAE0] border-[#E8D9A8]'
+                : 'text-[#606C38] bg-[#F9F8F4] border-[#E8E4D9] hover:text-[#283618] hover:bg-[#ECF3E9]'
+            }`}
+            title={isSaved ? 'Saved opportunity' : 'Save opportunity'}
+          >
+            <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsReportModalOpen(true);
+          }}
+          aria-label="Report suspicious listing or fee request"
+          className="w-10 h-10 flex items-center justify-center rounded-full border border-red-100 bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-500 transition-colors"
+          title="Report suspicious listing or fee request"
+        >
+          <ShieldAlert className="w-4 h-4" />
+        </button>
+      </div>
+
       {/* Organization Logo Avatar */}
       <div className="w-13 h-13 sm:w-14 sm:h-14 bg-[#F9F8F4] rounded-2xl flex-none overflow-hidden border border-[#E8E4D9] flex items-center justify-center text-base sm:text-lg font-bold text-[#4F772D] group-hover:bg-[#ECF3E9] transition-colors">
         {opportunity.organization.logoText || 'LR'}
@@ -80,7 +120,7 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({
 
       {/* Main Details */}
       <div className="flex-1 min-w-0">
-        <div className="flex flex-wrap items-start justify-between gap-2 mb-1">
+        <div className="flex flex-wrap items-start justify-between gap-2 mb-1 sm:pr-48">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-bold text-base sm:text-lg text-[#283618] group-hover:text-[#132A13] transition-colors line-clamp-1">
               {opportunity.title}
@@ -113,39 +153,6 @@ export const OpportunityCard: React.FC<OpportunityCardProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${getBadgeStyle()}`}>
-              {getBadgeLabel()}
-            </span>
-
-            {onToggleSave && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleSave(opportunity.id);
-                }}
-                className={`p-1 rounded-lg transition-colors ${
-                  isSaved ? 'text-[#BC6C25]' : 'text-[#A3B18A] hover:text-[#283618]'
-                }`}
-                title={isSaved ? 'Saved opportunity' : 'Save opportunity'}
-              >
-                <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsReportModalOpen(true);
-              }}
-              className="p-1 text-[#A3B18A] hover:text-red-700 transition-colors rounded-lg"
-              title="Report suspicious listing or fee request"
-            >
-              <ShieldAlert className="w-4 h-4" />
-            </button>
-          </div>
         </div>
 
         <ReportModal

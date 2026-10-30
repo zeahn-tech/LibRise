@@ -56,3 +56,20 @@ export const APP_METADATA = {
   version: '1.0.0-foundation',
   defaultPageSize: 10
 };
+
+/** Built-in business industries. Administrators can add more in Platform Settings (see usePlatformSettings). */
+export const BUSINESS_INDUSTRIES = [
+  'Agriculture & Forestry',
+  'Food Processing & Cold Chain Logistics',
+  'Hospitality & Tourism',
+  'Healthcare & Pharmaceuticals',
+  'Retail & Supermarket Chains',
+  'Transport, Logistics & Fleet Services',
+  'Mining, Energy & Gold Processing',
+  'Construction & Building Materials',
+  'Financial Services & Fintech',
+  'Technology & Telecom',
+  'Education & Training Institutions',
+  'Manufacturing & Industrial',
+  'Commercial Services & Real Estate'
+] as const;

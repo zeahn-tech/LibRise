@@ -1,3 +1,4 @@
+import { useBusinessIndustries } from '../lib/platformSettingsStore';
 import React, { useState, useEffect } from 'react';
 import { BusinessListing, County } from '../types';
 import { LIBERIAN_COUNTIES } from '../data/seedData';
@@ -55,22 +56,6 @@ interface BusinessMarketplaceProps {
   onRefresh?: () => void;
 }
 
-const INDUSTRIES = [
-  'All Industries',
-  'Agriculture & Forestry',
-  'Food Processing & Cold Chain Logistics',
-  'Hospitality & Tourism',
-  'Healthcare & Pharmaceuticals',
-  'Retail & Supermarket Chains',
-  'Transport, Logistics & Fleet Services',
-  'Mining, Energy & Gold Processing',
-  'Construction & Building Materials',
-  'Financial Services & Fintech',
-  'Technology & Telecom',
-  'Education & Training Institutions',
-  'Manufacturing & Industrial',
-  'Commercial Services & Real Estate'
-];
 
 export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
   businesses: initialBusinesses,
@@ -85,6 +70,7 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
   const currentUserId = propCurrentUserId || user?.id || '';
   const canModerate = can('business.moderate') || user?.systemRole === 'moderation_officer' || user?.systemRole === 'moderator' || user?.systemRole === 'platform_admin' || user?.primaryRole === 'platform_admin';
   const { isLowBandwidthMode } = useConfig();
+  const INDUSTRIES = ['All Industries', ...useBusinessIndustries()];
   const [businesses, setBusinesses] = useState<BusinessListing[]>(initialBusinesses);
   const [activeTab, setActiveTab] = useState<'browse' | 'saved' | 'my_listings' | 'moderation' | 'analytics'>('browse');
 

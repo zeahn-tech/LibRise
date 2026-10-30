@@ -1,6 +1,7 @@
 import { consentAllows, PREF_CURRENCY_KEY, PREF_LOW_BANDWIDTH_KEY, useConsent } from '../lib/consent';
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { EXCHANGE_RATES } from '../config/constants';
+import { getUsdToLrdRate } from '../lib/currency';
+import { usePlatformSettings } from '../lib/platformSettingsStore';
 import { envConfig } from '../config/env';
 import { logger } from '../core/logging/logger';
 
@@ -28,6 +29,8 @@ export const ConfigProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   // Preferences are only written to the device with consent; if consent arrives later, save the current choices.
   const { consent } = useConsent();
+  // Re-render consumers when an administrator changes the USD->LRD rate (the rate itself lives in lib/currency).
+  const { usdToLrd: adminRate } = usePlatformSettings();
   useEffect(() => {
     if (!consent?.preferences) return;
     localStorage.setItem(PREF_CURRENCY_KEY, currency);
@@ -76,7 +79,7 @@ export const ConfigProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const curr = targetCurrency || currency;
 
     if (curr === 'LRD') {
-      const amountLRD = Math.round(amountUSD * EXCHANGE_RATES.USD_TO_LRD);
+      const amountLRD = Math.round(amountUSD * (adminRate ?? getUsdToLrdRate()));
       return `L$ ${amountLRD.toLocaleString()}`;
     }
 
