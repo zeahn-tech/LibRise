@@ -1,3 +1,4 @@
+import { AnnouncementBanner } from './components/common/AnnouncementBanner';
 import { LegalPage } from './components/legal/LegalPage';
 import { ModalScrollLock } from './components/common/ModalScrollLock';
 import { logger } from './core/logging/logger';
@@ -499,6 +500,7 @@ function AppContent() {
 
       {/* Offline Status Alert */}
       <DemoModeBanner />
+      <AnnouncementBanner />
 
       {/* Main Navigation with Natural Tones palette */}
       <Navbar

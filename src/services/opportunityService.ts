@@ -147,6 +147,8 @@ export interface OpportunityRow {
   screening_questions: string[] | null;
   status: string;
   moderation_status: string;
+  moderation_note?: string | null;
+  moderated_at?: string | null;
   report_count: number;
   views_count: number;
   applications_count: number;
@@ -265,6 +267,8 @@ export function rowToOpportunity(row: OpportunityRow): Opportunity {
     applicationsCount: row.applications_count ?? 0,
     status: computeEffectiveStatus(row),
     moderationStatus: row.moderation_status as Opportunity['moderationStatus'],
+    moderationNote: row.moderation_note ?? undefined,
+    moderatedAt: row.moderated_at ?? undefined,
     reportCount: row.report_count
   };
 }
