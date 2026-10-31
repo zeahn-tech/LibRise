@@ -1,3 +1,4 @@
+import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { useEmailVerification } from './EmailVerificationBanner';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
@@ -30,6 +31,7 @@ interface UserProfileModalProps {
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onClose }) => {
   const { user, updateProfile, changePassword, logout } = useAuth();
   const emailVerification = useEmailVerification();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'sessions' | 'organizations'>('profile');
 
@@ -384,13 +386,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                 />
               </div>
 
-              <div className="flex items-center justify-between pt-2">
-                <div className="flex items-center gap-2">
-                  <label className="text-xs font-bold text-[#606C38]">Profile Visibility:</label>
+              {/* Stacks on phones (visibility above a full-width Save button) so nothing is pushed off-screen. */}
+              <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pt-2">
+                <div className="flex flex-col gap-1.5 sm:w-64">
+                  <label htmlFor="profile-visibility" className="text-xs font-bold text-[#606C38]">Profile Visibility</label>
                   <select
+                    id="profile-visibility"
                     value={visibility}
                     onChange={(e) => setVisibility(e.target.value as any)}
-                    className="text-xs px-2.5 py-1.5 bg-[#F9F8F6] border border-[#E8E4D9] rounded-lg"
+                    className="w-full min-h-11 text-sm px-3 bg-[#F9F8F6] border border-[#E8E4D9] rounded-xl focus:outline-none focus:border-[#283618]"
                   >
                     <option value="public">Public (Everyone)</option>
                     <option value="registered_only">Verified Employers Only</option>
@@ -398,7 +402,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                   </select>
                 </div>
 
-                <Button type="submit" variant="primary" size="md" isLoading={isLoading}>
+                <Button type="submit" variant="primary" size="md" isLoading={isLoading} className="w-full sm:w-auto min-h-11">
                   <Save className="w-3.5 h-3.5 mr-1.5" />
                   Save Changes
                 </Button>
@@ -500,6 +504,19 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                   </Button>
                 </div>
               </form>
+
+              {/* Danger zone */}
+              <div className="mt-8 rounded-2xl border border-red-200 bg-red-50/60 p-4 space-y-3">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-red-900">Delete account</h4>
+                  <p className="text-xs text-red-900/80 mt-1 leading-relaxed">
+                    No longer want to use LibRise? You can permanently delete your account and personal data. You will see exactly what is removed before anything happens.
+                  </p>
+                </div>
+                <Button type="button" variant="danger" size="md" onClick={() => setShowDeleteDialog(true)} className="w-full sm:w-auto min-h-11">
+                  Delete my account…
+                </Button>
+              </div>
             </div>
           )}
 
@@ -631,6 +648,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
           </Button>
         </div>
       </div>
+
+      {showDeleteDialog && (
+        <DeleteAccountDialog
+          onClose={() => setShowDeleteDialog(false)}
+          onFinished={async () => {
+            setShowDeleteDialog(false);
+            await logout();
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 };

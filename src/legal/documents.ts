@@ -159,10 +159,10 @@ const privacy: LegalDocument = {
       heading: 'How long we keep information',
       blocks: [
         ul(
-          'Account and profile data: while your account is open.',
-          'Applications and their documents: as long as the application record exists, so employers and you can refer back to it.',
+          'Account and profile data: while your account is open, and deleted when you delete it.',
+          'Applications and their documents: while your account is open, so employers and you can refer back to them. They are deleted with your account.',
           'Verification evidence: for as long as needed to support the badge and our audit trail.',
-          'Payment records, audit logs and safety reports: as long as needed for accounting, security, fraud prevention, and legal claims, even after an account is closed.',
+          'Payment records, audit logs and safety reports: as long as needed for accounting, security, fraud prevention, and legal claims, even after an account is closed (with your personal details removed, as described above).',
           'Temporary copies on your device (offline cache): up to 24 hours for server responses; see the Cookie Policy.'
         ),
         p('When information is no longer needed, we delete it or remove what identifies you.')
@@ -176,11 +176,12 @@ const privacy: LegalDocument = {
           'Access and correction: you can edit your profile, contact details and organisation details in the app. For a copy of your information or a correction you cannot make yourself, contact us.',
           'Privacy settings: control who sees your candidate profile, email, phone, salary expectations and CV in your profile settings.',
           'Cookies and device storage: change your choices any time with “Cookie settings” in the footer.',
-          'Deletion: there is no one-tap account deletion yet. Email us from your registered address and we will delete or anonymise your account and data, except information we must keep (see “How long we keep information”).',
+          'Deletion: you can delete your account yourself in your account settings (Security, then Delete account). You will see what is removed before anything happens, and you confirm with your password. If you cannot sign in, email us from your registered address and we will do it for you.',
           'Objection and withdrawal of consent: you can object to a use of your information or withdraw consent, which does not affect what we did before.',
           'Complaints: tell us first so we can fix it. You may also complain to any authority that regulates data protection where you live.'
         ),
-        p(`To use these rights email ${email} from the address on your account. We may need to confirm it is you, and we aim to respond within ${LEGAL.privacyRequestResponseDays} days.`)
+        p(`To use any of these rights email ${email} from the address on your account. We may need to confirm it is you, and we aim to respond within ${LEGAL.privacyRequestResponseDays} days.`),
+        p('**What deleting your account does.** It permanently deletes your profile and CV, the applications you submitted, saved items, notifications, business listings and enquiries you posted, team memberships, every file you uploaded (CVs, certificates, verification documents, message attachments) and your sign-in account. A few things are kept, with your name, email, phone number and photo removed so they show only as “Deleted user”: messages you sent (the people you sent them to still see them), payment records, safety reports, and verification and audit history, which we need for accounting, security and legal reasons. Employers who already downloaded your documents keep their own copies, which we cannot recall. If you are the only owner of a team that has other members, or the only platform administrator, or have a payment waiting for review, deletion waits until that is sorted out. Deletion cannot be undone, but you can register again later with the same email.'),
       ]
     },
     {
@@ -329,7 +330,7 @@ const terms: LegalDocument = {
       id: 'termination',
       heading: 'Suspension and closing accounts',
       blocks: [
-        p('You can stop using LibRise at any time and ask us to close your account (see the Privacy Policy). We may suspend or close an account, remove content, or withdraw a badge if you break these Terms, put others at risk, fail to pay what you owe, or if the law requires. Where reasonable we will tell you why. To appeal, email us with your account email and the details.'),
+        p('You can stop using LibRise at any time and delete your account yourself in your account settings (see the Privacy Policy for what is removed and what is kept). We may suspend or close an account, remove content, or withdraw a badge if you break these Terms, put others at risk, fail to pay what you owe, or if the law requires. Where reasonable we will tell you why. To appeal, email us with your account email and the details.'),
         p('Sections that by their nature should continue (for example content licences, payments owed, liability limits and governing law) survive closure.')
       ]
     },

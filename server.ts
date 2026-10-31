@@ -11,6 +11,7 @@ import { db } from './src/db/dbClient.js';
 import { authenticateSession as verifySupabaseSession } from './src/server/authMiddleware.js';
 import { createClient } from '@supabase/supabase-js';
 import { syncAuthEnforcement, BAN_DURATION } from './server/authEnforcement.js';
+import { deleteAccount, type Blocker, type StoragePaths } from './server/accountDeletion.js';
 import {
   AiInputError,
   AiOutputError,
@@ -594,6 +595,98 @@ Return a riskLevel (low, medium or high), a riskScore (0 = clearly ordinary, 100
     } catch (err) {
       console.error('Auth enforcement sync failed:', (err as Error).message);
       return res.status(502).json({ success: false, error: 'Authentication enforcement failed.', results: [] });
+    }
+  });
+
+  // ---- Account deletion (self-service) ----
+  // The caller deletes THEIR OWN account: every database read/write happens with the caller's own token (so the
+  // database enforces who they are); the service-role key is used only for what the database cannot do: removing
+  // uploaded files through the Storage API and deleting the sign-in account. Password re-entry is verified here.
+  const accountDeletionLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'Too many attempts. Please try again later.' }
+  });
+  app.post('/api/account/delete', accountDeletionLimiter, authenticateSession, async (req, res) => {
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    if (!url || !anonKey || !adminKey) {
+      return res.status(503).json({ success: false, error: 'Account deletion is not available on this server yet. Please contact support.' });
+    }
+    const opts = { auth: { persistSession: false, autoRefreshToken: false } };
+    const caller = createClient(url, anonKey, { ...opts, global: { headers: { Authorization: `Bearer ${token}` } } });
+    const admin = createClient(url, adminKey, opts);
+
+    try {
+      const { data: who, error: whoError } = await caller.auth.getUser(token);
+      if (whoError || !who?.user?.id || !who.user.email) {
+        return res.status(401).json({ success: false, error: 'Your session has expired. Please sign in again.' });
+      }
+      const userId = who.user.id;
+      const email = who.user.email;
+
+      const walk = async (bucket: string, prefix: string, depth = 0): Promise<string[]> => {
+        const { data, error } = await admin.storage.from(bucket).list(prefix, { limit: 1000 });
+        if (error) throw new Error(error.message);
+        const out: string[] = [];
+        for (const entry of data ?? []) {
+          const full = `${prefix}/${entry.name}`;
+          if (entry.id === null && depth < 4) out.push(...(await walk(bucket, full, depth + 1)));
+          else if (entry.id !== null) out.push(full);
+        }
+        return out;
+      };
+
+      const out = await deleteAccount(
+        {
+          userId,
+          verifyPassword: async (password) => {
+            // A throwaway client: this only checks the password; the resulting session is discarded.
+            const checker = createClient(url, anonKey, opts);
+            const { error } = await checker.auth.signInWithPassword({ email, password });
+            return error ? { ok: false, error: 'Incorrect password.' } : { ok: true };
+          },
+          getBlockers: async () => {
+            const { data, error } = await caller.rpc('account_deletion_blockers');
+            return { data: (data as Blocker[] | null) ?? null, error: error ? { code: error.code, message: error.message } : null };
+          },
+          getStoragePaths: async () => {
+            const { data, error } = await caller.rpc('account_deletion_storage_paths');
+            return { data: (data as StoragePaths | null) ?? null, error: error ? { code: error.code, message: error.message } : null };
+          },
+          deleteAccountData: async () => {
+            const { error } = await caller.rpc('delete_my_account');
+            return { error: error ? { code: error.code, message: error.message } : null };
+          },
+          removeFiles: async (bucket, paths) => {
+            const { error } = await admin.storage.from(bucket).remove(paths);
+            return { error: error ? { message: error.message } : null };
+          },
+          listFiles: async (bucket, prefix) => {
+            try {
+              return { paths: await walk(bucket, prefix), error: null };
+            } catch (err) {
+              return { paths: [], error: { message: (err as Error).message } };
+            }
+          },
+          deleteAuthUser: async () => {
+            const { error } = await admin.auth.admin.deleteUser(userId);
+            return { error: error ? { message: error.message } : null };
+          }
+        },
+        { confirm: req.body?.confirm, password: req.body?.password }
+      );
+      if (out.body.warnings && out.body.warnings.length > 0) {
+        console.error(`Account deletion for ${userId} finished with warnings:`, out.body.warnings);
+      }
+      return res.status(out.status).json(out.body);
+    } catch (err) {
+      console.error('Account deletion failed:', (err as Error).message);
+      return res.status(502).json({ success: false, error: 'Account deletion failed. Please try again or contact support.' });
     }
   });
 
