@@ -292,6 +292,10 @@ function translateError(error: { code?: string; message: string }): never {
     if (isGrantProblem(error)) throw toDbError('opportunityService', error);
     throw new ForbiddenError('You do not have permission to perform this action on this opportunity.');
   }
+  // Raised by enforce_max_job_expiry: the message is written for the employer ("at most 90 days ...").
+  if (error.code === '22023') {
+    throw new ValidationError(error.message);
+  }
   if (error.code === '23505') {
     throw new ValidationError('An opportunity with that slug already exists.');
   }

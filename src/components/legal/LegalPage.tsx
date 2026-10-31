@@ -1,3 +1,4 @@
+import { AnnouncementBanner } from '../common/AnnouncementBanner';
 import React, { useEffect } from 'react';
 import { ArrowLeft, ChevronRight, Cookie, FileText, ListTree, ShieldCheck, Undo2 } from 'lucide-react';
 import { getLegalDocument, type LegalBlock, type LegalDocument } from '../../legal/documents';
@@ -187,6 +188,7 @@ export const LegalPage: React.FC<Props> = ({ slug, onNavigate, onBack }) => {
 
   return (
     <div className="min-h-screen bg-[#F9F8F6] text-[#2D2D2D] font-sans pb-[env(safe-area-inset-bottom)]">
+      <AnnouncementBanner />
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-[#E8E4D9] pt-[env(safe-area-inset-top)]">
         <div className="max-w-3xl mx-auto px-4 flex items-center gap-3 h-14">
           <button type="button" onClick={onBack} aria-label="Go back" className="min-w-11 min-h-11 -ml-2 flex items-center justify-center rounded-xl text-[#283618] hover:bg-[#ECF3E9] cursor-pointer">

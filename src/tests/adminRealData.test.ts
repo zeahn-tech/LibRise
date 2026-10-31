@@ -52,9 +52,9 @@ describe('platform settings', () => {
       { key: 'usd_to_lrd', value: 190.5 },
       { key: 'extra_industries', value: ['Fisheries', 42, '  ', 'Rubber'] }
     ]);
-    expect(s).toEqual({ announcement: { enabled: true, message: 'Maintenance Sunday' }, usdToLrd: 190.5, extraIndustries: ['Fisheries', 'Rubber'] });
+    expect(s).toEqual({ announcement: { enabled: true, message: 'Maintenance Sunday' }, usdToLrd: 190.5, extraIndustries: ['Fisheries', 'Rubber'], maxJobDays: null });
     const bad = parsePlatformSettings([{ key: 'usd_to_lrd', value: 5 }, { key: 'announcement', value: { enabled: 'yes' } }, { key: 'unknown', value: 1 }]);
-    expect(bad).toEqual({ announcement: null, usdToLrd: null, extraIndustries: [] });
+    expect(bad).toEqual({ announcement: null, usdToLrd: null, extraIndustries: [], maxJobDays: null });
   });
 
   it('merges extra industries after the built-in list without duplicates', () => {

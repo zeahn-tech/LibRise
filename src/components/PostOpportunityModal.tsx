@@ -1,3 +1,5 @@
+import { useMaxJobDays } from '../lib/platformSettingsStore';
+import { defaultDeadline, deadlineError, describeLimit, maxDeadline, todayIso } from '../lib/jobExpiry';
 import React, { useState, useEffect } from 'react';
 import { County, EmploymentType, Opportunity, OpportunityType, Organization, WorkplaceModel } from '../types';
 import { X, Plus, Trash2, CheckCircle2, Clock, MapPin, DollarSign, Building2, Calendar, FileText } from 'lucide-react';
@@ -64,7 +66,8 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
   const [openingsCount, setOpeningsCount] = useState(1);
   const [summary, setSummary] = useState('');
   const [description, setDescription] = useState('');
-  const [deadline, setDeadline] = useState('2026-11-30');
+  const maxJobDays = useMaxJobDays();
+  const [deadline, setDeadline] = useState(() => defaultDeadline(maxJobDays));
   
   // Bullets & Tags
   const [responsibilities, setResponsibilities] = useState<string[]>([
@@ -133,7 +136,7 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
       setOpeningsCount(opportunityToEdit.openingsCount || 1);
       setSummary(opportunityToEdit.summary || '');
       setDescription(opportunityToEdit.description);
-      setDeadline(opportunityToEdit.deadline || '2026-11-30');
+      setDeadline(opportunityToEdit.deadline || defaultDeadline(maxJobDays));
       if (opportunityToEdit.responsibilities) setResponsibilities(opportunityToEdit.responsibilities);
       if (opportunityToEdit.requirements) setRequirements(opportunityToEdit.requirements);
       if (opportunityToEdit.skills) setSkills(opportunityToEdit.skills);
@@ -177,6 +180,14 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
     if (!description.trim()) {
       showToast('Full job description is required.', 'error');
       return;
+    }
+    // Only check the deadline when it is new or was changed, so editing an older vacancy is never blocked by the cap.
+    if (!opportunityToEdit || deadline !== (opportunityToEdit.deadline || '')) {
+      const problem = deadlineError(deadline, maxJobDays);
+      if (problem) {
+        showToast(problem, 'error');
+        return;
+      }
     }
 
     try {
@@ -443,9 +454,13 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
                   type="date"
                   required
                   value={deadline}
+                  min={todayIso()}
+                  max={maxDeadline(maxJobDays)}
                   onChange={(e) => setDeadline(e.target.value)}
+                  aria-describedby="deadline-help"
                   className="w-full p-2 bg-white rounded-xl border border-[#E8E4D9] outline-none text-xs"
                 />
+                <p id="deadline-help" className="mt-1 text-[10px] text-[#606C38]">{describeLimit(maxJobDays)}</p>
               </div>
 
               <div>

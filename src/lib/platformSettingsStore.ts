@@ -9,6 +9,7 @@ import { useSyncExternalStore } from 'react';
 import { BUSINESS_INDUSTRIES } from '../config/constants';
 import { EMPTY_PLATFORM_SETTINGS, platformSettingsService, type PlatformSettings } from '../services/platformSettingsService';
 import { setUsdToLrdRate } from './currency';
+import { DEFAULT_MAX_JOB_DAYS } from './jobExpiry';
 
 let snapshot: PlatformSettings = EMPTY_PLATFORM_SETTINGS;
 const listeners = new Set<() => void>();
@@ -19,8 +20,9 @@ function apply(next: PlatformSettings) {
   listeners.forEach((l) => l());
 }
 
-export async function refreshPlatformSettings(): Promise<PlatformSettings> {
-  apply(await platformSettingsService.load());
+/** `strict` makes a failure to read the settings throw (used right after an admin saves, to confirm it is readable). */
+export async function refreshPlatformSettings(strict = false): Promise<PlatformSettings> {
+  apply(await platformSettingsService.load({ strict }));
   return snapshot;
 }
 
@@ -49,6 +51,11 @@ export function mergeIndustries(extra: string[]): string[] {
     out.push(name.trim());
   }
   return out;
+}
+
+/** The effective maximum job expiry in days (the admin's setting, else the built-in default). */
+export function useMaxJobDays(): number {
+  return usePlatformSettings().maxJobDays ?? DEFAULT_MAX_JOB_DAYS;
 }
 
 export function useBusinessIndustries(): string[] {
