@@ -6,11 +6,23 @@
 -- is published again; unrelated edits to an older vacancy are never blocked, and platform administrators may
 -- override. Idempotent. The previous settings function is replaced with one that also accepts max_job_days.
 
+-- 0. FIX for databases that already ran 20261026100000: its suspended-account policy on platform_settings called
+--    is_account_suspended(), which signed-in users may no longer execute (20261012190000). Every signed-in READ of
+--    platform_settings therefore failed with "permission denied for function is_account_suspended", so signed-in people
+--    never received the announcement banner, exchange rate, extra industries or the expiry limit (anonymous visitors
+--    were unaffected). Re-point the policy to the self-only wrapper every other table uses. Safe to re-run.
+drop policy if exists "restrict_suspended_accounts" on public.platform_settings;
+create policy "restrict_suspended_accounts" on public.platform_settings
+  as restrictive for all to authenticated
+  using ((select not public.current_account_suspended())) with check ((select not public.current_account_suspended()));
+
 -- Effective cap: the admin's setting if present, else 90 days.
+-- SECURITY DEFINER so the rule works for every employer regardless of their own table permissions.
 create or replace function public.platform_max_job_days()
 returns integer
 language sql
 stable
+security definer
 set search_path to 'public', 'pg_temp'
 as $$
   select coalesce(

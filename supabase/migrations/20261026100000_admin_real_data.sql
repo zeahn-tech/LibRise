@@ -31,11 +31,13 @@ create policy "Anyone can read platform settings"
 revoke all on public.platform_settings from anon, authenticated;
 grant select on public.platform_settings to anon, authenticated;
 
--- Suspended accounts are blocked on every RLS table (repo-wide invariant, see 20261012150000_enforce_account_status).
+-- Suspended accounts are blocked on every RLS table (repo-wide invariant). Policies use the self-only wrapper
+-- current_account_suspended(); the parameterised is_account_suspended() is no longer executable by signed-in users
+-- (20261012190000_account_status_helpers_self_only).
 drop policy if exists "restrict_suspended_accounts" on public.platform_settings;
 create policy "restrict_suspended_accounts" on public.platform_settings
   as restrictive for all to authenticated
-  using ((select not public.is_account_suspended())) with check ((select not public.is_account_suspended()));
+  using ((select not public.current_account_suspended())) with check ((select not public.current_account_suspended()));
 
 create or replace function public.admin_set_platform_setting(p_key character varying, p_value jsonb)
 returns void

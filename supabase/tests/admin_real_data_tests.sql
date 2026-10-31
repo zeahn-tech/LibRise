@@ -45,6 +45,14 @@ select set_config('role','anon',true), set_config('request.jwt.claim.sub','',tru
 insert into test_log(line) select * from extensions.is((select value ->> 'message' from public.platform_settings where key='announcement'), 'Maintenance on Sunday', '[anon] can read the announcement');
 insert into test_log(line) select * from extensions.is((select (value #>> '{}')::numeric from public.platform_settings where key='usd_to_lrd'), 190.5, '[anon] can read the exchange rate');
 reset role;
+-- Regression: a signed-in user once got "permission denied for function is_account_suspended" here, so the banner never
+-- reached signed-in people. Signed-in users (and admins) must be able to read the settings too.
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b0b0b0b-0000-4000-8000-000000000003',true);
+insert into test_log(line) select * from extensions.is((select value ->> 'message' from public.platform_settings where key='announcement'), 'Maintenance on Sunday', '[signed-in user] can read the announcement');
+reset role;
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b0b0b0b-0000-4000-8000-000000000001',true);
+insert into test_log(line) select * from extensions.is((select (value #>> '{}')::numeric from public.platform_settings where key='usd_to_lrd'), 190.5, '[admin] can read the exchange rate while signed in');
+reset role;
 
 -- 3. Moderation: reason required, status/visibility change, employer notified, drafts are not force-published.
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b0b0b0b-0000-4000-8000-000000000001',true);
