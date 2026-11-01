@@ -73,10 +73,10 @@ reset role;
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0d0d0d0d-0000-4000-8000-000000000004',true);
 insert into test_log(line) select * from extensions.lives_ok($$select public.delete_my_account()$$, '[sole owner of a one-person organization] can delete');
 reset role;
-insert into test_log(line) select * from extensions.is((select status from public.opportunities where id = 'opp-ad-solo'), 'closed'::text, 'the orphaned organization's vacancy is closed');
+insert into test_log(line) select * from extensions.is((select status from public.opportunities where id = 'opp-ad-solo'), 'closed'::text, 'the vacancy of the orphaned organization is closed');
 insert into test_log(line) select * from extensions.is((select count(*) from public.organizations where id = 'org-ad-solo'), 1::bigint, 'the organization itself is kept');
 insert into test_log(line) select * from extensions.is((select count(*) from public.organization_memberships where user_id = '0d0d0d0d-0000-4000-8000-000000000004'), 0::bigint, 'the membership is removed');
-insert into test_log(line) select * from extensions.is((select status from public.opportunities where id = 'opp-ad-team'), 'published'::text, 'other organizations' vacancies are untouched');
+insert into test_log(line) select * from extensions.is((select status from public.opportunities where id = 'opp-ad-team'), 'published'::text, 'vacancies of other organizations are untouched');
 
 -- 7. Two administrators: the first may delete once another remains.
 insert into public.users (id, email, full_name, phone_number, primary_role, system_role, account_status, is_email_verified) values ('0d0d0d0d-0000-4000-8000-000000000006','ad-admin2@example.com','AD Admin2','+231-770-700-006','platform_admin','platform_admin','active',true);
