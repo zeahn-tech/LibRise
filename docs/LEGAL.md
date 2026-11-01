@@ -20,7 +20,7 @@ The documents describe real behaviour (providers, AI, payments, storage). When o
 - a new service provider, analytics tool or ad tool is added (the Privacy and Cookie policies must list it);
 - anything new is written to localStorage/cookies/cache (add it to `STORAGE_REGISTRY`; a test fails if a raw `localStorage.setItem('literal')` appears);
 - payment methods, prices handling, cancellation or refund handling change;
-- account deletion / data export is built (update "Your choices and rights").
+- account deletion changes (what it removes or keeps) or a data export is built (update "Your choices and rights" and the retention section; the deletion list lives in supabase/migrations/20261031100000_account_deletion.sql and src/components/auth/DeleteAccountDialog.tsx).
 
 If the cookie categories change, increase `CONSENT_VERSION` so everyone is asked again.
 

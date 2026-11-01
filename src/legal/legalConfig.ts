@@ -21,8 +21,8 @@ export const LEGAL = {
   supportEmail: env.VITE_SUPPORT_EMAIL || APP_METADATA.supportEmail,
 
   /** Human-readable date and a machine version; bump the version when the meaning of a document changes. */
-  lastUpdated: '26 October 2026',
-  documentVersion: '2026-10-26',
+  lastUpdated: '31 October 2026',
+  documentVersion: '2026-10-31',
 
   /** Minimum age to hold an account. */
   minimumAge: 18,
