@@ -2,7 +2,7 @@
 --
 -- What "delete my account" means in LibRise:
 --   DELETED  the person's profile and CV, the applications they submitted, saved items, notifications, business
---            listings they posted, team memberships, their sign-in account (server step) and every file they uploaded
+--            listings they posted, team memberships (an organization's last owner row is kept, see below), their sign-in account (server step) and every file they uploaded
 --            (server step: CVs, credentials, verification evidence, message attachments).
 --   KEPT     records other people or the business depend on, with the person shown only as "Deleted user":
 --            messages they sent, payment records, safety reports, verification and audit history. The users row stays
@@ -163,7 +163,18 @@ begin
   delete from public.conversation_participants where user_id = v_uid;
   delete from public.user_blocks where blocking_user_id = v_uid or blocked_user_id = v_uid;
   delete from public.organization_invitations where lower(invitee_email) = lower(v_old_email);
-  delete from public.organization_memberships where user_id = v_uid;
+  -- Memberships are removed, EXCEPT where this person is the organization's only active owner (which is the case when they
+  -- are its only member, since the blockers above reject owners of teams with others): the database rule
+  -- enforce_owner_invariant requires every organization to keep an active owner, so that row stays, attached to the
+  -- now-deactivated account. The organization and its history are preserved and its vacancies were closed above.
+  delete from public.organization_memberships m
+   where m.user_id = v_uid
+     and not (
+       m.org_role = 'owner' and m.status = 'active'
+       and not exists (select 1 from public.organization_memberships o
+                        where o.organization_id = m.organization_id and o.id <> m.id
+                          and o.org_role = 'owner' and o.status = 'active')
+     );
 
   -- The account itself: anonymised, deactivated (the trigger on account_status bans the sign-in account), and stripped
   -- of any elevated role. The row is kept so messages, payments and audit history keep a valid reference.

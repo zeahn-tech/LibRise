@@ -75,7 +75,12 @@ insert into test_log(line) select * from extensions.lives_ok($$select public.del
 reset role;
 insert into test_log(line) select * from extensions.is((select status from public.opportunities where id = 'opp-ad-solo')::text, 'closed'::text, 'the vacancy of the orphaned organization is closed');
 insert into test_log(line) select * from extensions.is((select count(*) from public.organizations where id = 'org-ad-solo'), 1::bigint, 'the organization itself is kept');
-insert into test_log(line) select * from extensions.is((select count(*) from public.organization_memberships where user_id = '0d0d0d0d-0000-4000-8000-000000000004'), 0::bigint, 'the membership is removed');
+insert into test_log(line) select * from extensions.is((select count(*) from public.organization_memberships where user_id = '0d0d0d0d-0000-4000-8000-000000000004'), 1::bigint, 'the last owner row is kept so the organization still has an owner (the closed account)');
+select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0d0d0d0d-0000-4000-8000-000000000003',true);
+insert into test_log(line) select * from extensions.lives_ok($$select public.delete_my_account()$$, '[non-owner team member] can delete');
+reset role;
+insert into test_log(line) select * from extensions.is((select count(*) from public.organization_memberships where user_id = '0d0d0d0d-0000-4000-8000-000000000003'), 0::bigint, 'a non-owner membership is removed');
+insert into test_log(line) select * from extensions.is((select count(*) from public.organization_memberships where organization_id = 'org-ad-team' and user_id = '0d0d0d0d-0000-4000-8000-000000000002'), 1::bigint, 'the rest of the team is untouched');
 insert into test_log(line) select * from extensions.is((select status from public.opportunities where id = 'opp-ad-team')::text, 'published'::text, 'vacancies of other organizations are untouched');
 
 -- 7. Two administrators: the first may delete once another remains.
