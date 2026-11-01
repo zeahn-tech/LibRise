@@ -43,11 +43,11 @@ reset role;
 
 -- 3. Blockers.
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0d0d0d0d-0000-4000-8000-000000000002',true);
-insert into test_log(line) select * from extensions.is((select public.account_deletion_blockers() -> 0 ->> 'code'), 'organization_owner'::text, '[only owner of a team with members] is blocked');
+insert into test_log(line) select * from extensions.is((select public.account_deletion_blockers() -> 0 ->> 'code')::text, 'organization_owner'::text, '[only owner of a team with members] is blocked');
 insert into test_log(line) select * from extensions.throws_ok($$select public.delete_my_account()$$, '22023'::char(5), NULL::text, '[only owner of a team with members] cannot delete yet');
 reset role;
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0d0d0d0d-0000-4000-8000-000000000005',true);
-insert into test_log(line) select * from extensions.is((select public.account_deletion_blockers() -> 0 ->> 'code'), 'last_platform_admin'::text, '[only platform administrator] is blocked');
+insert into test_log(line) select * from extensions.is((select public.account_deletion_blockers() -> 0 ->> 'code')::text, 'last_platform_admin'::text, '[only platform administrator] is blocked');
 insert into test_log(line) select * from extensions.throws_ok($$select public.delete_my_account()$$, '22023'::char(5), NULL::text, '[only platform administrator] cannot delete');
 reset role;
 insert into test_log(line) select * from extensions.is((select count(*) from public.users where id in ('0d0d0d0d-0000-4000-8000-000000000002','0d0d0d0d-0000-4000-8000-000000000005') and account_status = 'active'), 2::bigint, 'blocked people are untouched');
@@ -59,7 +59,7 @@ reset role;
 insert into test_log(line) select * from extensions.is((select count(*) from public.candidate_profiles where user_id = '0d0d0d0d-0000-4000-8000-000000000001'), 0::bigint, 'the profile and CV are gone');
 insert into test_log(line) select * from extensions.is((select count(*) from public.applications where applicant_user_id = '0d0d0d0d-0000-4000-8000-000000000001'), 0::bigint, 'the applications are gone');
 insert into test_log(line) select * from extensions.is((select count(*) from public.notifications where recipient_user_id = '0d0d0d0d-0000-4000-8000-000000000001'), 0::bigint, 'the notifications are gone');
-insert into test_log(line) select * from extensions.is((select full_name || '|' || (email like 'deleted-%@deleted.invalid')::text || '|' || coalesce(phone_number,'none') || '|' || account_status || '|' || (deleted_at is not null)::text from public.users where id = '0d0d0d0d-0000-4000-8000-000000000001'), 'Deleted user|true|none|deactivated|true'::text, 'the account is anonymised, deactivated and marked deleted (row kept for references)');
+insert into test_log(line) select * from extensions.is((select full_name || '|' || (email like 'deleted-%@deleted.invalid')::text || '|' || coalesce(phone_number,'none') || '|' || account_status || '|' || (deleted_at is not null)::text from public.users where id = '0d0d0d0d-0000-4000-8000-000000000001')::text, 'Deleted user|true|none|deactivated|true'::text, 'the account is anonymised, deactivated and marked deleted (row kept for references)');
 insert into test_log(line) select * from extensions.ok(exists(select 1 from public.audit_logs where action = 'account.deleted' and resource_id = '0d0d0d0d-0000-4000-8000-000000000001'), 'deletion is recorded in the audit trail');
 insert into test_log(line) select * from extensions.is((select count(*) from public.audit_logs where action = 'account.deleted' and details::text like '%@%'), 0::bigint, 'the audit entry holds no personal data');
 
@@ -73,10 +73,10 @@ reset role;
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0d0d0d0d-0000-4000-8000-000000000004',true);
 insert into test_log(line) select * from extensions.lives_ok($$select public.delete_my_account()$$, '[sole owner of a one-person organization] can delete');
 reset role;
-insert into test_log(line) select * from extensions.is((select status from public.opportunities where id = 'opp-ad-solo'), 'closed'::text, 'the vacancy of the orphaned organization is closed');
+insert into test_log(line) select * from extensions.is((select status from public.opportunities where id = 'opp-ad-solo')::text, 'closed'::text, 'the vacancy of the orphaned organization is closed');
 insert into test_log(line) select * from extensions.is((select count(*) from public.organizations where id = 'org-ad-solo'), 1::bigint, 'the organization itself is kept');
 insert into test_log(line) select * from extensions.is((select count(*) from public.organization_memberships where user_id = '0d0d0d0d-0000-4000-8000-000000000004'), 0::bigint, 'the membership is removed');
-insert into test_log(line) select * from extensions.is((select status from public.opportunities where id = 'opp-ad-team'), 'published'::text, 'vacancies of other organizations are untouched');
+insert into test_log(line) select * from extensions.is((select status from public.opportunities where id = 'opp-ad-team')::text, 'published'::text, 'vacancies of other organizations are untouched');
 
 -- 7. Two administrators: the first may delete once another remains.
 insert into public.users (id, email, full_name, phone_number, primary_role, system_role, account_status, is_email_verified) values ('0d0d0d0d-0000-4000-8000-000000000006','ad-admin2@example.com','AD Admin2','+231-770-700-006','platform_admin','platform_admin','active',true);
