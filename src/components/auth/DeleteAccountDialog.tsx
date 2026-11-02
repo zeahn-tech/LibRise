@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2, X } from 'lucide-react';
-import { accountService, AccountDeletionError, type DeletionBlocker } from '../../services/accountService';
+import { accountService, AccountDeletionError, type DeletionBlocker, type ServerStatus } from '../../services/accountService';
 
 interface Props {
   onClose: () => void;
@@ -32,14 +32,14 @@ export const DeleteAccountDialog: React.FC<Props> = ({ onClose, onFinished }) =>
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState<{ warnings: string[] } | null>(null);
-  const [server, setServer] = useState<'checking' | 'ready' | 'unreachable'>('checking');
+  const [server, setServer] = useState<'checking' | ServerStatus>('checking');
   const [serverCheck, setServerCheck] = useState(0);
 
   // Find out BEFORE the person types a password whether the server can be reached (it may be waking up).
   useEffect(() => {
     let cancelled = false;
     setServer('checking');
-    accountService.checkServer().then((ok) => !cancelled && setServer(ok ? 'ready' : 'unreachable'));
+    accountService.checkServer().then((status) => !cancelled && setServer(status));
     return () => {
       cancelled = true;
     };
@@ -118,6 +118,19 @@ export const DeleteAccountDialog: React.FC<Props> = ({ onClose, onFinished }) =>
               )}
               {server === 'checking' && (
                 <p className="text-xs text-[#606C38] flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Contacting the server… this can take up to a minute if it was asleep.</p>
+              )}
+              {server === 'blocked' && (
+                <div role="alert" className="rounded-2xl border border-[#E8D9A8] bg-[#FEFAE0] p-4 space-y-2">
+                  <p className="text-xs text-[#283618]">
+                    The LibRise server is running, but it is not set up to accept requests from this website. This is a setup problem, not something you did wrong, and your account cannot be deleted until it is fixed. Please contact support.
+                  </p>
+                  <p className="text-[11px] text-[#606C38]">
+                    For the administrator: add <strong className="break-all">{window.location.origin}</strong> to the server’s <code>ALLOWED_ORIGINS</code> setting.
+                  </p>
+                  <button type="button" onClick={() => setServerCheck((n) => n + 1)} className="min-h-11 px-4 rounded-xl border border-[#E8D9A8] bg-white text-xs font-bold text-[#283618] hover:bg-[#FEFAE0] cursor-pointer">
+                    Check again
+                  </button>
+                </div>
               )}
               {server === 'unreachable' && (
                 <div role="alert" className="rounded-2xl border border-[#E8D9A8] bg-[#FEFAE0] p-4 space-y-2">

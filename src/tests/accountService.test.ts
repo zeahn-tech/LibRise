@@ -57,19 +57,40 @@ describe('checkServer', () => {
     vi.unstubAllGlobals();
   });
 
-  it('is true for any reply from the server (even an error page) and false when the request itself fails', async () => {
+  it('is ready for any reply the browser lets us read (even an error page)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 404 })));
     const { accountService } = await import('../services/accountService');
-    await expect(accountService.checkServer(1000)).resolves.toBe(true);
+    await expect(accountService.checkServer(1000, 0)).resolves.toBe('ready');
     expect((globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe('https://api.example.test/api/ai/health');
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
-    await expect(accountService.checkServer(1000)).resolves.toBe(false);
   });
 
-  it('gives up after the timeout instead of waiting forever', async () => {
-    vi.stubGlobal('fetch', vi.fn((_u: string, init: RequestInit) => new Promise((_res, rej) => init.signal!.addEventListener('abort', () => rej(new Error('aborted'))))));
+  it('is blocked when a normal request keeps failing but a no-cors one gets an answer (server up, ALLOWED_ORIGINS wrong)', async () => {
+    const fetchMock = vi.fn(async (_u: string, init: RequestInit) => {
+      if (init.mode === 'no-cors') return new Response(null, { status: 200 });
+      throw new TypeError('Failed to fetch');
+    });
+    vi.stubGlobal('fetch', fetchMock);
     const { accountService } = await import('../services/accountService');
-    await expect(accountService.checkServer(20)).resolves.toBe(false);
+    await expect(accountService.checkServer(1000, 0)).resolves.toBe('blocked');
+    expect(fetchMock.mock.calls.filter(([, i]) => (i as RequestInit).mode === 'no-cors')).toHaveLength(1);
+  });
+
+  it('is unreachable when nothing answers at all', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    const { accountService } = await import('../services/accountService');
+    await expect(accountService.checkServer(1000, 0)).resolves.toBe('unreachable');
+  });
+
+  it('forgives one failed request (a host mid-restart) but gives up after the timeout instead of waiting forever', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => { if (calls++ === 0) throw new TypeError('Failed to fetch'); return new Response('ok'); }));
+    let { accountService } = await import('../services/accountService');
+    await expect(accountService.checkServer(1000, 0)).resolves.toBe('ready');
+
+    vi.resetModules();
+    vi.stubGlobal('fetch', vi.fn((_u: string, init: RequestInit) => new Promise((_res, rej) => init.signal!.addEventListener('abort', () => rej(new Error('aborted'))))));
+    ({ accountService } = await import('../services/accountService'));
+    await expect(accountService.checkServer(20, 0)).resolves.toBe('unreachable');
   });
 });
 
@@ -89,6 +110,8 @@ describe('delete account UI', () => {
     expect(dialog).toContain('blockers.length === 0');
     expect(dialog).toContain("server === 'ready'");
     expect(dialog).toMatch(/Check again/);
+    expect(dialog).toContain("server === 'blocked'");
+    expect(dialog).toContain('ALLOWED_ORIGINS');
     expect(dialog).toMatch(/What will be deleted/);
     expect(dialog).toMatch(/What we keep/);
     expect(dialog).toMatch(/Before you can delete your account/);

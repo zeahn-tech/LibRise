@@ -15,6 +15,8 @@ export interface DeletionBlocker {
   message: string;
 }
 
+export type ServerStatus = 'ready' | 'blocked' | 'unreachable';
+
 export class AccountDeletionError extends Error {
   constructor(message: string, public readonly status: number, public readonly blockers: DeletionBlocker[] = []) {
     super(message);
@@ -26,21 +28,39 @@ const apiBase = () => envConfig.apiBaseUrl.replace(/\/+$/, '');
 
 export const accountService = {
   /**
-   * Can this website reach the LibRise server? A reply of any kind (even an error page) proves the server is awake AND
-   * that it accepts requests from this site; a network failure or a cross-origin block (the server's ALLOWED_ORIGINS
-   * not listing this site) makes the request fail. Servers on free hosting can take up to a minute to wake up.
+   * Can this website talk to the LibRise server?
+   *   ready       the server answered and accepts requests from this website
+   *   blocked     something answers, but the browser refused the reply: the server's ALLOWED_ORIGINS setting does not
+   *               list this website (a setup problem, not a connection problem)
+   *   unreachable nothing answered (server asleep or down, or the device is offline)
+   * A normal request only succeeds when the server both answers and allows this website. A `no-cors` request succeeds
+   * whenever anything answers, so comparing the two tells the cases apart. Hosts on free plans can take up to a minute
+   * to wake a sleeping server, hence the long first timeout.
    */
-  async checkServer(timeoutMs = 60000): Promise<boolean> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      await fetch(`${apiBase()}/ai/health`, { signal: controller.signal });
-      return true;
-    } catch {
-      return false;
-    } finally {
-      clearTimeout(timer);
-    }
+  async checkServer(timeoutMs = 60000, retryDelayMs = 2000): Promise<ServerStatus> {
+    const url = `${apiBase()}/ai/health`;
+    const attempt = async (init: RequestInit, ms: number): Promise<'ok' | 'failed' | 'timeout'> => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), ms);
+      try {
+        await fetch(url, { ...init, signal: controller.signal });
+        return 'ok';
+      } catch (err) {
+        return (err as Error)?.name === 'AbortError' || controller.signal.aborted ? 'timeout' : 'failed';
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+
+    const first = await attempt({}, timeoutMs);
+    if (first === 'ok') return 'ready';
+    if (first === 'timeout') return 'unreachable';
+
+    // Failed quickly. A host that is mid-restart can fail once without meaning anything, so try once more.
+    await new Promise((r) => setTimeout(r, retryDelayMs));
+    if ((await attempt({}, timeoutMs)) === 'ok') return 'ready';
+
+    return (await attempt({ mode: 'no-cors' }, 15000)) === 'ok' ? 'blocked' : 'unreachable';
   },
 
   async getDeletionBlockers(): Promise<DeletionBlocker[]> {
