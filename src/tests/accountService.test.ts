@@ -47,7 +47,29 @@ describe('accountService', () => {
     await expect(accountService.deleteMyAccount('pw', 'DELETE')).rejects.toThrow(/could not be deleted/i);
 
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
-    await expect(accountService.deleteMyAccount('pw', 'DELETE')).rejects.toThrow(/Nothing was changed/);
+    await expect(accountService.deleteMyAccount('pw', 'DELETE')).rejects.toThrow(/Could not reach the server.*starting up/);
+  });
+});
+
+describe('checkServer', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.unstubAllGlobals();
+  });
+
+  it('is true for any reply from the server (even an error page) and false when the request itself fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 404 })));
+    const { accountService } = await import('../services/accountService');
+    await expect(accountService.checkServer(1000)).resolves.toBe(true);
+    expect((globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe('https://api.example.test/api/ai/health');
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    await expect(accountService.checkServer(1000)).resolves.toBe(false);
+  });
+
+  it('gives up after the timeout instead of waiting forever', async () => {
+    vi.stubGlobal('fetch', vi.fn((_u: string, init: RequestInit) => new Promise((_res, rej) => init.signal!.addEventListener('abort', () => rej(new Error('aborted'))))));
+    const { accountService } = await import('../services/accountService');
+    await expect(accountService.checkServer(20)).resolves.toBe(false);
   });
 });
 
@@ -65,6 +87,8 @@ describe('delete account UI', () => {
     expect(dialog).toContain("confirmText === 'DELETE'");
     expect(dialog).toContain('password.length > 0');
     expect(dialog).toContain('blockers.length === 0');
+    expect(dialog).toContain("server === 'ready'");
+    expect(dialog).toMatch(/Check again/);
     expect(dialog).toMatch(/What will be deleted/);
     expect(dialog).toMatch(/What we keep/);
     expect(dialog).toMatch(/Before you can delete your account/);
