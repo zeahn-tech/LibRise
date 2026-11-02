@@ -22,7 +22,27 @@ export class AccountDeletionError extends Error {
   }
 }
 
+const apiBase = () => envConfig.apiBaseUrl.replace(/\/+$/, '');
+
 export const accountService = {
+  /**
+   * Can this website reach the LibRise server? A reply of any kind (even an error page) proves the server is awake AND
+   * that it accepts requests from this site; a network failure or a cross-origin block (the server's ALLOWED_ORIGINS
+   * not listing this site) makes the request fail. Servers on free hosting can take up to a minute to wake up.
+   */
+  async checkServer(timeoutMs = 60000): Promise<boolean> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      await fetch(`${apiBase()}/ai/health`, { signal: controller.signal });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+
   async getDeletionBlockers(): Promise<DeletionBlocker[]> {
     const supabase = getSupabaseClient();
     if (!supabase) return [];
@@ -37,13 +57,13 @@ export const accountService = {
 
     let res: Response;
     try {
-      res = await fetch(`${envConfig.apiBaseUrl.replace(/\/+$/, '')}/account/delete`, {
+      res = await fetch(`${apiBase()}/account/delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ password, confirm })
       });
     } catch {
-      throw new AccountDeletionError('Could not reach the server. Check your connection and try again. Nothing was changed.', 0);
+      throw new AccountDeletionError('Could not reach the server. Check your connection, wait a moment (the server may be starting up) and try again.', 0);
     }
 
     let body: { success?: boolean; error?: string; blockers?: DeletionBlocker[]; warnings?: string[] } = {};

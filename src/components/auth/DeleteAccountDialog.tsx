@@ -32,6 +32,18 @@ export const DeleteAccountDialog: React.FC<Props> = ({ onClose, onFinished }) =>
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState<{ warnings: string[] } | null>(null);
+  const [server, setServer] = useState<'checking' | 'ready' | 'unreachable'>('checking');
+  const [serverCheck, setServerCheck] = useState(0);
+
+  // Find out BEFORE the person types a password whether the server can be reached (it may be waking up).
+  useEffect(() => {
+    let cancelled = false;
+    setServer('checking');
+    accountService.checkServer().then((ok) => !cancelled && setServer(ok ? 'ready' : 'unreachable'));
+    return () => {
+      cancelled = true;
+    };
+  }, [serverCheck]);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +62,7 @@ export const DeleteAccountDialog: React.FC<Props> = ({ onClose, onFinished }) =>
     return () => document.removeEventListener('keydown', onKey);
   }, [busy, done, onClose]);
 
-  const canSubmit = blockers !== null && blockers.length === 0 && password.length > 0 && confirmText === 'DELETE' && !busy;
+  const canSubmit = blockers !== null && blockers.length === 0 && server === 'ready' && password.length > 0 && confirmText === 'DELETE' && !busy;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,6 +115,19 @@ export const DeleteAccountDialog: React.FC<Props> = ({ onClose, onFinished }) =>
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 sm:p-6 space-y-5">
               {blockers === null && !checkError && (
                 <p className="text-xs text-[#606C38] flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Checking your account…</p>
+              )}
+              {server === 'checking' && (
+                <p className="text-xs text-[#606C38] flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Contacting the server… this can take up to a minute if it was asleep.</p>
+              )}
+              {server === 'unreachable' && (
+                <div role="alert" className="rounded-2xl border border-[#E8D9A8] bg-[#FEFAE0] p-4 space-y-2">
+                  <p className="text-xs text-[#283618]">
+                    We can’t reach the LibRise server right now, so your account can’t be deleted yet. It may still be starting up: wait a minute and check again. If this keeps happening, please contact support.
+                  </p>
+                  <button type="button" onClick={() => setServerCheck((n) => n + 1)} className="min-h-11 px-4 rounded-xl border border-[#E8D9A8] bg-white text-xs font-bold text-[#283618] hover:bg-[#FEFAE0] cursor-pointer">
+                    Check again
+                  </button>
+                </div>
               )}
               {checkError && <p role="alert" className="text-xs text-red-800 bg-red-50 border border-red-200 rounded-xl p-3">{checkError}</p>}
 
