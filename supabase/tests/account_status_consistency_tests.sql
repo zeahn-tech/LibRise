@@ -54,7 +54,7 @@ reset role;
 -- ===== 2. B: an APPEALED, unexpired full suspension still counts
 select pg_temp.cs_r('cs-r-b', '0b3b3b3b-0000-4000-8000-000000000002', 'full_suspension', 'appealed');
 insert into test_log(line) select * from extensions.is((select account_status from public.users where id = '0b3b3b3b-0000-4000-8000-000000000002'), 'suspended', '[2] inserting an appealed full suspension directly moves the account to suspended (restriction/status sync)');
-insert into test_log(line) select * from extensions.ok((select banned_until = 'infinity' from auth.users where id = '0b3b3b3b-0000-4000-8000-000000000002'), '[2] ...and bans the auth user');
+insert into test_log(line) select * from extensions.ok((select (banned_until > now() + interval '50 years' and banned_until < 'infinity') from auth.users where id = '0b3b3b3b-0000-4000-8000-000000000002'), '[2] ...and bans the auth user');
 insert into test_log(line) select * from extensions.throws_ok($$update public.users set account_status = 'active' where id = '0b3b3b3b-0000-4000-8000-000000000002'$$, '23514'::char(5), NULL::text, '[2] an appealed suspension cannot be bypassed by a status update');
 -- an EXPIRED suspension no longer blocks a deliberate reinstatement
 update public.account_restrictions set expires_at = now() - interval '1 hour' where id = 'cs-r-b';

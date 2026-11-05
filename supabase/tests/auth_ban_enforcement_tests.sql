@@ -50,7 +50,7 @@ select set_config('role','authenticated',true), set_config('request.jwt.claim.su
 insert into test_log(line) select * from extensions.lives_ok($$select public.apply_account_restriction('ab-r1', '0b1b1b1b-0000-4000-8000-000000000001', 'full_suspension', 'abuse', null)$$, '[admin] suspends V1');
 reset role;
 insert into test_log(line) select * from extensions.is((select account_status from public.users where id = '0b1b1b1b-0000-4000-8000-000000000001'), 'suspended', '[V1] account_status is suspended');
-insert into test_log(line) select * from extensions.ok((select banned_until = 'infinity' from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000001'), '[V1] auth.users.banned_until = infinity (GoTrue refuses sign-in and token refresh while this is set)');
+insert into test_log(line) select * from extensions.ok((select (banned_until > now() + interval '50 years' and banned_until < 'infinity') from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000001'), '[V1] auth.users.banned_until is a long finite date, never infinity (GoTrue refuses sign-in and token refresh while this is set)');
 insert into test_log(line) select * from extensions.is((select count(*) from auth.sessions where user_id = '0b1b1b1b-0000-4000-8000-000000000001') + (select count(*) from auth.refresh_tokens where user_id = '0b1b1b1b-0000-4000-8000-000000000001'), 0::bigint, '[V1] sessions and refresh tokens are gone');
 insert into test_log(line) select * from extensions.is((select status from public.account_auth_enforcement where user_id = '0b1b1b1b-0000-4000-8000-000000000001'), 'applied', '[V1] enforcement record says applied');
 -- a previously issued access token (still cryptographically valid) vs the database
@@ -69,7 +69,7 @@ select set_config('role','authenticated',true), set_config('request.jwt.claim.su
 insert into test_log(line) select * from extensions.lives_ok($$select public.apply_account_restriction('ab-r2', '0b1b1b1b-0000-4000-8000-000000000002', 'full_suspension', 'abuse', null)$$, '[failure] the suspension itself still succeeds (database denial applies)');
 reset role;
 insert into test_log(line) select * from extensions.is((select account_status from public.users where id = '0b1b1b1b-0000-4000-8000-000000000002'), 'suspended', '[failure][V2] account_status is suspended');
-insert into test_log(line) select * from extensions.ok((select banned_until = 'infinity' from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000002'), '[failure][V2] the ban PERSISTS even though session cleanup failed (was rolled back)');
+insert into test_log(line) select * from extensions.ok((select (banned_until > now() + interval '50 years' and banned_until < 'infinity') from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000002'), '[failure][V2] the ban PERSISTS even though session cleanup failed (was rolled back)');
 insert into test_log(line) select * from extensions.is((select status from public.account_auth_enforcement where user_id = '0b1b1b1b-0000-4000-8000-000000000002'), 'failed', '[failure][V2] enforcement is recorded as FAILED, not applied');
 insert into test_log(line) select * from extensions.ok((select detail like 'failed:%' from public.account_auth_enforcement where user_id = '0b1b1b1b-0000-4000-8000-000000000002'), '[failure][V2] the failure detail is stored');
 insert into test_log(line) select * from extensions.is((select count(*) from public.audit_logs where action = 'user.auth_ban_failed' and resource_id = '0b1b1b1b-0000-4000-8000-000000000002'), 1::bigint, '[failure][V2] an audit_logs entry is written');
@@ -104,7 +104,7 @@ insert into public.account_restrictions (id, user_id, user_name, user_email, res
   ('ab-r4-a',    '0b1b1b1b-0000-4000-8000-000000000004', 'V4', 'ab-v4@example.com', 'full_suspension',  'x', '0b1b1b1b-0000-4000-8000-000000000008', 'AB PA', null, 'active'),
   ('ab-r4-b',    '0b1b1b1b-0000-4000-8000-000000000004', 'V4', 'ab-v4@example.com', 'full_suspension',  'x', '0b1b1b1b-0000-4000-8000-000000000008', 'AB PA', null, 'appealed');
 update public.users set account_status = 'suspended' where id in ('0b1b1b1b-0000-4000-8000-000000000003', '0b1b1b1b-0000-4000-8000-000000000004');   -- the trigger bans both
-insert into test_log(line) select * from extensions.ok((select count(*) = 2 from auth.users where id in ('0b1b1b1b-0000-4000-8000-000000000003', '0b1b1b1b-0000-4000-8000-000000000004') and banned_until = 'infinity'), '[V3,V4] suspension by direct status change (any pathway) also bans the auth users');
+insert into test_log(line) select * from extensions.ok((select count(*) = 2 from auth.users where id in ('0b1b1b1b-0000-4000-8000-000000000003', '0b1b1b1b-0000-4000-8000-000000000004') and (banned_until > now() + interval '50 years' and banned_until < 'infinity')), '[V3,V4] suspension by direct status change (any pathway) also bans the auth users');
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b1b1b1b-0000-4000-8000-000000000008',true);
 select public.lift_account_restriction('ab-r3-post');
 reset role;
@@ -132,7 +132,7 @@ reset role;
 -- E. Out-of-band suspension, deactivation, account without an auth user
 -- =====================================================================
 update public.users set account_status = 'suspended' where id = '0b1b1b1b-0000-4000-8000-000000000005';
-insert into test_log(line) select * from extensions.ok((select banned_until = 'infinity' from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000005'), '[V5] a suspension made directly in the database (dashboard / service role) bans the auth user');
+insert into test_log(line) select * from extensions.ok((select (banned_until > now() + interval '50 years' and banned_until < 'infinity') from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000005'), '[V5] a suspension made directly in the database (dashboard / service role) bans the auth user');
 insert into public.account_restrictions (id, user_id, user_name, user_email, restriction_type, reason, issued_by_user_id, issued_by_name, expires_at, status)
 values ('ab-r5-post', '0b1b1b1b-0000-4000-8000-000000000005', 'V5', 'ab-v5@example.com', 'posting_disabled', 'x', '0b1b1b1b-0000-4000-8000-000000000008', 'AB PA', null, 'active');
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b1b1b1b-0000-4000-8000-000000000008',true);
@@ -140,7 +140,7 @@ select public.lift_account_restriction('ab-r5-post');
 reset role;
 insert into test_log(line) select * from extensions.ok((select account_status = 'suspended' from public.users where id = '0b1b1b1b-0000-4000-8000-000000000005') and (select banned_until = 'infinity' from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000005'), '[V5] lifting an unrelated restriction does not reinstate an out-of-band suspension (was: it did)');
 update public.users set account_status = 'deactivated' where id = '0b1b1b1b-0000-4000-8000-000000000007';
-insert into test_log(line) select * from extensions.ok((select banned_until = 'infinity' from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000007'), '[V7] deactivation also bans the auth user');
+insert into test_log(line) select * from extensions.ok((select (banned_until > now() + interval '50 years' and banned_until < 'infinity') from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000007'), '[V7] deactivation also bans the auth user');
 update public.users set account_status = 'suspended' where id = '0b1b1b1b-0000-4000-8000-000000000006';
 insert into test_log(line) select * from extensions.is((select status from public.account_auth_enforcement where user_id = '0b1b1b1b-0000-4000-8000-000000000006'), 'no_auth_user', '[V6] a public profile with no auth user is recorded as no_auth_user (not an error)');
 

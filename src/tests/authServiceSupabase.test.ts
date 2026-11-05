@@ -128,9 +128,21 @@ describe('authService -- Supabase-backed flows (mocked Supabase, no local fallba
 
     const { authService } = await import('../services/authService');
     await expect(authService.login('someone@opportunityhub.lr', 'WrongPassword1!')).rejects.toThrow(
-      'Invalid login credentials'
+      /couldn’t find an account with that email and password/i
     );
     expect(dbAuthSpy).not.toHaveBeenCalled();
+  });
+
+  it('login(): internal database errors from the auth service are never shown to the person', async () => {
+    mockClient = buildMockSupabaseClient();
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { message: 'Database error querying schema' }
+    });
+    const { authService } = await import('../services/authService');
+    const err = await authService.login('someone@opportunityhub.lr', 'WrongPassword1!').catch((e) => e);
+    expect(err.message).not.toMatch(/database|schema/i);
+    expect(err.message).toMatch(/couldn’t sign you in right now/i);
   });
 
   it('login(): on Supabase network/unreachable error, surfaces the real error rather than creating a local session', async () => {

@@ -296,7 +296,7 @@ insert into auth.refresh_tokens (user_id, session_id) values ('0a0a0a0a-0000-400
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-000000000007',true);
 insert into test_log(line) select * from extensions.lives_ok($$select public.apply_account_restriction('as-ban-1', '0a0a0a0a-0000-4000-8000-0000000000c1', 'full_suspension', 'abuse', null)$$, '[F-19][platform admin] suspends an account');
 reset role;
-insert into test_log(line) select * from extensions.ok((select banned_until = 'infinity' from auth.users where id = '0a0a0a0a-0000-4000-8000-0000000000c1'), '[F-19] the auth user is banned (sign-in and token refresh refused)');
+insert into test_log(line) select * from extensions.ok((select (banned_until > now() + interval '50 years' and banned_until < 'infinity') from auth.users where id = '0a0a0a0a-0000-4000-8000-0000000000c1'), '[F-19] the auth user is banned (sign-in and token refresh refused)');
 insert into test_log(line) select * from extensions.is((select count(*) from auth.sessions where user_id = '0a0a0a0a-0000-4000-8000-0000000000c1') + (select count(*) from auth.refresh_tokens where user_id = '0a0a0a0a-0000-4000-8000-0000000000c1'), 0::bigint, '[F-19] sessions and refresh tokens are revoked');
 -- a still-valid access token is denied by the database
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0a0a0a0a-0000-4000-8000-0000000000c1',true);
