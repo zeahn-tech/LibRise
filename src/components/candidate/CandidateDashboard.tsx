@@ -27,12 +27,15 @@ import {
   DollarSign,
   ChevronRight,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { applicationService } from '../../services/applicationService';
 import { candidateService } from '../../services/candidateService';
+import { messagingService } from '../../services/messagingService';
+import { useRouter } from '../../routes/router';
 import { CandidateProfileEditor } from './CandidateProfileEditor';
 
 interface CandidateDashboardProps {
@@ -46,6 +49,29 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({
 }) => {
   const { user } = useAuth();
   const { showToast } = useToast();
+  const { navigate } = useRouter();
+  const [messagingAppId, setMessagingAppId] = useState<string | null>(null);
+
+  // Opens (or reuses) the chat with the employer for this application. The
+  // employer is resolved on the server, so their email is never exposed.
+  const handleMessageEmployer = async (app: Application) => {
+    if (messagingAppId) return;
+    setMessagingAppId(app.id);
+    try {
+      const res = await messagingService.startApplicationConversation({
+        id: app.id,
+        opportunityId: app.opportunityId,
+        opportunityTitle: app.opportunityTitle
+      });
+      if (res.error || !res.data) {
+        showToast(res.error?.message || 'Could not open the conversation. Please try again.', 'error');
+        return;
+      }
+      navigate(`/messages?c=${encodeURIComponent(res.data.id)}`);
+    } finally {
+      setMessagingAppId(null);
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<'applications' | 'profile' | 'interviews'>('applications');
   const [applications, setApplications] = useState<Application[]>([]);
@@ -179,41 +205,41 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({
       </div>
 
       {/* Main Tab Navigation */}
-      <div className="flex items-center gap-2 border-b border-[#E8E4D9] pb-3">
+      <div className="grid grid-cols-3 gap-2 border-b border-[#E8E4D9] pb-3">
         <button
           onClick={() => setActiveTab('applications')}
-          className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
+          className={`min-h-[3.5rem] px-2 sm:px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center text-center gap-2 cursor-pointer ${
             activeTab === 'applications'
               ? 'bg-[#283618] text-white shadow-xs'
               : 'bg-white text-[#606C38] border border-[#E8E4D9] hover:bg-[#F9F8F6]'
           }`}
         >
-          <Briefcase className="w-4 h-4" />
+          <Briefcase className="w-4 h-4 hidden sm:block shrink-0" />
           <span>Track Applications ({applications.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('interviews')}
-          className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
+          className={`min-h-[3.5rem] px-2 sm:px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center text-center gap-2 cursor-pointer ${
             activeTab === 'interviews'
               ? 'bg-[#283618] text-white shadow-xs'
               : 'bg-white text-[#606C38] border border-[#E8E4D9] hover:bg-[#F9F8F6]'
           }`}
         >
-          <Calendar className="w-4 h-4" />
+          <Calendar className="w-4 h-4 hidden sm:block shrink-0" />
           <span>Interviews & Offers ({interviewApps.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('profile')}
-          className={`px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
+          className={`min-h-[3.5rem] px-2 sm:px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center text-center gap-2 cursor-pointer ${
             activeTab === 'profile'
               ? 'bg-[#283618] text-white shadow-xs'
               : 'bg-white text-[#606C38] border border-[#E8E4D9] hover:bg-[#F9F8F6]'
           }`}
         >
-          <User className="w-4 h-4" />
-          <span>My Profile & CV Studio</span>
+          <User className="w-4 h-4 hidden sm:block shrink-0" />
+          <span>My Profile & CV</span>
         </button>
       </div>
 
@@ -374,6 +400,17 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({
                       <Eye className="w-3.5 h-3.5 text-[#4F772D]" />
                       <span>View History & Status</span>
                     </button>
+
+                    {app.stage !== 'withdrawn' && (
+                      <button
+                        onClick={() => handleMessageEmployer(app)}
+                        disabled={messagingAppId === app.id}
+                        className="px-4 py-2 bg-[#4F772D] hover:bg-[#3f6224] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>{messagingAppId === app.id ? 'Opening chat…' : 'Message Employer'}</span>
+                      </button>
+                    )}
 
                     {app.stage !== 'withdrawn' && app.stage !== 'hired' && app.stage !== 'rejected' && (
                       <button

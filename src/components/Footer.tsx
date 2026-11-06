@@ -46,11 +46,6 @@ export const Footer: React.FC<FooterProps> = ({ onOpenSafetyModal, onOpenVerific
           Cookie settings
         </button>
       </nav>
-
-      <div className="flex items-center gap-2 text-[10px] text-[#283618] font-semibold">
-        <div className="w-2 h-2 bg-[#4F772D] rounded-full animate-pulse"></div>
-        <span>SYSTEM OPERATIONAL (PORT 3000)</span>
-      </div>
     </footer>
   );
 };

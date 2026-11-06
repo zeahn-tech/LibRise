@@ -340,7 +340,7 @@ export const CandidateProfileEditor: React.FC<CandidateProfileEditorProps> = ({
             <span>National Talent & Professional Registry</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-serif font-bold text-[#132A13]">
-            Candidate Profile & CV Studio
+            Candidate Profile & CV
           </h2>
           <p className="text-xs sm:text-sm text-[#606C38] mt-1">
             Build your professional credentials for verified Liberian employers, NGOs, and government agencies.

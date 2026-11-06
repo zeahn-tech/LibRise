@@ -479,6 +479,53 @@ export const messagingService = {
     });
   },
 
+  /**
+   * Opens (or reuses) the chat between a job seeker and the employer of a
+   * vacancy they applied to. The employer is resolved server-side, so the
+   * applicant never needs, and never sees, the employer's email address.
+   */
+  async startApplicationConversation(application: {
+    id: string;
+    opportunityId: string;
+    opportunityTitle: string;
+  }): Promise<ApiResponse<Conversation>> {
+    return apiClient.execute(async () => {
+      const session = authService.getSession();
+      const me = session.user;
+      if (!me) throw new UnauthorizedError('Sign in required to message the employer.');
+
+      const { data, error } = await client().rpc('get_application_employer_contact', {
+        p_application_id: application.id
+      });
+      if (error) throw toDbError('messagingService', error);
+      const row = ((data as {
+        employer_user_id: string;
+        employer_name: string;
+        organization_name: string | null;
+        opportunity_title: string | null;
+      }[]) || [])[0];
+      if (!row) throw new Error('The employer for this application could not be found.');
+      if (row.employer_user_id === me.id) throw new Error('You cannot message yourself.');
+
+      const title = `${row.opportunity_title || application.opportunityTitle}${
+        row.organization_name ? ` · ${row.organization_name}` : ''
+      }`;
+      const res = await this.startConversation({
+        category: 'candidate_recruiter',
+        title,
+        contextId: application.id,
+        contextType: 'application',
+        senderUserId: me.id,
+        participants: [
+          { userId: me.id, name: me.fullName, email: '', role: me.primaryRole as UserRole },
+          { userId: row.employer_user_id, name: row.employer_name, email: '' }
+        ]
+      });
+      if (res.error || !res.data) throw new Error(res.error?.message || 'Could not open the conversation.');
+      return res.data;
+    });
+  },
+
   async getBlockedUsers(userId: string): Promise<ApiResponse<UserBlock[]>> {
     return apiClient.execute(async () => {
       const { data, error } = await client().from('user_blocks').select('*').eq('blocking_user_id', userId);

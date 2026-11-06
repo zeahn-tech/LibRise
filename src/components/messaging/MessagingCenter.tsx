@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
+import { useRouter } from '../../routes/router';
 import { validateUploadedFile, verifyFileSignature } from '../../core/security/fileValidator';
 import {
   MessageSquare,
@@ -39,8 +40,11 @@ interface MessagingCenterProps {
 }
 
 export const MessagingCenter: React.FC<MessagingCenterProps> = ({ initialConversationId }) => {
+  // Deep link: #/messages?c=<conversationId> opens that chat directly.
+  const { route } = useRouter();
+  const linkedConversationId = route.queryParams.get('c') || undefined;
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConvId, setActiveConvId] = useState<string | null>(initialConversationId || null);
+  const [activeConvId, setActiveConvId] = useState<string | null>(initialConversationId || linkedConversationId || null);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [messageInput, setMessageInput] = useState('');
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
