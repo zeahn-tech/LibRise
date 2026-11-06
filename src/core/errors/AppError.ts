@@ -1,3 +1,5 @@
+import { OFFLINE_MESSAGE } from '../../lib/offlineMessage';
+
 export class AppError extends Error {
   public readonly code: string;
   public readonly statusCode: number;
@@ -59,7 +61,7 @@ export class TenantIsolationError extends AppError {
 }
 
 export class NetworkOfflineError extends AppError {
-  constructor(message = 'You are currently offline. This action will be retried when connectivity is restored.') {
+  constructor(message = OFFLINE_MESSAGE) {
     super(message, 'NETWORK_OFFLINE', 503);
     this.name = 'NetworkOfflineError';
   }

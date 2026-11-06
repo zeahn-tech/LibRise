@@ -1,3 +1,4 @@
+import { friendlyAuthError } from '../lib/authErrors';
 import { appBaseUrl } from '../lib/recoveryLink';
 import {
   AccountStatus,
@@ -476,7 +477,8 @@ class AuthService {
         }
       });
       if (error) {
-        throw new Error(error.message || 'Registration failed.');
+        logger.warn('AUTH', 'Registration rejected by the auth service', { error: error.message });
+        throw new Error(friendlyAuthError(error.message, 'signup'));
       }
       if (!data.user) {
         throw new Error('Registration did not return a user. Please try again.');
@@ -577,7 +579,8 @@ class AuthService {
       if (error) {
         // No silent fallback to local credentials. Supabase's error
         // (invalid credentials, network failure, etc.) is the real answer.
-        throw new UnauthorizedError(error.message || 'Invalid email or password.');
+        logger.warn('AUTH', 'Sign-in rejected by the auth service', { error: error.message });
+        throw new UnauthorizedError(friendlyAuthError(error.message, 'signin'));
       }
       if (!data.user || !data.session) {
         throw new UnauthorizedError('Login did not return a valid session. Please try again.');
@@ -657,7 +660,8 @@ class AuthService {
       const redirectTo = typeof window !== 'undefined' ? appBaseUrl() : undefined;
       const { error } = await supabase.auth.resetPasswordForEmail(email, redirectTo ? { redirectTo } : undefined);
       if (error) {
-        throw new Error(error.message || 'Unable to send password reset email.');
+        logger.warn('AUTH', 'Password reset request rejected', { error: error.message });
+        throw new Error(friendlyAuthError(error.message, 'reset'));
       }
       return { success: true };
     }
@@ -675,7 +679,8 @@ class AuthService {
       // dbClient-issued string -- updateUser() operates on it directly.
       const { data, error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) {
-        throw new Error(error.message || 'Failed to reset password.');
+        logger.warn('AUTH', 'Password update rejected', { error: error.message });
+        throw new Error(friendlyAuthError(error.message, 'password'));
       }
       if (data.user) {
         const { data: sessionData } = await supabase.auth.getSession();
@@ -710,7 +715,7 @@ class AuthService {
       if (/rate|seconds|too many|limit/i.test(error.message)) {
         throw new Error('Please wait a minute before requesting another email.');
       }
-      throw new Error(error.message || 'Could not send the verification email. Please try again.');
+      throw new Error(friendlyAuthError(error.message, 'reset').replace('send the reset email', 'send the verification email'));
     }
   }
 
@@ -803,7 +808,8 @@ class AuthService {
       }
       const { error } = await supabase.auth.updateUser({ password: newPass });
       if (error) {
-        throw new Error(error.message || 'Failed to update password.');
+        logger.warn('AUTH', 'Password change rejected', { error: error.message });
+        throw new Error(friendlyAuthError(error.message, 'password'));
       }
       return;
     }
