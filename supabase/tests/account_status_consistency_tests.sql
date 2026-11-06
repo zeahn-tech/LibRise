@@ -38,7 +38,7 @@ insert into test_log(line) select * from extensions.throws_ok($$update public.us
   '[1] a direct (administrative / service-role) status update to active is REFUSED while a full suspension is active');
 insert into test_log(line) select * from extensions.throws_ok($$update public.users set account_status = 'pending_verification' where id = '0b3b3b3b-0000-4000-8000-000000000001'$$, '23514'::char(5), NULL::text,
   '[1] ...and so is any other non-suspended status');
-insert into test_log(line) select * from extensions.ok((select account_status = 'suspended' from public.users where id = '0b3b3b3b-0000-4000-8000-000000000001') and (select banned_until = 'infinity' from auth.users where id = '0b3b3b3b-0000-4000-8000-000000000001'), '[1] the account stays suspended and banned');
+insert into test_log(line) select * from extensions.ok((select account_status = 'suspended' from public.users where id = '0b3b3b3b-0000-4000-8000-000000000001') and (select (banned_until > now() + interval '50 years' and banned_until < 'infinity') from auth.users where id = '0b3b3b3b-0000-4000-8000-000000000001'), '[1] the account stays suspended and banned');
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b3b3b3b-0000-4000-8000-000000000001',true);
 insert into test_log(line) select * from extensions.is((select count(*) from public.get_organization_private_fields(array['org-cs'])), 0::bigint, '[1] private organization data stays unavailable');
 reset role;
@@ -68,7 +68,7 @@ select pg_temp.cs_r('cs-r-c3', '0b3b3b3b-0000-4000-8000-000000000003', 'posting_
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b3b3b3b-0000-4000-8000-0000000000aa',true);
 select public.lift_account_restriction('cs-r-c1');
 reset role;
-insert into test_log(line) select * from extensions.ok((select account_status = 'suspended' from public.users where id = '0b3b3b3b-0000-4000-8000-000000000003') and (select banned_until = 'infinity' from auth.users where id = '0b3b3b3b-0000-4000-8000-000000000003'), '[3] lifting ONE of two qualifying suspensions does not restore access');
+insert into test_log(line) select * from extensions.ok((select account_status = 'suspended' from public.users where id = '0b3b3b3b-0000-4000-8000-000000000003') and (select (banned_until > now() + interval '50 years' and banned_until < 'infinity') from auth.users where id = '0b3b3b3b-0000-4000-8000-000000000003'), '[3] lifting ONE of two qualifying suspensions does not restore access');
 insert into test_log(line) select * from extensions.throws_ok($$update public.users set account_status = 'active' where id = '0b3b3b3b-0000-4000-8000-000000000003'$$, '23514'::char(5), NULL::text, '[3] ...and a direct status update is still refused');
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b3b3b3b-0000-4000-8000-000000000003',true);
 insert into test_log(line) select * from extensions.ok(public.current_account_suspended(), '[3] the account is still suspended for RLS');
@@ -108,7 +108,7 @@ insert into test_log(line) select * from extensions.is(
   '[legacy review query] lists exactly the account whose status disagrees with an active full suspension');
 -- ===== E: a restriction inserted directly (no RPC) suspends and bans
 select pg_temp.cs_r('cs-r-e', '0b3b3b3b-0000-4000-8000-000000000005', 'full_suspension', 'active');
-insert into test_log(line) select * from extensions.ok((select account_status = 'suspended' from public.users where id = '0b3b3b3b-0000-4000-8000-000000000005') and (select banned_until = 'infinity' from auth.users where id = '0b3b3b3b-0000-4000-8000-000000000005'), '[E] a full_suspension row inserted by any path suspends the account and bans the auth user');
+insert into test_log(line) select * from extensions.ok((select account_status = 'suspended' from public.users where id = '0b3b3b3b-0000-4000-8000-000000000005') and (select (banned_until > now() + interval '50 years' and banned_until < 'infinity') from auth.users where id = '0b3b3b3b-0000-4000-8000-000000000005'), '[E] a full_suspension row inserted by any path suspends the account and bans the auth user');
 -- ===== F: confirming an email cannot reinstate a suspended account
 select pg_temp.cs_r('cs-r-f', '0b3b3b3b-0000-4000-8000-000000000006', 'full_suspension', 'active');
 update auth.users set email_confirmed_at = now() where id = '0b3b3b3b-0000-4000-8000-000000000006';

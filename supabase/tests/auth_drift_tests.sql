@@ -55,7 +55,7 @@ update auth.users set banned_until = 'infinity' where id = '0b5b5b5b-0000-4000-8
 -- OP: an operator's manual ban of an active account
 update auth.users set banned_until = now() + interval '30 days' where id = '0b5b5b5b-0000-4000-8000-000000000008';
 
-insert into test_log(line) select * from extensions.ok((select count(*) from auth.sessions where user_id = '0b5b5b5b-0000-4000-8000-000000000003') >= 1 and (select banned_until = 'infinity' from auth.users where id = '0b5b5b5b-0000-4000-8000-000000000003'), '(setup) B2 has an effective ban AND lingering session rows, as after an Admin-API ban');
+insert into test_log(line) select * from extensions.ok((select count(*) from auth.sessions where user_id = '0b5b5b5b-0000-4000-8000-000000000003') >= 1 and (select (banned_until > now() + interval '50 years' and banned_until < 'infinity') from auth.users where id = '0b5b5b5b-0000-4000-8000-000000000003'), '(setup) B2 has an effective ban AND lingering session rows, as after an Admin-API ban');
 
 -- =====================================================================
 -- the drift report

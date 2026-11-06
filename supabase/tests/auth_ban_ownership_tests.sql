@@ -50,7 +50,7 @@ reset role;
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b6b6b6b-0000-4000-8000-0000000000aa',true);
 select public.apply_account_restriction('ow-r3', pg_temp.u(3), 'full_suspension', 'abuse', null);
 reset role;
-insert into test_log(line) select * from extensions.ok((select imposed_banned_until = 'infinity' and banned_until = 'infinity' from public.account_auth_enforcement e join auth.users a on a.id::text = e.user_id where e.user_id = pg_temp.u(3)), '[2] suspending an un-banned account: LibRise imposes the ban and records ownership of that exact value');
+insert into test_log(line) select * from extensions.ok((select imposed_banned_until = banned_until and banned_until > now() + interval '50 years' and banned_until < 'infinity' from public.account_auth_enforcement e join auth.users a on a.id::text = e.user_id where e.user_id = pg_temp.u(3)), '[2] suspending an un-banned account: LibRise imposes the ban and records ownership of that exact value');
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b6b6b6b-0000-4000-8000-0000000000aa',true);
 select public.lift_account_restriction('ow-r3');
 reset role;
@@ -128,7 +128,7 @@ select set_config('role','authenticated',true), set_config('request.jwt.claim.su
 insert into test_log(line) select * from extensions.is((select desired from public.list_auth_enforcement_drift() where user_id = pg_temp.u(11)), 'ban', '[6] an operator ban that expires while the account is suspended is detected as drift');
 insert into test_log(line) select * from extensions.is(public.reapply_account_auth_ban(pg_temp.u(11)), 'ok', '[6] an administrator can re-apply: LibRise now imposes its own ban');
 reset role;
-insert into test_log(line) select * from extensions.ok((select imposed_banned_until = 'infinity' from public.account_auth_enforcement where user_id = pg_temp.u(11)), '[6] ...and owns that new ban');
+insert into test_log(line) select * from extensions.ok((select (imposed_banned_until > now() + interval '50 years' and imposed_banned_until < 'infinity') from public.account_auth_enforcement where user_id = pg_temp.u(11)), '[6] ...and owns that new ban');
 
 -- ===== 7. database authorization for a suspended account is unchanged
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub', pg_temp.u(6), true);

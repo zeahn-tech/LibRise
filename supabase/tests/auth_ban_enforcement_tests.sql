@@ -108,11 +108,11 @@ insert into test_log(line) select * from extensions.ok((select count(*) = 2 from
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b1b1b1b-0000-4000-8000-000000000008',true);
 select public.lift_account_restriction('ab-r3-post');
 reset role;
-insert into test_log(line) select * from extensions.ok((select account_status = 'suspended' from public.users where id = '0b1b1b1b-0000-4000-8000-000000000003') and (select banned_until = 'infinity' from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000003'), '[V3] lifting an UNRELATED restriction (posting_disabled) does not reinstate a suspended account');
+insert into test_log(line) select * from extensions.ok((select account_status = 'suspended' from public.users where id = '0b1b1b1b-0000-4000-8000-000000000003') and (select (banned_until > now() + interval '50 years' and banned_until < 'infinity') from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000003'), '[V3] lifting an UNRELATED restriction (posting_disabled) does not reinstate a suspended account');
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b1b1b1b-0000-4000-8000-000000000008',true);
 select public.lift_account_restriction('ab-r4-a');
 reset role;
-insert into test_log(line) select * from extensions.ok((select account_status = 'suspended' from public.users where id = '0b1b1b1b-0000-4000-8000-000000000004') and (select banned_until = 'infinity' from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000004'), '[V4] lifting one full_suspension while another (appealed) remains keeps the account suspended and banned');
+insert into test_log(line) select * from extensions.ok((select account_status = 'suspended' from public.users where id = '0b1b1b1b-0000-4000-8000-000000000004') and (select (banned_until > now() + interval '50 years' and banned_until < 'infinity') from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000004'), '[V4] lifting one full_suspension while another (appealed) remains keeps the account suspended and banned');
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b1b1b1b-0000-4000-8000-000000000008',true);
 select public.lift_account_restriction('ab-r4-b');
 reset role;
@@ -138,7 +138,7 @@ values ('ab-r5-post', '0b1b1b1b-0000-4000-8000-000000000005', 'V5', 'ab-v5@examp
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0b1b1b1b-0000-4000-8000-000000000008',true);
 select public.lift_account_restriction('ab-r5-post');
 reset role;
-insert into test_log(line) select * from extensions.ok((select account_status = 'suspended' from public.users where id = '0b1b1b1b-0000-4000-8000-000000000005') and (select banned_until = 'infinity' from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000005'), '[V5] lifting an unrelated restriction does not reinstate an out-of-band suspension (was: it did)');
+insert into test_log(line) select * from extensions.ok((select account_status = 'suspended' from public.users where id = '0b1b1b1b-0000-4000-8000-000000000005') and (select (banned_until > now() + interval '50 years' and banned_until < 'infinity') from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000005'), '[V5] lifting an unrelated restriction does not reinstate an out-of-band suspension (was: it did)');
 update public.users set account_status = 'deactivated' where id = '0b1b1b1b-0000-4000-8000-000000000007';
 insert into test_log(line) select * from extensions.ok((select (banned_until > now() + interval '50 years' and banned_until < 'infinity') from auth.users where id = '0b1b1b1b-0000-4000-8000-000000000007'), '[V7] deactivation also bans the auth user');
 update public.users set account_status = 'suspended' where id = '0b1b1b1b-0000-4000-8000-000000000006';
