@@ -191,7 +191,7 @@ export const AuthModal: React.FC = () => {
             <BrandLogo />
             <h2 className="text-xl font-serif font-bold text-[#132A13] mt-3">
               {authModalView === 'login' && 'Sign in to your account'}
-              {authModalView === 'register' && 'Create an opportunity account'}
+              {authModalView === 'register' && 'Create an account'}
               {authModalView === 'forgot_password' && 'Account Recovery'}
               {authModalView === 'reset_password' && 'Set a new password'}
             </h2>
@@ -444,7 +444,7 @@ export const AuthModal: React.FC = () => {
 
               <div className="pt-2">
                 <Button type="submit" variant="primary" size="lg" className="w-full" isLoading={isLoading}>
-                  Create Opportunity Account
+                  Create Account
                 </Button>
               </div>
 
