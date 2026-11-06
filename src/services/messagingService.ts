@@ -44,6 +44,7 @@ import {
 import { getSupabaseClient } from '../lib/supabaseClient';
 import { apiClient, ApiResponse } from './apiClient';
 import { authService } from './authService';
+import { businessService } from './businessService';
 import { notificationService } from './notificationService';
 import { fireAndForget } from '../lib/fireAndForget';
 import { trustSafetyService } from './trustSafetyService';
@@ -519,6 +520,36 @@ export const messagingService = {
         participants: [
           { userId: me.id, name: me.fullName, email: '', role: me.primaryRole as UserRole },
           { userId: row.employer_user_id, name: row.employer_name, email: '' }
+        ]
+      });
+      if (res.error || !res.data) throw new Error(res.error?.message || 'Could not open the conversation.');
+      return res.data;
+    });
+  },
+
+  /**
+   * Opens (or reuses) a chat between a buyer and the seller of a business
+   * listing. The seller is resolved from the listing itself, so the buyer
+   * never needs the seller's email address.
+   */
+  async startBusinessConversation(listing: { id: string; title: string }): Promise<ApiResponse<Conversation>> {
+    return apiClient.execute(async () => {
+      const me = authService.getSession().user;
+      if (!me) throw new UnauthorizedError('Sign in required to message the seller.');
+
+      const { ownerUserId, title } = await businessService.getListingOwner(listing.id);
+      if (!ownerUserId) throw new Error('The seller for this listing could not be found.');
+      if (ownerUserId === me.id) throw new Error('This is your own listing.');
+
+      const res = await this.startConversation({
+        category: 'buyer_seller',
+        title: title || listing.title,
+        contextId: listing.id,
+        contextType: 'business_listing',
+        senderUserId: me.id,
+        participants: [
+          { userId: me.id, name: me.fullName, email: '', role: me.primaryRole as UserRole },
+          { userId: ownerUserId, name: 'Seller', email: '' }
         ]
       });
       if (res.error || !res.data) throw new Error(res.error?.message || 'Could not open the conversation.');

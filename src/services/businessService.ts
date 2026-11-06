@@ -158,6 +158,9 @@ async function lookupListing(listingId: string): Promise<{ ownerUserId?: string;
 }
 
 export const businessService = {
+  /** Seller (owner) user id + title for a listing, via the public RPC. No contact details. */
+  getListingOwner: lookupListing,
+
   async list(filter?: { county?: string; industry?: string; listingType?: string }): Promise<ApiResponse<BusinessListing[]>> {
     return apiClient.execute(async () => {
       // Unchanged behavior for existing callers (moderation queue, "my
