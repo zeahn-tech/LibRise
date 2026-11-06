@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { BusinessListing, County } from '../types';
 import { LIBERIAN_COUNTIES } from '../data/seedData';
 import { businessService } from '../services/businessService';
+import { messagingService } from '../services/messagingService';
+import { useRouter } from '../routes/router';
 import {
   Building,
   ShieldCheck,
@@ -13,6 +15,7 @@ import {
   Filter,
   Plus,
   Send,
+  MessageSquare,
   Eye,
   CheckCircle,
   FileCheck,
@@ -67,6 +70,26 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
   const { user, can, activeOrganization } = useAuth();
   const [promoteListing, setPromoteListing] = useState<BusinessListing | null>(null);
   const { showToast } = useToast();
+  const { navigate } = useRouter();
+  const [messagingBizId, setMessagingBizId] = useState<string | null>(null);
+
+  // Opens (or reuses) the chat with the seller. The seller is resolved from the
+  // listing, so the buyer never needs the seller's email address.
+  const handleMessageSeller = async (biz: BusinessListing) => {
+    if (messagingBizId) return;
+    setMessagingBizId(biz.id);
+    try {
+      const res = await messagingService.startBusinessConversation({ id: biz.id, title: biz.title });
+      if (res.error || !res.data) {
+        showToast(res.error?.message || 'Could not open the conversation. Please try again.', 'error');
+        return;
+      }
+      setDetailModalListing(null);
+      navigate(`/messages?c=${encodeURIComponent(res.data.id)}`);
+    } finally {
+      setMessagingBizId(null);
+    }
+  };
   const currentUserId = propCurrentUserId || user?.id || '';
   const canModerate = can('business.moderate') || user?.systemRole === 'moderation_officer' || user?.systemRole === 'moderator' || user?.systemRole === 'platform_admin' || user?.primaryRole === 'platform_admin';
   const { isLowBandwidthMode } = useConfig();
@@ -647,6 +670,16 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
                               <span>Contact Seller</span>
                             </button>
                           )}
+                          {!isGated && biz.ownerUserId !== currentUserId && (
+                            <button
+                              onClick={() => handleMessageSeller(biz)}
+                              disabled={messagingBizId === biz.id}
+                              className="px-4 py-2 bg-[#ECF3E9] hover:bg-[#DDE9D8] text-[#283618] rounded-xl text-xs font-bold border border-[#D9E3D5] transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5 text-[#4F772D]" />
+                              <span>{messagingBizId === biz.id ? 'Opening chat…' : 'Message Seller'}</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -722,6 +755,7 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
           onToggleSave={handleToggleSave}
           onRequestNda={(biz) => setNdaModalListing(biz)}
           onOpenContactSeller={(biz) => setContactModalListing(biz)}
+          onMessageSeller={handleMessageSeller}
           currency={currency}
           currentUserId={currentUserId}
           onDeleteListing={handleDeleteListing}

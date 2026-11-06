@@ -7,6 +7,7 @@ import {
   Unlock,
   Bookmark,
   Send,
+  MessageSquare,
   MapPin,
   DollarSign,
   Users,
@@ -33,6 +34,7 @@ interface BusinessDetailModalProps {
   onToggleSave: (bizId: string) => void;
   onRequestNda: (listing: BusinessListing) => void;
   onOpenContactSeller: (listing: BusinessListing) => void;
+  onMessageSeller?: (listing: BusinessListing) => void;
   currency?: 'USD' | 'LRD';
   currentUserId?: string;
   onEditListing?: (listing: BusinessListing) => void;
@@ -47,6 +49,7 @@ export const BusinessDetailModal: React.FC<BusinessDetailModalProps> = ({
   onToggleSave,
   onRequestNda,
   onOpenContactSeller,
+  onMessageSeller,
   currency = 'USD',
   currentUserId,
   onEditListing,
@@ -342,6 +345,16 @@ export const BusinessDetailModal: React.FC<BusinessDetailModalProps> = ({
                 <span>Request Access & Sign NDA</span>
               </button>
             ) : null}
+
+            {onMessageSeller && listing.ownerUserId !== currentUserId && (!listing.isConfidential || listing.accessGranted) && (
+              <button
+                onClick={() => onMessageSeller(listing)}
+                className="px-6 py-2.5 bg-[#ECF3E9] hover:bg-[#DDE9D8] text-[#283618] border border-[#D9E3D5] rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-[#4F772D]" />
+                <span>Message Seller</span>
+              </button>
+            )}
 
             <button
               onClick={() => {
