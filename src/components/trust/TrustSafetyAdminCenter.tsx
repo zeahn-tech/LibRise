@@ -239,6 +239,17 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
     }
   };
 
+  const [isSyncing, setIsSyncing] = useState(false);
+  const handleManualSync = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    try {
+      await refreshAllData();
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   useEffect(() => {
     refreshAllData(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -479,11 +490,14 @@ export const TrustSafetyAdminCenter: React.FC<{ currentUserId?: string }> = () =
         {/* Action Controls */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => refreshAllData()}
-            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl border border-white/10 transition-all flex items-center gap-1.5 cursor-pointer"
+            type="button"
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            aria-busy={isSyncing}
+            className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-60 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl border border-white/10 transition-all flex items-center gap-1.5 cursor-pointer"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Sync DB Status</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Syncing…' : 'Sync DB Status'}</span>
           </button>
           <button
             onClick={logout}

@@ -104,6 +104,10 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({
       if (profRes.data) {
         setCandidateProfile(profRes.data);
       }
+      const failure = appsRes.error || profRes.error;
+      if (failure) {
+        showToast(failure.message || 'Could not refresh your dashboard.', 'error');
+      }
     } catch (err: any) {
       showToast(err.message || 'Error loading candidate portal.', 'error');
     } finally {
@@ -195,8 +199,12 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({
           )}
 
           <button
+            type="button"
             onClick={loadDashboardData}
-            className="p-2.5 bg-white text-[#283618] hover:bg-[#F9F8F6] rounded-full border border-[#D9E3D5] shadow-xs cursor-pointer"
+            disabled={isLoading}
+            aria-busy={isLoading}
+            aria-label="Refresh dashboard"
+            className="p-2.5 bg-white text-[#283618] hover:bg-[#F9F8F6] disabled:opacity-60 disabled:cursor-not-allowed rounded-full border border-[#D9E3D5] shadow-xs cursor-pointer"
             title="Refresh Dashboard"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />

@@ -25,6 +25,7 @@ import { candidateToRecommendationInput, mergeParsedCvIntoProfile } from '../ser
 import type { CandidateProfile } from '../types';
 import { ParsedCVResult } from '../services/ai/aiTypes';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { useEntitlements } from '../hooks/useEntitlements';
 import { AiStudioTool, canUseAiStudioTool } from '../core/auth/featureAccess';
 import { UpgradePrompt } from './common/UpgradePrompt';
@@ -36,6 +37,7 @@ interface AiStudioHubProps {
 
 export const AiStudioHub: React.FC<AiStudioHubProps> = ({ onOpenBilling }) => {
   const { authContext } = useAuth();
+  const { showToast } = useToast();
   const { entitlements } = useEntitlements();
   // Each tool is shown only to the audience it was built for (see featureAccess.ts).
   const allowed = (tool: AiStudioTool) => canUseAiStudioTool(authContext, tool);
@@ -93,6 +95,13 @@ export const AiStudioHub: React.FC<AiStudioHubProps> = ({ onOpenBilling }) => {
 
   const refreshAuditLogs = () => {
     setAuditLogs(aiService.getAuditLogs());
+  };
+
+  // Manual refresh from the Logs tab: re-read the log and tell the person it happened.
+  const handleRefreshLogsClick = () => {
+    const logs = aiService.getAuditLogs();
+    setAuditLogs(logs);
+    showToast(logs.length === 0 ? 'Logs refreshed. No AI activity recorded yet.' : `Logs refreshed. ${logs.length} entr${logs.length === 1 ? 'y' : 'ies'} shown.`, 'success');
   };
 
   const handleRunJobAssistant = async () => {
@@ -572,7 +581,8 @@ export const AiStudioHub: React.FC<AiStudioHubProps> = ({ onOpenBilling }) => {
             </div>
 
             <button
-              onClick={refreshAuditLogs}
+              type="button"
+              onClick={handleRefreshLogsClick}
               className="p-2 bg-[#F9F8F4] hover:bg-[#ECF3E9] border border-[#D9E3D5] rounded-xl text-xs font-bold text-[#283618] flex items-center gap-1.5"
             >
               <RefreshCw className="w-3.5 h-3.5" />

@@ -46,7 +46,7 @@ export const PaymentReviewHistory: React.FC = () => {
               {f === 'all' ? 'All' : f === 'payment_success' ? 'Approved' : 'Rejected'}
             </button>
           ))}
-          <button onClick={() => void load()} aria-label="Refresh history" className="p-2 rounded-xl border border-[#E8E4D9] bg-white cursor-pointer">
+          <button onClick={() => void load()} disabled={loading} aria-busy={loading} aria-label="Refresh history" className="p-2 rounded-xl border border-[#E8E4D9] bg-white disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>

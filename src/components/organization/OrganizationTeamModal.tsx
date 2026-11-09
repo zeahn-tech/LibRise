@@ -44,7 +44,7 @@ export const OrganizationTeamModal: React.FC<OrganizationTeamModalProps> = ({
   const [inviteRole, setInviteRole] = useState<OrgRole>('recruiter');
   const [isSendingInvite, setIsSendingInvite] = useState(false);
 
-  const loadData = async () => {
+  const loadData = async (manual = false) => {
     if (!organization || !user) return;
     try {
       setIsLoading(true);
@@ -56,8 +56,10 @@ export const OrganizationTeamModal: React.FC<OrganizationTeamModalProps> = ({
       setMembers(mems);
       setInvitations(orgInvs);
       setMemberProfiles(profiles);
+      if (manual) showToast('Team list refreshed.', 'success');
     } catch (err: unknown) {
-      // Non-blocking error
+      // Initial loads stay quiet; a manual refresh must tell the person if it failed.
+      if (manual) showToast(err instanceof Error ? err.message : 'Could not refresh the team list.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -206,10 +208,13 @@ export const OrganizationTeamModal: React.FC<OrganizationTeamModalProps> = ({
             <div className="text-xs font-bold text-[#132A13] uppercase tracking-wider mb-2 flex items-center justify-between">
               <span>Active Workspace Members ({members.length})</span>
               <button
-                onClick={loadData}
-                className="text-[11px] text-[#606C38] hover:text-[#132A13] flex items-center gap-1 cursor-pointer"
+                type="button"
+                onClick={() => loadData(true)}
+                disabled={isLoading}
+                aria-busy={isLoading}
+                className="text-[11px] text-[#606C38] hover:text-[#132A13] disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
               >
-                <RefreshCw className="w-3 h-3" /> Refresh
+                <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
               </button>
             </div>
 
