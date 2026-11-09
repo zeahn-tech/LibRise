@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, ShieldAlert, X, CheckCircle, FileText, Lock } from 'lucide-react';
 import { ContentReportReason } from '../../types';
 import { trustSafetyService } from '../../services/trustSafetyService';
@@ -29,6 +30,16 @@ export const ReportModal: React.FC<ReportModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
+
+  // Lock background scroll while the report form is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -71,8 +82,19 @@ export const ReportModal: React.FC<ReportModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+  // Rendered in a portal and with propagation stopped so interactions inside the form
+  // never reach a parent card's onClick (which would open the application card on top).
+  const modal = (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onFocus={(e) => e.stopPropagation()}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Report Trust and Safety concern"
+    >
       <div className="bg-white rounded-3xl max-w-lg w-full border border-[#E8E4D9] shadow-2xl max-h-[90dvh] overflow-y-auto overscroll-contain animate-in fade-in zoom-in duration-200">
         {/* Modal Header */}
         <div className="bg-[#283618] px-6 py-5 text-white flex items-center justify-between">
@@ -81,7 +103,9 @@ export const ReportModal: React.FC<ReportModalProps> = ({
             <h3 className="font-serif font-bold text-lg">Report Trust & Safety Concern</h3>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close report form"
             className="p-1 min-w-11 min-h-11 flex items-center justify-center rounded-full text-white/70 hover:text-white hover:bg-white/10 transition-all"
           >
             <X className="w-5 h-5" />
@@ -183,4 +207,6 @@ export const ReportModal: React.FC<ReportModalProps> = ({
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 };
