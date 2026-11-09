@@ -54,6 +54,7 @@ import { ApplicationDocumentsPicker, type CvEntry } from './applications/Applica
 import { candidateService } from '../services/candidateService';
 import { organizationService } from '../services/organizationService';
 import { useToast } from '../context/ToastContext';
+import { ReportModal } from './trust/ReportModal';
 
 interface OpportunityDetailModalProps {
   opportunity: Opportunity | null;
@@ -219,9 +220,9 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-[#132A13]/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 overflow-hidden overscroll-contain">
-      <div className="bg-white w-full max-w-3xl rounded-[32px] sm:rounded-[40px] border border-[#E8E4D9] shadow-2xl overflow-hidden max-h-[90dvh] flex flex-col">
+      <div className="bg-white w-full max-w-3xl rounded-[28px] sm:rounded-[40px] border border-[#E8E4D9] shadow-2xl overflow-hidden h-[calc(100dvh-1.5rem)] sm:h-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90dvh] flex flex-col">
         {/* Header Bar */}
-        <div className="p-6 sm:p-8 bg-[#ECF3E9] border-b border-[#D9E3D5] relative pr-16 sm:pr-20 flex-none">
+        <div className="p-4 sm:p-8 bg-[#ECF3E9] border-b border-[#D9E3D5] relative pr-16 sm:pr-20 flex-none">
           <button
             onClick={onClose}
             className="absolute top-3 right-3 sm:top-5 sm:right-5 w-11 h-11 bg-white/80 hover:bg-white rounded-full flex items-center justify-center text-[#283618] border border-[#D9E3D5] transition-colors cursor-pointer"
@@ -230,7 +231,7 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
           </button>
 
           {/* Status & Badge Row */}
-          <div className="flex flex-wrap items-center gap-2 mb-3">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-2 sm:mb-3">
             <span
               className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${
                 effectiveStatus === 'published'
@@ -281,7 +282,7 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
         </div>
 
         {/* Scrollable Content */}
-        <div className="p-6 sm:p-8 overflow-y-auto overscroll-contain flex-1 min-h-0 space-y-6 text-[#2D2D2D]">
+        <div className="p-4 sm:p-8 overflow-y-auto overscroll-contain flex-1 min-h-0 space-y-6 text-[#2D2D2D]">
           {/* Lifecycle Warning Banner if Expired, Closed, or Draft */}
           {effectiveStatus === 'expired' && (
             <div className="p-4 bg-red-50 rounded-2xl border border-red-200 flex items-start gap-3">
@@ -544,7 +545,7 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-5 sm:p-6 bg-white border-t border-[#E8E4D9] flex flex-wrap items-center justify-between gap-3 flex-none">
+        <div className="p-3 sm:p-6 bg-white border-t border-[#E8E4D9] flex flex-wrap items-center justify-between gap-2 sm:gap-3 flex-none">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowReportModal(true)}
@@ -598,6 +599,15 @@ const OpportunityDetailModalInner: React.FC<OpportunityDetailModalProps> = ({
           </div>
         </div>
       </div>
+
+      <ReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        reportType="listing"
+        targetId={opportunity.id}
+        targetTitleOrName={opportunity.title}
+        currentUserId={user?.id || ''}
+      />
     </div>
   );
 };
