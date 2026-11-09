@@ -67,6 +67,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     loading: notificationsLoading,
     error: notificationsError,
     refresh: refreshNotifications,
+    retry: retryNotifications,
     markAsRead: markNotificationRead,
     markAllAsRead: markAllNotificationsRead
   } = useNotifications(user?.id, { announce: !showNotificationsModal });
@@ -559,7 +560,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         notifications={notifications}
         loading={notificationsLoading}
         error={notificationsError}
-        onRetry={refreshNotifications}
+        onRetry={retryNotifications}
         onMarkAsRead={markNotificationRead}
         onMarkAllAsRead={markAllNotificationsRead}
       />

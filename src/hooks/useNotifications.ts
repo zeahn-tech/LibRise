@@ -110,7 +110,15 @@ export function useNotifications(userId?: string, options: { announce?: boolean 
     }
   }, [userId, notifications, showToast]);
 
+  // "Try again" on the error screen: clear the stale error and show the loading state while refetching.
+  const retry = useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    await refresh();
+    setLoading(false);
+  }, [refresh]);
+
   const unreadCount = notifications.reduce((n, x) => n + (x.isRead ? 0 : 1), 0);
 
-  return { notifications, unreadCount, loading, error, refresh, markAsRead, markAllAsRead };
+  return { notifications, unreadCount, loading, error, refresh, retry, markAsRead, markAllAsRead };
 }
