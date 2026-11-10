@@ -519,11 +519,11 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
               return (
                 <div
                   key={biz.id}
-                  className={`bg-white p-5 sm:p-6 rounded-3xl border transition-all hover:shadow-md ${
+                  className={`bg-white p-4 sm:p-6 rounded-3xl border transition-all hover:shadow-md min-w-0 max-w-full ${
                     isGated ? 'border-[#E8E4D9]' : 'border-[#A3B18A]'
                   }`}
                 >
-                  <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-4 sm:gap-6 min-w-0">
                     {/* Visual Photo Thumbnail or Letter Avatar */}
                     {firstPhoto && !isLowBandwidthMode ? (
                       <button
@@ -554,12 +554,12 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
                       </div>
                     )}
 
-                    <div className="flex-1 min-w-0 space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex-1 min-w-0 w-full space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
                           <h3
                             onClick={() => handleViewListing(biz)}
-                            className={`font-serif font-bold text-lg sm:text-xl text-[#283618] hover:text-[#4F772D] cursor-pointer ${
+                            className={`font-serif font-bold text-lg sm:text-xl text-[#283618] hover:text-[#4F772D] cursor-pointer break-words [overflow-wrap:anywhere] min-w-0 ${
                               isGated ? 'underline decoration-dotted decoration-[#BC6C25]' : ''
                             }`}
                           >
@@ -567,7 +567,7 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
                           </h3>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
                           <span className={`px-2.5 py-0.5 text-[11px] font-bold rounded-md ${
                             biz.isConfidential ? 'bg-[#DDA15E]/20 text-[#283618]' : 'bg-blue-50 text-blue-800'
                           }`}>
@@ -607,16 +607,16 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
                         </div>
                       </div>
 
-                      <p className="text-xs text-[#606C38]">
+                      <p className="text-xs text-[#606C38] break-words [overflow-wrap:anywhere]">
                         {biz.industry} • {biz.county} County • Est. {biz.establishedYear} • {biz.employeeCount} Employees
                       </p>
 
-                      <p className="text-xs sm:text-sm text-[#2D2D2D] leading-relaxed line-clamp-2">
+                      <p className="text-xs sm:text-sm text-[#2D2D2D] leading-relaxed line-clamp-2 break-words [overflow-wrap:anywhere]">
                         {biz.publicTeaser}
                       </p>
 
                       {/* Financial Snapshot Matrix */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 p-3 bg-[#F9F8F4] rounded-2xl border border-[#E8E4D9] text-xs">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 p-3 bg-[#F9F8F4] rounded-2xl border border-[#E8E4D9] text-xs min-w-0 [&>div]:min-w-0 [&_div]:break-words">
                         <div>
                           <div className="text-[10px] uppercase font-bold text-[#A3B18A]">Asking Price</div>
                           <div className="text-sm font-bold text-[#283618]">{formatPrice(biz.askingPriceUSD)}</div>
@@ -636,13 +636,13 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
                       </div>
 
                       {/* Action Row */}
-                      <div className="flex items-center justify-between pt-2 border-t border-[#F2F2EC] flex-wrap gap-2">
-                        <span className="text-xs text-[#A3B18A] flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-[#4F772D]" />
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-2 border-t border-[#F2F2EC] gap-2 min-w-0">
+                        <span className="text-xs text-[#A3B18A] flex items-start gap-1 min-w-0 break-words [overflow-wrap:anywhere]">
+                          <MapPin className="w-3 h-3 mt-0.5 shrink-0 text-[#4F772D]" />
                           {isGated ? `${biz.county} County (Street protected)` : biz.locationSummary}
                         </span>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full [&>button]:whitespace-nowrap [&>button]:shrink-0">
                           {activeTab === 'my_listings' && biz.ownerUserId === currentUserId && (
                             <button
                               onClick={() => setEditingListing(biz)}
