@@ -55,6 +55,7 @@ import { notificationService } from './notificationService';
 import { fireAndForget } from '../lib/fireAndForget';
 import { ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from '../core/errors/AppError';
 import { toDbError } from './dbErrors';
+import { validateUploadedFile } from '../core/security/fileValidator';
 
 export interface BusinessListingRow {
   id: string;
@@ -87,6 +88,7 @@ export interface BusinessListingRow {
   seller_contact_email: string | null;
   seller_contact_phone: string | null;
   views_count: number | null;
+  photos?: unknown;
   promotion_level?: string | null;
   promotion_until?: string | null;
   created_at: string;
@@ -129,6 +131,9 @@ export function rowToListing(row: BusinessListingRow): BusinessListing {
     sellerContactPhone: row.seller_contact_phone ?? undefined,
     sellerName: row.seller_name ?? undefined,
     viewsCount: row.views_count ?? 0,
+    photos: Array.isArray(row.photos)
+      ? (row.photos as unknown[]).filter((u): u is string => typeof u === 'string' && u.length > 0)
+      : [],
     // Paid promotion only counts while it is in date; it then lapses on its own.
     ...(row.promotion_level && row.promotion_until && new Date(row.promotion_until).getTime() > Date.now()
       ? { promotionLevel: row.promotion_level as 'boost' | 'featured' | 'premium', promotionUntil: row.promotion_until }
@@ -157,7 +162,58 @@ async function lookupListing(listingId: string): Promise<{ ownerUserId?: string;
   }
 }
 
+export const BUSINESS_PHOTO_BUCKET = 'business-photos';
+export const MAX_BUSINESS_PHOTOS = 12;
+
+/** Keep only http(s) image URLs (never inline data: blobs or script URLs), de-duplicated and capped. */
+function sanitizePhotos(photos?: string[]): string[] {
+  const out: string[] = [];
+  for (const raw of photos ?? []) {
+    const url = (raw || '').trim();
+    if (/^https?:\/\//i.test(url) && !out.includes(url)) out.push(url);
+  }
+  return out.slice(0, MAX_BUSINESS_PHOTOS);
+}
+
 export const businessService = {
+  /**
+   * Uploads every selected image to the public `business-photos` bucket and returns their public URLs,
+   * in order. Uploads run in parallel; if any fails, the ones that succeeded are removed and the error is
+   * rethrown so a failed submit never leaves orphan files behind.
+   */
+  async uploadPhotos(files: File[]): Promise<string[]> {
+    if (files.length === 0) return [];
+    const user = authService.getSession().user;
+    if (!user) throw new UnauthorizedError('You must be signed in to upload photos.');
+    const storage = client().storage.from(BUSINESS_PHOTO_BUCKET);
+    const results = await Promise.allSettled(
+      files.map(async (file) => {
+        const validation = validateUploadedFile(file, 'image');
+        if (!validation.valid) throw new ValidationError(validation.error || `${file.name} is not a valid image.`);
+        const path = `${user.id}/${crypto.randomUUID()}-${validation.cleanFileName}`;
+        const { error } = await storage.upload(path, file, {
+          contentType: file.type || undefined,
+          upsert: false,
+          cacheControl: '31536000'
+        });
+        if (error) {
+          if (/bucket not found/i.test(error.message)) {
+            throw new ValidationError('Photo uploads are not enabled on this server yet. Please contact support.');
+          }
+          throw new ValidationError(`Could not upload ${validation.cleanFileName}: ${error.message}`);
+        }
+        return { path, url: storage.getPublicUrl(path).data.publicUrl };
+      })
+    );
+    const ok = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+    const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (failed) {
+      if (ok.length) await storage.remove(ok.map((o) => o.path));
+      throw failed.reason instanceof Error ? failed.reason : new ValidationError('Photo upload failed.');
+    }
+    return ok.map((o) => o.url);
+  },
+
   /** Seller (owner) user id + title for a listing, via the public RPC. No contact details. */
   getListingOwner: lookupListing,
 
@@ -294,7 +350,8 @@ export const businessService = {
         is_confidential: listing.isConfidential ?? true,
         seller_name: listing.sellerName || user.fullName,
         seller_contact_email: listing.sellerContactEmail || user.email,
-        seller_contact_phone: listing.sellerContactPhone || user.phoneNumber || null
+        seller_contact_phone: listing.sellerContactPhone || user.phoneNumber || null,
+        photos: sanitizePhotos(listing.photos)
       };
 
       const { data, error } = await client().from('business_listings').insert(insertRow).select('*').maybeSingle();
@@ -331,6 +388,7 @@ export const businessService = {
       if (updates.sellerName !== undefined) safe.seller_name = updates.sellerName;
       if (updates.sellerContactEmail !== undefined) safe.seller_contact_email = updates.sellerContactEmail;
       if (updates.sellerContactPhone !== undefined) safe.seller_contact_phone = updates.sellerContactPhone;
+      if (updates.photos !== undefined) safe.photos = sanitizePhotos(updates.photos);
 
       const { data, error } = await client()
         .from('business_listings')

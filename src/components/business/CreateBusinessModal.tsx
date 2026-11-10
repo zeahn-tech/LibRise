@@ -2,6 +2,7 @@ import { BUSINESS_INDUSTRIES } from '../../config/constants';
 import { useBusinessIndustries } from '../../lib/platformSettingsStore';
 import React, { useEffect, useRef, useState } from 'react';
 import { validateUploadedFile } from '../../core/security/fileValidator';
+import { businessService, MAX_BUSINESS_PHOTOS } from '../../services/businessService';
 import { BusinessListing, County } from '../../types';
 import { LIBERIAN_COUNTIES } from '../../data/seedData';
 import { Building, Lock, Unlock, Plus, Trash2, ShieldCheck, Image as ImageIcon, DollarSign, MapPin, Tag, FileText, Upload, X } from 'lucide-react';
@@ -9,7 +10,17 @@ import { Building, Lock, Unlock, Plus, Trash2, ShieldCheck, Image as ImageIcon, 
 interface CreateBusinessModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (listing: Omit<BusinessListing, 'id' | 'status'> & Partial<BusinessListing>) => void;
+  /**
+   * Receives the finished listing (photo files are already uploaded; `photos` holds public URLs).
+   * `editingId` is set when an existing listing is being edited. Return `false` to keep the form open
+   * (e.g. the save failed) so the seller does not lose what they typed.
+   */
+  onSubmit: (
+    listing: Omit<BusinessListing, 'id' | 'status'> & Partial<BusinessListing>,
+    editingId?: string
+  ) => Promise<boolean | void> | boolean | void;
+  /** When set, the modal edits this listing instead of creating a new one. */
+  listing?: BusinessListing | null;
   currentUserId?: string;
   currency?: 'USD' | 'LRD';
 }
@@ -19,6 +30,7 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  listing,
   currentUserId,
   currency = 'USD'
 }) => {
@@ -38,10 +50,15 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
   const [customIndustry, setCustomIndustry] = useState('');
   const [establishedYear, setEstablishedYear] = useState<number>(new Date().getFullYear() - 5);
   const [employeeCount, setEmployeeCount] = useState<number>(8);
-  const [photos, setPhotos] = useState<string[]>([
-    'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=800&auto=format&fit=crop&q=80'
-  ]);
+  // Photos already stored (public URLs) plus freshly picked files that upload when the form is submitted.
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [pendingPhotos, setPendingPhotos] = useState<{ id: string; file: File; preview: string }[]>([]);
   const [photoUrlInput, setPhotoUrlInput] = useState('');
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const isEditing = !!listing;
+  const totalPhotos = photos.length + pendingPhotos.length;
 
   // Step 2: Location & Confidentiality
   const [county, setCounty] = useState<County>('Montserrado');
@@ -73,37 +90,135 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
   const [sellerContactPhone, setSellerContactPhone] = useState('');
   const [requestVerification, setRequestVerification] = useState(true);
 
+  // Fill the form from the listing when editing; start clean when creating.
+  useEffect(() => {
+    if (!isOpen) return;
+    setStep(1);
+    setSaveError(null);
+    setPhotoError(null);
+    setPendingPhotos((prev) => {
+      prev.forEach((p) => URL.revokeObjectURL(p.preview));
+      return [];
+    });
+    if (listing) {
+      setTitle(listing.title);
+      setIndustry(listing.industry);
+      setCustomIndustry('');
+      setEstablishedYear(listing.establishedYear || new Date().getFullYear());
+      setEmployeeCount(listing.employeeCount || 1);
+      setPhotos(listing.photos ?? []);
+      setCounty(listing.county);
+      setCityDistrict(listing.cityDistrict ?? '');
+      setLocationSummary('');
+      setIsConfidential(listing.isConfidential);
+      setPublicTeaser(listing.publicTeaser ?? '');
+      setConfidentialDescription(listing.confidentialDescription ?? '');
+      setAskingPriceUSD(listing.askingPriceUSD ?? 0);
+      setAnnualRevenueUSD(listing.annualRevenueUSD ?? 0);
+      setAnnualProfitUSD(listing.annualProfitUSD ?? 0);
+      setRevenueRange(listing.financialRanges?.revenueRange ?? '');
+      setProfitRange(listing.financialRanges?.profitRange ?? '');
+      setEbitdaRange(listing.financialRanges?.ebitdaRange ?? '');
+      setCashFlowRange(listing.financialRanges?.cashFlowRange ?? '');
+      setReasonForSale(listing.reasonForSale ?? '');
+      setAssets(listing.assetsIncluded ?? []);
+      setNewAssetInput('');
+      setSellerName(listing.sellerName ?? '');
+      setSellerContactEmail(listing.sellerContactEmail ?? '');
+      setSellerContactPhone(listing.sellerContactPhone ?? '');
+    } else {
+      setTitle('');
+      setIndustry(BUSINESS_INDUSTRIES[0]);
+      setCustomIndustry('');
+      setEstablishedYear(new Date().getFullYear() - 5);
+      setEmployeeCount(8);
+      setPhotos([]);
+      setCounty('Montserrado');
+      setCityDistrict('');
+      setLocationSummary('');
+      setIsConfidential(true);
+      setPublicTeaser('');
+      setConfidentialDescription('');
+      setAskingPriceUSD(150000);
+      setAnnualRevenueUSD(120000);
+      setAnnualProfitUSD(45000);
+      setRevenueRange('$100,000 - $250,000');
+      setProfitRange('$30,000 - $60,000');
+      setEbitdaRange('$50,000');
+      setCashFlowRange('$40,000 - $55,000');
+      setReasonForSale('');
+      setAssets([
+        'Registered Commercial Property Lease',
+        '3x Industrial Diesel Generators',
+        'Automated POS & Inventory System'
+      ]);
+      setNewAssetInput('');
+      setSellerName('Enterprise Owner');
+      setSellerContactEmail('');
+      setSellerContactPhone('');
+      setRequestVerification(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, listing?.id]);
+
+  // Release preview blobs when the modal unmounts.
+  const pendingRef = useRef(pendingPhotos);
+  pendingRef.current = pendingPhotos;
+  useEffect(() => () => pendingRef.current.forEach((p) => URL.revokeObjectURL(p.preview)), []);
+
   if (!isOpen) return null;
 
   const handleAddPhoto = () => {
-    if (photoUrlInput.trim()) {
-      setPhotos([...photos, photoUrlInput.trim()]);
-      setPhotoUrlInput('');
+    const url = photoUrlInput.trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) {
+      setPhotoError('Photo links must start with http:// or https://');
+      return;
     }
+    if (totalPhotos >= MAX_BUSINESS_PHOTOS) {
+      setPhotoError(`You can attach up to ${MAX_BUSINESS_PHOTOS} photos.`);
+      return;
+    }
+    setPhotoError(null);
+    setPhotos((prev) => (prev.includes(url) ? prev : [...prev, url]));
+    setPhotoUrlInput('');
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    // Copy the files BEFORE clearing the input: FileList is live, and clearing the input empties it.
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = ''; // lets the same file(s) be picked again
+    if (files.length === 0) return;
 
-    Array.from(files).forEach((file) => {
+    const room = MAX_BUSINESS_PHOTOS - totalPhotos;
+    const problems: string[] = [];
+    const accepted: { id: string; file: File; preview: string }[] = [];
+    for (const file of files) {
       const validation = validateUploadedFile(file, 'image');
       if (!validation.valid) {
-        alert(validation.error || 'Image upload failed validation.');
-        return;
+        problems.push(`${file.name}: ${validation.error || 'not a valid image'}`);
+        continue;
       }
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setPhotos((prev) => [...prev, event.target!.result as string]);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+      if (accepted.length >= room) {
+        problems.push(`${file.name}: photo limit (${MAX_BUSINESS_PHOTOS}) reached`);
+        continue;
+      }
+      accepted.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, file, preview: URL.createObjectURL(file) });
+    }
+    if (accepted.length) setPendingPhotos((prev) => [...prev, ...accepted]);
+    setPhotoError(problems.length ? problems.join(' \u2022 ') : null);
   };
 
   const handleRemovePhoto = (index: number) => {
-    setPhotos(photos.filter((_, i) => i !== index));
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleRemovePending = (id: string) => {
+    setPendingPhotos((prev) => {
+      const gone = prev.find((p) => p.id === id);
+      if (gone) URL.revokeObjectURL(gone.preview);
+      return prev.filter((p) => p.id !== id);
+    });
   };
 
   const handleAddAsset = () => {
@@ -117,8 +232,10 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
     setAssets(assets.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return;
+    setSaveError(null);
 
     const selectedInd = industry === 'Other' && customIndustry.trim() ? customIndustry.trim() : industry;
 
@@ -144,8 +261,8 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
       employeeCount,
       assetsIncluded: assets,
       reasonForSale,
-      isVerified: requestVerification,
-      moderationStatus: 'published',
+      isVerified: isEditing ? (listing?.isVerified ?? false) : requestVerification,
+      ...(isEditing ? {} : { moderationStatus: 'published' as const }),
       sellerName,
       sellerContactEmail,
       sellerContactPhone,
@@ -153,8 +270,21 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
       ownerUserId: currentUserId
     };
 
-    onSubmit(newListing);
-    onClose();
+    setIsSaving(true);
+    try {
+      // Upload every picked file first; the listing is only saved once all photos are stored.
+      const uploaded = await businessService.uploadPhotos(pendingPhotos.map((p) => p.file));
+      newListing.photos = [...photos, ...uploaded];
+      const result = await onSubmit(newListing, listing?.id);
+      if (result === false) return;
+      pendingPhotos.forEach((p) => URL.revokeObjectURL(p.preview));
+      setPendingPhotos([]);
+      onClose();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save the listing. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -162,7 +292,7 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="List your business for sale"
+        aria-label={isEditing ? 'Edit your business listing' : 'List your business for sale'}
         className="bg-white w-full max-w-2xl rounded-[32px] sm:rounded-[40px] border border-[#E8E4D9] shadow-2xl overflow-hidden max-h-[92dvh] flex flex-col"
       >
         {/* Header (fixed) */}
@@ -179,7 +309,7 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
             <Building className="w-4 h-4 shrink-0" />
             <span>Liberia Enterprise M&A Marketplace</span>
           </div>
-          <h3 className="text-xl sm:text-2xl font-serif font-bold text-[#132A13] pr-12">List Your Business For Sale</h3>
+          <h3 className="text-xl sm:text-2xl font-serif font-bold text-[#132A13] pr-12">{isEditing ? 'Edit Business Listing' : 'List Your Business For Sale'}</h3>
         </div>
 
         {/* Step indicator (fixed, so progress is always visible) */}
@@ -285,7 +415,7 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
                     <ImageIcon className="w-4 h-4 text-[#4F772D]" />
                     Business & Facility Photos Upload
                   </span>
-                  <span className="text-[11px] text-[#A3B18A]">{photos.length} Photos Added</span>
+                  <span className="text-[11px] text-[#A3B18A]">{totalPhotos} / {MAX_BUSINESS_PHOTOS} Photos</span>
                 </div>
 
                 {/* Local File Picker Button */}
@@ -309,6 +439,12 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
                       type="url"
                       value={photoUrlInput}
                       onChange={(e) => setPhotoUrlInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddPhoto();
+                        }
+                      }}
                       placeholder="Paste image URL (e.g. https://...)"
                       className="flex-1 text-xs p-2.5 bg-white rounded-xl border border-[#E8E4D9] outline-none"
                     />
@@ -322,21 +458,46 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
                   </div>
                 </div>
 
+                {photoError && (
+                  <p role="alert" className="text-[11px] font-semibold text-red-700">{photoError}</p>
+                )}
+
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-2">
                   {photos.map((url, idx) => (
-                    <div key={idx} className="relative group rounded-xl overflow-hidden h-20 border border-[#E8E4D9]">
+                    <div key={`saved-${url}`} className="relative group rounded-xl overflow-hidden h-20 border border-[#E8E4D9]">
                       <img src={url} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" />
                       <button
                         type="button"
                         onClick={() => handleRemovePhoto(idx)}
-                        className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-full opacity-80 hover:opacity-100 cursor-pointer"
+                        className="absolute top-1 right-1 p-1.5 bg-red-600 text-white rounded-full opacity-90 hover:opacity-100 cursor-pointer"
                         title="Remove photo"
+                        aria-label={`Remove photo ${idx + 1}`}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  {pendingPhotos.map((p) => (
+                    <div key={p.id} className="relative group rounded-xl overflow-hidden h-20 border border-dashed border-[#4F772D]">
+                      <img src={p.preview} alt={p.file.name} className="w-full h-full object-cover" />
+                      <span className="absolute bottom-0 inset-x-0 bg-[#283618]/80 text-white text-[9px] font-bold text-center py-0.5">
+                        Uploads on save
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePending(p.id)}
+                        className="absolute top-1 right-1 p-1.5 bg-red-600 text-white rounded-full opacity-90 hover:opacity-100 cursor-pointer"
+                        title="Remove photo"
+                        aria-label={`Remove ${p.file.name}`}
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
                     </div>
                   ))}
                 </div>
+                {totalPhotos === 0 && (
+                  <p className="text-[11px] text-[#606C38]">No photos yet. Listings without photos show a placeholder image.</p>
+                )}
               </div>
             </div>
           )}
@@ -597,7 +758,8 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
                 </div>
               </div>
 
-              {/* Verification Request Toggle */}
+              {/* Verification Request Toggle (new listings only) */}
+              {!isEditing && (
               <div className="p-4 bg-[#ECF3E9] rounded-2xl border border-[#D9E3D5] flex items-center justify-between">
                 <div className="space-y-1 pr-4">
                   <div className="text-xs font-bold text-[#132A13] flex items-center gap-1.5">
@@ -615,10 +777,17 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
                   className="w-5 h-5 rounded text-[#4F772D]"
                 />
               </div>
+              )}
             </div>
           )}
 
           </div>
+
+          {saveError && (
+            <div role="alert" className="flex-none px-4 sm:px-6 py-2 bg-red-50 border-t border-red-200 text-xs font-semibold text-red-700">
+              {saveError}
+            </div>
+          )}
 
           {/* Navigation (fixed footer) */}
           <div className="flex-none flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-t border-[#E8E4D9] bg-white">
@@ -651,9 +820,12 @@ export const CreateBusinessModal: React.FC<CreateBusinessModalProps> = ({
             ) : (
               <button
                 type="submit"
-                className="px-6 min-h-11 bg-[#4F772D] text-white rounded-xl text-xs font-bold shadow-lg hover:bg-[#283618] transition-all cursor-pointer"
+                disabled={isSaving}
+                className="px-6 min-h-11 bg-[#4F772D] text-white rounded-xl text-xs font-bold shadow-lg hover:bg-[#283618] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-wait"
               >
-                Publish Business Listing
+                {isSaving
+                  ? pendingPhotos.length > 0 ? 'Uploading photos…' : 'Saving…'
+                  : isEditing ? 'Save Changes' : 'Publish Business Listing'}
               </button>
             )}
           </div>
