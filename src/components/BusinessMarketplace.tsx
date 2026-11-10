@@ -121,6 +121,7 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
 
   // Modals state
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingListing, setEditingListing] = useState<BusinessListing | null>(null);
   const [detailModalListing, setDetailModalListing] = useState<BusinessListing | null>(null);
   const [contactModalListing, setContactModalListing] = useState<BusinessListing | null>(null);
 
@@ -231,13 +232,25 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
     }
   };
 
-  const handleCreateSubmit = async (listingData: Omit<BusinessListing, 'id' | 'status'> & Partial<BusinessListing>) => {
+  const handleCreateSubmit = async (
+    listingData: Omit<BusinessListing, 'id' | 'status'> & Partial<BusinessListing>,
+    editingId?: string
+  ): Promise<boolean> => {
     try {
-      await businessService.createListing(listingData);
+      if (editingId) {
+        const res = await businessService.updateListing(editingId, listingData);
+        if (res.error || !res.data) throw new Error(res.error?.message || 'Could not save your changes.');
+        showToast('Listing updated.', 'success');
+      } else {
+        const res = await businessService.createListing(listingData);
+        if (res.error || !res.data) throw new Error(res.error?.message || 'Could not create the listing.');
+      }
       await reloadListings();
+      return true;
     } catch (err) {
-      console.error('Failed to create business listing', err);
-      showToast(errorMessage(err, 'Could not create the listing.'), 'error');
+      console.error('Failed to save business listing', err);
+      showToast(errorMessage(err, editingId ? 'Could not save your changes.' : 'Could not create the listing.'), 'error');
+      return false;
     }
   };
 
@@ -630,6 +643,15 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
                         </span>
 
                         <div className="flex items-center gap-2">
+                          {activeTab === 'my_listings' && biz.ownerUserId === currentUserId && (
+                            <button
+                              onClick={() => setEditingListing(biz)}
+                              data-testid="edit-listing"
+                              className="px-3.5 py-2 bg-white hover:bg-[#F9F8F4] text-[#283618] rounded-xl text-xs font-bold border border-[#E8E4D9] cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                          )}
                           {activeTab === 'my_listings' && biz.ownerUserId === currentUserId && biz.status === 'published' && (
                             <button
                               onClick={() => {
@@ -738,8 +760,12 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
 
       {/* CREATE BUSINESS MODAL */}
       <CreateBusinessModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        isOpen={showCreateModal || !!editingListing}
+        listing={editingListing}
+        onClose={() => {
+          setShowCreateModal(false);
+          setEditingListing(null);
+        }}
         onSubmit={handleCreateSubmit}
         currentUserId={currentUserId}
         currency={currency}
@@ -758,6 +784,7 @@ export const BusinessMarketplace: React.FC<BusinessMarketplaceProps> = ({
           onMessageSeller={handleMessageSeller}
           currency={currency}
           currentUserId={currentUserId}
+          onEditListing={(biz) => setEditingListing(biz)}
           onDeleteListing={handleDeleteListing}
         />
       )}
