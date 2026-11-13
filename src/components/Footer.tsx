@@ -1,5 +1,4 @@
 import React from 'react';
-import { ShieldCheck, MapPin } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getFeatureAccess } from '../core/auth/featureAccess';
 import { LEGAL_NAV, legalPath } from '../legal/legalConfig';
@@ -10,42 +9,50 @@ interface FooterProps {
   onOpenVerification: () => void;
 }
 
+// GitHub-style footer: dark slate surface, centered muted links that wrap
+// into rows, then the brand mark + copyright on the last line.
+const linkClass =
+  'inline-flex items-center min-h-11 px-2 text-sm text-[#9198A1] hover:text-[#4F772D] hover:underline underline-offset-2 transition-colors cursor-pointer bg-transparent border-0';
+
 export const Footer: React.FC<FooterProps> = ({ onOpenSafetyModal, onOpenVerification }) => {
   const { authContext } = useAuth();
   const canSeeVerification = getFeatureAccess(authContext).tabs.verification.allowed;
-  return (
-    <footer className="bg-[#F2F2EC] border-t border-[#E8E4D9] px-4 sm:px-10 py-3 sm:py-0 sm:min-h-14 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 text-[11px] font-bold text-[#A3B18A] uppercase tracking-wider shrink-0 mt-auto">
-      <div className="text-center sm:text-left">
-        © 2026 Lib<span className="text-[#4F772D]">Rise</span> • ALL 15 COUNTIES
-      </div>
 
-      <div className="flex items-center gap-4 sm:gap-6 text-xs normal-case tracking-normal">
-        <button
-          onClick={onOpenSafetyModal}
-          className="text-[#606C38] hover:text-[#283618] transition-colors"
-        >
-          Safety & Anti-Scam Policy
+  return (
+    <footer className="bg-[#22272E] w-full shrink-0 mt-auto px-4 pt-8 pb-6 flex flex-col items-center gap-3 text-center">
+      <nav
+        aria-label="Footer"
+        className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0 max-w-xl"
+      >
+        <button type="button" onClick={onOpenSafetyModal} className={linkClass}>
+          Safety
         </button>
         {canSeeVerification && (
-          <button
-            onClick={onOpenVerification}
-            className="text-[#606C38] hover:text-[#283618] transition-colors"
-          >
-            LBR Verification Standards
+          <button type="button" onClick={onOpenVerification} className={linkClass}>
+            Verification
           </button>
         )}
-      </div>
-
-      <nav aria-label="Legal" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs normal-case tracking-normal">
         {LEGAL_NAV.map((n) => (
-          <a key={n.slug} href={`#${legalPath(n.slug)}`} className="min-h-11 inline-flex items-center text-[#606C38] hover:text-[#283618] transition-colors">
-            {n.label}
+          <a key={n.slug} href={`#${legalPath(n.slug)}`} className={linkClass}>
+            {n.short}
           </a>
         ))}
-        <button type="button" onClick={openCookieSettings} className="min-h-11 inline-flex items-center text-[#606C38] hover:text-[#283618] transition-colors cursor-pointer">
-          Cookie settings
+        <button type="button" onClick={openCookieSettings} className={linkClass}>
+          Manage cookies
         </button>
       </nav>
+
+      <div className="flex items-center justify-center gap-2 text-sm text-[#9198A1]">
+        <span
+          aria-hidden="true"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#283618]"
+        >
+          <span className="h-3 w-3 rounded-full border-2 border-[#9198A1]" />
+        </span>
+        <span>
+          © 2026 Lib<span className="text-[#4F772D]">Rise</span>, Liberia · All 15 counties
+        </span>
+      </div>
     </footer>
   );
 };
