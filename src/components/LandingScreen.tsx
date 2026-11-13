@@ -167,17 +167,17 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ onEnterPortal }) =
       </section>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-[#E8E4D9] py-8 px-6 text-center text-xs text-stone-500 space-y-2">
+      <footer className="bg-[#F2F2EC] border-t border-[#E8E4D9] py-3 px-4 text-center text-xs text-stone-500 space-y-1">
         <p>© 2026 LibRise. All rights reserved.</p>
         <p className="text-stone-400">Organisation verification is based on documents such as Liberia Business Registry (LBR) certificates and tax clearance. LibRise is an independent platform and is not a government service.</p>
-        <nav aria-label="Legal" className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1 pt-2">
+        <nav aria-label="Legal" className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0 pt-0">
           {LEGAL_NAV.map((n) => (
-            <a key={n.slug} href={`#${legalPath(n.slug)}`} className="min-h-11 inline-flex items-center font-semibold text-[#606C38] hover:text-[#283618] underline-offset-2 hover:underline">
-              {n.label}
+            <a key={n.slug} href={`#${legalPath(n.slug)}`} className="min-h-8 inline-flex items-center font-semibold text-[#606C38] hover:text-[#283618] underline-offset-2 hover:underline">
+              {n.short}
             </a>
           ))}
-          <button type="button" onClick={openCookieSettings} className="min-h-11 inline-flex items-center font-semibold text-[#606C38] hover:text-[#283618] underline-offset-2 hover:underline cursor-pointer">
-            Cookie settings
+          <button type="button" onClick={openCookieSettings} className="min-h-8 inline-flex items-center font-semibold text-[#606C38] hover:text-[#283618] underline-offset-2 hover:underline cursor-pointer">
+            Manage cookies
           </button>
         </nav>
       </footer>
