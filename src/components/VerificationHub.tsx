@@ -216,7 +216,7 @@ export const VerificationHub: React.FC<VerificationHubProps> = ({
                       <div className="flex items-center gap-2 flex-wrap">
                         {item.documents.map((doc, idx) => (
                           <span key={idx} className="text-[11px] px-2 py-0.5 bg-[#F9F8F4] border border-[#E8E4D9] rounded-md text-[#606C38]">
-                            📄 {doc} <span className="text-[#A3B18A]">(file not stored)</span>
+                            📄 {doc} <span className="text-[#A3B18A]">(uploaded before file storage — ask the applicant to re-submit)</span>
                           </span>
                         ))}
                       </div>

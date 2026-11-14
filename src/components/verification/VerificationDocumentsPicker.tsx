@@ -101,7 +101,7 @@ export const VerificationDocumentsPicker: React.FC<Props> = ({ documents, onChan
           </div>
         </div>
       )}
-      <input ref={inputRef} type="file" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onChange={handlePick} disabled={disabled} className="hidden" tabIndex={-1} />
+      <input ref={inputRef} type="file" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg" onChange={handlePick} disabled={disabled} className="hidden" tabIndex={-1} />
 
       {error && (
         <p role="alert" className="flex items-start gap-1.5 text-[11px] text-red-700">
