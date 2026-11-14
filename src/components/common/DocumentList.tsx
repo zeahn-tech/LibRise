@@ -130,6 +130,81 @@ const PdfPreviewModal: React.FC<{ doc: Row; onClose: () => void }> = ({ doc, onC
   );
 };
 
+const isDocxFile = (d: Pick<ListedDocument, 'fileName' | 'fileType'>) =>
+  /\.docx$/i.test(d.fileName) || d.fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+/** In-app Word (.docx) viewer: converts to HTML in the browser and shows it in a script-free sandboxed frame. */
+const DocxPreviewModal: React.FC<{ doc: Row; onClose: () => void }> = ({ doc, onClose }) => {
+  const [html, setHtml] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(doc.url!);
+        if (!res.ok) throw new Error(String(res.status));
+        const mammoth = await import('mammoth');
+        const out = await mammoth.convertToHtml({ arrayBuffer: await res.arrayBuffer() });
+        if (!cancelled) setHtml(out.value || '<p>(This document has no readable text.)</p>');
+      } catch {
+        if (!cancelled) setError(true);
+      }
+    })();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    document.addEventListener('keydown', onKey);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [doc.url, onClose]);
+
+  const srcDoc = html
+    ? `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:15px/1.6 system-ui,sans-serif;color:#283618;padding:16px;word-wrap:break-word}img{max-width:100%}table{border-collapse:collapse;max-width:100%}td,th{border:1px solid #ccc;padding:4px 8px}</style>${html}`
+    : '';
+
+  return (
+    <div role="dialog" aria-modal="true" aria-label={`Preview of ${doc.fileName}`} className="fixed inset-0 z-[70] bg-black/85 flex flex-col">
+      <div className="flex items-center justify-between gap-3 p-3 text-white">
+        <p className="text-sm font-semibold truncate min-w-0">{doc.fileName}</p>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            aria-label="Download"
+            disabled={downloading}
+            onClick={async () => {
+              setDownloading(true);
+              try {
+                await downloadAttachment(toAttachment(doc));
+              } finally {
+                setDownloading(false);
+              }
+            }}
+            className="min-w-11 min-h-11 flex items-center justify-center rounded-xl hover:bg-white/10"
+          >
+            {downloading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+          </button>
+          <button type="button" onClick={onClose} aria-label="Close preview" className="min-w-11 min-h-11 flex items-center justify-center rounded-xl hover:bg-white/10">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 bg-white">
+        {error ? (
+          <div className="h-full flex flex-col items-center justify-center gap-2 text-[#283618] text-sm p-6 text-center">
+            <AlertCircle className="w-6 h-6" /> This document could not be previewed. Use Download to open it in Word.
+          </div>
+        ) : html === null ? (
+          <div className="h-full flex items-center justify-center text-[#283618]"><Loader2 className="w-6 h-6 animate-spin" /></div>
+        ) : (
+          <iframe title={doc.fileName} sandbox="" srcDoc={srcDoc} className="w-full h-full bg-white" />
+        )}
+      </div>
+    </div>
+  );
+};
+
 const DownloadButton: React.FC<{ doc: Row; disabled: boolean }> = ({ doc, disabled }) => {
   const [busy, setBusy] = useState(false);
   return (
@@ -157,7 +232,7 @@ const DownloadButton: React.FC<{ doc: Row; disabled: boolean }> = ({ doc, disabl
 
 /**
  * Generic list of stored files with View + Download. Images open in a zoomable lightbox, PDFs in an in-app viewer;
- * Word/RTF/TXT files download under their real name. Used for application CVs and verification evidence.
+ * DOCX opens in an in-app reader; legacy .doc files download under their real name. Used for application CVs and verification evidence.
  */
 export const DocumentList: React.FC<Props> = ({
   documents,
@@ -171,6 +246,7 @@ export const DocumentList: React.FC<Props> = ({
   const [failed, setFailed] = useState(false);
   const [imageDoc, setImageDoc] = useState<Row | null>(null);
   const [pdfDoc, setPdfDoc] = useState<Row | null>(null);
+  const [docxDoc, setDocxDoc] = useState<Row | null>(null);
 
   // Stable key so a parent re-render with an equal list does not refetch signed URLs.
   const key = documents.map((d) => d.path || d.id).join('|');
@@ -214,6 +290,7 @@ export const DocumentList: React.FC<Props> = ({
         const att = toAttachment(doc);
         const image = isImageAttachment(att);
         const pdf = isPdfAttachment(att);
+        const docx = isDocxFile(doc);
         const ready = !!doc.url;
         const neverStored = !doc.path && !doc.directUrl;
         return (
@@ -227,11 +304,11 @@ export const DocumentList: React.FC<Props> = ({
                 {!ready && !neverStored && loading && ' · Loading…'}
               </p>
             </div>
-            {(image || pdf) && (
+            {(image || pdf || docx) && (
               <button
                 type="button"
                 disabled={!ready}
-                onClick={() => (image ? setImageDoc(doc) : setPdfDoc(doc))}
+                onClick={() => (image ? setImageDoc(doc) : docx ? setDocxDoc(doc) : setPdfDoc(doc))}
                 aria-label={`View ${doc.fileName}`}
                 className="inline-flex items-center gap-1.5 min-h-11 px-3 rounded-xl text-xs font-bold text-[#283618] border border-[#D9E3D5] hover:bg-[#ECF3E9] disabled:opacity-40 cursor-pointer"
               >
@@ -245,6 +322,7 @@ export const DocumentList: React.FC<Props> = ({
 
       {imageDoc && <AttachmentLightbox attachment={toAttachment(imageDoc)} onClose={() => setImageDoc(null)} />}
       {pdfDoc && <PdfPreviewModal doc={pdfDoc} onClose={() => setPdfDoc(null)} />}
+      {docxDoc && <DocxPreviewModal doc={docxDoc} onClose={() => setDocxDoc(null)} />}
     </div>
   );
 };
