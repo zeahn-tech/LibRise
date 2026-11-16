@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2, X } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import { accountService, AccountDeletionError, type DeletionBlocker, type ServerStatus } from '../../services/accountService';
 
 interface Props {
@@ -17,6 +18,25 @@ const DELETED = [
   'Your sign-in account. You can register again later with the same email.'
 ];
 
+const EMPLOYER_DELETED = [
+  'Your profile and your place on every organization team you belong to',
+  'Business listings you posted, and your business enquiries and saved listings',
+  'Every verification document you uploaded (business certificate, tax clearance, accreditation letter, permits) and your notes on them',
+  'The tax ID and licence numbers and your name and email on your verification requests',
+  'Your notifications, and every other file you uploaded, including message attachments',
+  'Any CV or applications you created as a job seeker',
+  'Your sign-in account. You can register again later with the same email.'
+];
+
+const EMPLOYER_KEPT = [
+  'Your organization stays. If other people are on its team they keep running it, and its vacancies stay live. If you were the only member, the organization stays but its vacancies are closed',
+  'If you are the only owner of a team that has other members, you must make another member an owner first. This dialog tells you if that applies',
+  'Applications your organization already received stay with the organization and the candidates',
+  'The outcome of your verification (approved or rejected, the date, the reviewer, your organization name and registration number), without your documents or personal details',
+  'Messages you sent stay visible to the people you sent them to, shown as from “Deleted user”',
+  'Payment records, safety reports and the audit trail, which we must keep for accounting and security'
+];
+
 const KEPT = [
   'Messages you sent stay visible to the people you sent them to, shown as from “Deleted user”',
   'Payment records, safety reports and the audit trail, which we must keep for accounting and security',
@@ -25,6 +45,10 @@ const KEPT = [
 
 /** Confirms and performs deleting the signed-in person's own account. */
 export const DeleteAccountDialog: React.FC<Props> = ({ onClose, onFinished }) => {
+  const { user } = useAuth();
+  const employerSide = user?.primaryRole === 'employer' || user?.primaryRole === 'recruiter';
+  const deletedItems = employerSide ? EMPLOYER_DELETED : DELETED;
+  const keptItems = employerSide ? EMPLOYER_KEPT : KEPT;
   const [blockers, setBlockers] = useState<DeletionBlocker[] | null>(null);
   const [checkError, setCheckError] = useState('');
   const [password, setPassword] = useState('');
@@ -162,13 +186,13 @@ export const DeleteAccountDialog: React.FC<Props> = ({ onClose, onFinished }) =>
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-[#A3B18A] mb-1.5">What will be deleted</p>
                   <ul className="list-disc pl-5 space-y-1 text-xs text-[#2D2D2D] marker:text-red-500">
-                    {DELETED.map((t) => <li key={t}>{t}</li>)}
+                    {deletedItems.map((t) => <li key={t}>{t}</li>)}
                   </ul>
                 </div>
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider text-[#A3B18A] mb-1.5">What we keep</p>
                   <ul className="list-disc pl-5 space-y-1 text-xs text-[#2D2D2D] marker:text-[#A3B18A]">
-                    {KEPT.map((t) => <li key={t}>{t}</li>)}
+                    {keptItems.map((t) => <li key={t}>{t}</li>)}
                   </ul>
                 </div>
               </div>
