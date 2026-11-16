@@ -117,7 +117,10 @@ export const DeleteAccountDialog: React.FC<Props> = ({ onClose, onFinished }) =>
                 <p className="text-xs text-[#606C38] flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Checking your account…</p>
               )}
               {server === 'checking' && (
-                <p className="text-xs text-[#606C38] flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Contacting the server… this can take up to a minute if it was asleep.</p>
+                <div role="status" aria-live="polite" className="flex items-center gap-3 rounded-2xl border border-[#E8D9A8] bg-[#FEFAE0] p-4">
+                  <Loader2 className="w-6 h-6 shrink-0 animate-spin text-[#BC6C25]" />
+                  <p className="text-base font-extrabold leading-snug text-[#283618]">Please wait while we prepare your data for deletion…</p>
+                </div>
               )}
               {server === 'blocked' && (
                 <div role="alert" className="rounded-2xl border border-[#E8D9A8] bg-[#FEFAE0] p-4 space-y-2">
