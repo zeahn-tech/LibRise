@@ -25,6 +25,10 @@ insert into public.applications (id, opportunity_id, applicant_user_id, organiza
  ('app-ad-1','opp-ad-team','0d0d0d0d-0000-4000-8000-000000000001','org-ad-team','AD Del','ad-del@example.com','submitted','[{"id":"d1","path":"0d0d0d0d-0000-4000-8000-000000000001/app-ad-1/cv.pdf"}]'::jsonb);
 insert into public.candidate_profiles (user_id, headline, cv_raw_text, cv_file_url, cv_data_json, privacy_settings) values
  ('0d0d0d0d-0000-4000-8000-000000000001','AD headline','cv text',null,'{}'::jsonb,'{}'::jsonb);
+insert into public.verification_requests (id, entity_type, entity_id, entity_name, submitter_user_id, submitter_name, submitter_email, status, badge_requested, registration_number, tax_id_number, license_number, county, evidence_documents, evidence_notes) values
+ ('vreq-ad-solo','organization','org-ad-solo','AD Solo Org','0d0d0d0d-0000-4000-8000-000000000004','AD Solo','ad-solo@example.com','verified','verified_company','LBR-AD-1','TIN-AD-1','LIC-AD-1','Montserrado','[{"id":"vd1","path":"0d0d0d0d-0000-4000-8000-000000000004/vreq-ad-solo/lbr.pdf"}]'::jsonb,'my private notes');
+insert into public.verification_audits (id, organization_id, requested_by_user_id, status, requested_badge, documents_submitted) values
+ ('vreq-ad-solo','org-ad-solo','0d0d0d0d-0000-4000-8000-000000000004','approved','verified_company','["lbr.pdf"]'::jsonb);
 insert into public.notifications (id, recipient_user_id, category, title, message) values
  ('ntf-ad-1','0d0d0d0d-0000-4000-8000-000000000001','system_alert','hello','fixture');
 
@@ -76,6 +80,9 @@ reset role;
 insert into test_log(line) select * from extensions.is((select status from public.opportunities where id = 'opp-ad-solo')::text, 'closed'::text, 'the vacancy of the orphaned organization is closed');
 insert into test_log(line) select * from extensions.is((select count(*) from public.organizations where id = 'org-ad-solo'), 1::bigint, 'the organization itself is kept');
 insert into test_log(line) select * from extensions.is((select count(*) from public.organization_memberships where user_id = '0d0d0d0d-0000-4000-8000-000000000004'), 1::bigint, 'the last owner row is kept so the organization still has an owner (the closed account)');
+insert into test_log(line) select * from extensions.is((select evidence_documents::text || '|' || coalesce(evidence_notes,'none') || '|' || coalesce(tax_id_number,'none') || '|' || coalesce(license_number,'none') || '|' || submitter_name from public.verification_requests where id = 'vreq-ad-solo'), '[]|none|none|none|Deleted user'::text, 'verification documents, notes, TIN, licence number and submitter name are scrubbed');
+insert into test_log(line) select * from extensions.is((select registration_number || '|' || status from public.verification_requests where id = 'vreq-ad-solo'), 'LBR-AD-1|verified'::text, 'the verification decision record is kept');
+insert into test_log(line) select * from extensions.is((select documents_submitted::text from public.verification_audits where id = 'vreq-ad-solo'), '[]'::text, 'the audit row no longer lists documents');
 select set_config('role','authenticated',true), set_config('request.jwt.claim.sub','0d0d0d0d-0000-4000-8000-000000000003',true);
 insert into test_log(line) select * from extensions.lives_ok($$select public.delete_my_account()$$, '[non-owner team member] can delete');
 reset role;
