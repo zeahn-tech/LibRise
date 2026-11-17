@@ -1,0 +1,56 @@
+# Render Blueprint for LibRise (Express + SPA, built from the repository Dockerfile).
+# Two web services from the same repo: staging deploys automatically once CI passes;
+# production deploys only through the approval-gated GitHub workflow (.github/workflows/deploy-production.yml).
+#
+# Variables marked `sync: false` are entered once in the Render dashboard and are never stored in Git.
+# Render passes a Docker service's variables to the image build as build args, which is how the
+# public VITE_* values reach the frontend bundle. The Dockerfile only declares the PUBLIC ones as ARG,
+# so server secrets (service-role key, Gemini key) never enter the image.
+services:
+  - type: web
+    name: librise-staging
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    branch: main
+    plan: starter
+    region: frankfurt            # match your Supabase region (eu-west-1 is Ireland; frankfurt is the closest Render region)
+    healthCheckPath: /api/ai/health
+    autoDeployTrigger: checksPass   # deploy only when the commit's CI checks pass
+    envVars:
+      - { key: NODE_ENV, value: production }
+      - { key: PORT, value: "10000" }
+      - { key: TRUST_PROXY_HOPS, value: "1" }
+      - { key: VITE_APP_ENV, value: staging }
+      - { key: VITE_API_BASE_URL, value: /api }
+      - { key: VITE_SUPABASE_URL, sync: false }          # STAGING Supabase project URL
+      - { key: VITE_SUPABASE_ANON_KEY, sync: false }     # STAGING anon/publishable key
+      - { key: SUPABASE_SERVICE_ROLE_KEY, sync: false }  # STAGING service-role key (server only)
+      - { key: GEMINI_API_KEY, sync: false }
+      - { key: ALLOWED_ORIGINS, sync: false }            # e.g. https://librise-staging.onrender.com
+      - { key: VITE_MOMO_MTN_NUMBER, sync: false }
+      - { key: VITE_MOMO_ORANGE_NUMBER, sync: false }
+      - { key: VITE_MOMO_ACCOUNT_NAME, sync: false }
+
+  - type: web
+    name: librise-production
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    branch: main
+    plan: starter
+    region: frankfurt
+    healthCheckPath: /api/ai/health
+    autoDeployTrigger: "off"        # production only deploys via the approved GitHub workflow (deploy hook)
+    envVars:
+      - { key: NODE_ENV, value: production }
+      - { key: PORT, value: "10000" }
+      - { key: TRUST_PROXY_HOPS, value: "1" }
+      - { key: VITE_APP_ENV, value: production }
+      - { key: VITE_API_BASE_URL, value: /api }
+      - { key: VITE_SUPABASE_URL, sync: false }          # PRODUCTION Supabase project URL
+      - { key: VITE_SUPABASE_ANON_KEY, sync: false }
+      - { key: SUPABASE_SERVICE_ROLE_KEY, sync: false }
+      - { key: GEMINI_API_KEY, sync: false }
+      - { key: ALLOWED_ORIGINS, sync: false }            # your real domain(s)
+      - { key: VITE_MOMO_MTN_NUMBER, sync: false }
+      - { key: VITE_MOMO_ORANGE_NUMBER, sync: false }
+      - { key: VITE_MOMO_ACCOUNT_NAME, sync: false }

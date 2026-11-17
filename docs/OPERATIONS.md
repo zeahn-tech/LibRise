@@ -56,7 +56,7 @@ db.resetToDefaultSeedData();
 ## 4. Key Rotation & SSL Management
 
 ### SSL Expirations
-- Native Cloud Run deployments handle Let's Encrypt certificate renewals automatically.
+- Render provisions and renews TLS certificates for custom domains automatically.
 - For external Nginx ingress models, ensure certbot is scheduled as a background system cron job.
 
 ### Rotating Session Secrets
