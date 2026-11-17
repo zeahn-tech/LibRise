@@ -28,7 +28,10 @@ export function readAuthEnv(env: NodeJS.ProcessEnv = process.env): SupabaseAuthE
   return {
     supabaseUrl: env.VITE_SUPABASE_URL || env.SUPABASE_URL,
     supabaseAnonKey: env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY,
-    demoModeEnabled: (env.VITE_ENABLE_DEMO_MODE || '').toLowerCase() === 'true'
+    // Demo-mode sessions are in-memory seed accounts. They must never be honoured by a production
+    // server, even if VITE_ENABLE_DEMO_MODE=true leaks into its environment.
+    demoModeEnabled:
+      (env.VITE_ENABLE_DEMO_MODE || '').toLowerCase() === 'true' && env.NODE_ENV !== 'production'
   };
 }
 

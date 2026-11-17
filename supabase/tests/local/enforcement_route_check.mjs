@@ -2,7 +2,7 @@
 // and PostgREST, with the Supabase Auth service SIMULATED by a local stub (token lookup + Auth
 // Admin API). It proves the route's authorization, targeting, failure and convergence behaviour
 // and that the service-role credential is only ever sent from the server. It does NOT prove how a
-// real hosted Auth service behaves. Needs: dist/server.cjs (npm run build), PostgREST on :3999,
+// real hosted Auth service behaves. Needs: build/server.cjs (npm run build), PostgREST on :3999,
 // psql env (PGHOST/PGPORT/PGUSER) and DBNAME. Port 3000 must be free (the server port is fixed).
 import http from 'node:http';
 import crypto from 'node:crypto';
@@ -11,8 +11,8 @@ import fs from 'node:fs';
 
 const DB = process.env.DBNAME, POSTGREST = process.env.POSTGREST_URL || 'http://127.0.0.1:3999';
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-jwt-token-with-at-least-32-characters-long';
-const SERVER_BUNDLE = new URL('../../../dist/server.cjs', import.meta.url).pathname;
-if (!fs.existsSync(SERVER_BUNDLE)) { console.log('SKIPPED: dist/server.cjs not built (run npm run build)'); process.exit(0); }
+const SERVER_BUNDLE = new URL('../../../build/server.cjs', import.meta.url).pathname;
+if (!fs.existsSync(SERVER_BUNDLE)) { console.log('SKIPPED: build/server.cjs not built (run npm run build)'); process.exit(0); }
 
 const ADMIN = '11111111-aaaa-4000-8000-000000000003', OTHER = '11111111-aaaa-4000-8000-000000000002';
 const SUSP = '11111111-aaaa-4000-8000-000000000004', FAILER = '22222222-aaaa-4000-8000-000000000001', PREV = '22222222-aaaa-4000-8000-000000000002';

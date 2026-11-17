@@ -1,0 +1,12 @@
+node_modules
+dist
+build
+.git
+.github
+.env*
+!.env.example
+coverage
+docs
+supabase/tests
+*.log
+.DS_Store

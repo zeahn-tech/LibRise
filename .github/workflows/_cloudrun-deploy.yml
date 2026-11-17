@@ -1,0 +1,141 @@
+# Reusable workflow: build the container for ONE environment, deploy it to Cloud Run with no traffic,
+# health-check the candidate revision, shift traffic, re-check, and roll back automatically on failure.
+#
+# Vite inlines the public VITE_* values at build time, so the image is immutable per (commit, environment):
+# it is built once, tagged with the commit SHA, and deployed by digest. Server secrets are never baked in;
+# they are mounted from Secret Manager at runtime.
+name: Cloud Run deploy (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      ref:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write   # Workload Identity Federation (no long-lived keys in GitHub)
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Protection rules (required reviewers for "production") are configured on the GitHub environment.
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: cloudrun-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      PROJECT: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+      IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.AR_REPO }}/librise
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Refuse to deploy a build that would enable demo mode
+        run: |
+          if [ "${{ vars.VITE_ENABLE_DEMO_MODE }}" = "true" ]; then
+            echo "VITE_ENABLE_DEMO_MODE must not be true for ${{ inputs.environment }}."; exit 1
+          fi
+          for v in VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY GCP_PROJECT_ID GCP_REGION CLOUD_RUN_SERVICE AR_REPO; do
+            case "$v" in
+              VITE_SUPABASE_URL) val="${{ vars.VITE_SUPABASE_URL }}";;
+              VITE_SUPABASE_ANON_KEY) val="${{ vars.VITE_SUPABASE_ANON_KEY }}";;
+              GCP_PROJECT_ID) val="${{ vars.GCP_PROJECT_ID }}";;
+              GCP_REGION) val="${{ vars.GCP_REGION }}";;
+              CLOUD_RUN_SERVICE) val="${{ vars.CLOUD_RUN_SERVICE }}";;
+              AR_REPO) val="${{ vars.AR_REPO }}";;
+            esac
+            [ -n "$val" ] || { echo "Missing required environment variable: $v"; exit 1; }
+          done
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.WIF_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build image (public config only; build runs the bundle-confidentiality checks)
+        run: |
+          docker build \
+            --build-arg VITE_SUPABASE_URL="${{ vars.VITE_SUPABASE_URL }}" \
+            --build-arg VITE_SUPABASE_ANON_KEY="${{ vars.VITE_SUPABASE_ANON_KEY }}" \
+            --build-arg VITE_API_BASE_URL="${{ vars.VITE_API_BASE_URL || '/api' }}" \
+            --build-arg VITE_MOMO_MTN_NUMBER="${{ vars.VITE_MOMO_MTN_NUMBER }}" \
+            --build-arg VITE_MOMO_ORANGE_NUMBER="${{ vars.VITE_MOMO_ORANGE_NUMBER }}" \
+            --build-arg VITE_MOMO_ACCOUNT_NAME="${{ vars.VITE_MOMO_ACCOUNT_NAME }}" \
+            -t "${IMAGE}:${{ github.sha }}-${{ inputs.environment }}" .
+
+      - name: Push and resolve immutable digest
+        id: push
+        run: |
+          docker push "${IMAGE}:${{ github.sha }}-${{ inputs.environment }}"
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "${IMAGE}:${{ github.sha }}-${{ inputs.environment }}")
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Remember the revision currently serving traffic (rollback target)
+        id: prev
+        run: |
+          PREV=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" \
+                 --format='value(status.traffic[0].revisionName)' 2>/dev/null || true)
+          echo "revision=${PREV}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy candidate revision with NO traffic
+        id: deploy
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --project "$PROJECT" --region "$REGION" \
+            --image "${{ steps.push.outputs.digest }}" \
+            --no-traffic --tag candidate \
+            --port 8080 --cpu 1 --memory 512Mi --min-instances 0 --max-instances 10 \
+            --ingress all --allow-unauthenticated \
+            --set-env-vars "NODE_ENV=production,TRUST_PROXY_HOPS=1,ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS }},VITE_SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }},VITE_SUPABASE_ANON_KEY=${{ vars.VITE_SUPABASE_ANON_KEY }}" \
+            --set-secrets "SUPABASE_SERVICE_ROLE_KEY=${{ vars.SECRET_SERVICE_ROLE }}:latest,GEMINI_API_KEY=${{ vars.SECRET_GEMINI }}:latest"
+          URL=$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" \
+                --format='value(status.traffic[?tag="candidate"].url)')
+          echo "candidate_url=${URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke-test the candidate revision (no user traffic yet)
+        run: |
+          set -e
+          U="${{ steps.deploy.outputs.candidate_url }}"
+          for i in 1 2 3 4 5 6; do curl -fsS "$U/api/ai/health" && ok=1 && break || sleep 5; done
+          [ "${ok:-0}" = 1 ] || { echo "Health check failed"; exit 1; }
+          [ "$(curl -s -o /dev/null -w '%{http_code}' "$U/")" = "200" ]
+          [ "$(curl -s -o /dev/null -w '%{http_code}' "$U/api/does-not-exist")" = "404" ]
+          # The server bundle must never be downloadable.
+          for p in /server.cjs /server.cjs.map /build/server.cjs; do
+            if curl -fsS "$U$p" | head -c 200 | grep -qE 'sourcesContent|"version":3|require\("'; then
+              echo "Server bundle exposed at $p"; exit 1; fi
+          done
+          # Unauthenticated callers must be rejected on protected routes.
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$U/api/ai/parse-cv")" = "401" ]
+
+      - name: Shift 100% of traffic to the new revision
+        run: |
+          gcloud run services update-traffic "$SERVICE" --project "$PROJECT" --region "$REGION" --to-latest
+
+      - name: Post-deploy check (live URL)
+        id: live
+        run: |
+          set -e
+          LIVE=$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format='value(status.url)')
+          for i in 1 2 3 4 5 6; do curl -fsS "$LIVE/api/ai/health" && exit 0 || sleep 5; done
+          exit 1
+
+      - name: Roll back to the previous revision
+        if: failure() && steps.prev.outputs.revision != '' && steps.deploy.conclusion == 'success'
+        run: |
+          gcloud run services update-traffic "$SERVICE" --project "$PROJECT" --region "$REGION" \
+            --to-revisions "${{ steps.prev.outputs.revision }}=100"
+          echo "::error::Deployment failed; traffic restored to ${{ steps.prev.outputs.revision }}"

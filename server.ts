@@ -6,6 +6,7 @@ import Stripe from 'stripe';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
 import helmet from 'helmet';
+import { buildHelmetOptions } from './server/securityHeaders.js';
 import rateLimit from 'express-rate-limit';
 import { db } from './src/db/dbClient.js';
 import { authenticateSession as verifySupabaseSession } from './src/server/authMiddleware.js';
@@ -119,12 +120,7 @@ async function startServer() {
   app.disable('x-powered-by');
 
   // 2. HTTP Header hardening
-  app.use(helmet({
-    contentSecurityPolicy: false, // Disabled only to ensure full compatibility with the development/preview iframe
-    crossOriginEmbedderPolicy: false,
-    crossOriginOpenerPolicy: false,
-    crossOriginResourcePolicy: false
-  }));
+  app.use(helmet(buildHelmetOptions()));
 
   // 3. Sliding-window rate limit to prevent API abuse, spam, and DoS attacks
   const apiLimiter = rateLimit({
@@ -893,6 +889,11 @@ Return parsed search intent (keywords, county if detected, opportunity type if d
   });
 
   // Vite middleware for development
+  // Unknown API paths must be a JSON 404, never the SPA shell (which would answer 200 text/html).
+  app.use('/api', (_req, res) => {
+    res.status(404).json({ error: 'Not found' });
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -907,9 +908,19 @@ Return parsed search intent (keywords, county if detected, opportunity type if d
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const httpServer = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+
+  // Graceful shutdown (Cloud Run / Docker send SIGTERM): stop accepting connections, let in-flight
+  // requests finish, and force-exit after 10 s so a stuck connection cannot block a rollout.
+  const shutdown = (signal: string) => {
+    console.log(`${signal} received; shutting down.`);
+    httpServer.close(() => process.exit(0));
+    setTimeout(() => process.exit(1), 10_000).unref();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 startServer();

@@ -19,7 +19,7 @@ Every variable below is documented, as a placeholder, in `.env.example` — copy
 `.env` locally and fill in real values, or set the same names as secrets in your
 hosting platform for production. The split below is the one that actually matters:
 **anything prefixed `VITE_` is compiled into the public browser bundle by Vite; anything
-without that prefix is read only by the Node server process (`server.ts` / `dist/server.cjs`)
+without that prefix is read only by the Node server process (`server.ts` / `build/server.cjs`)
 and is never bundled for the browser.** Get this wrong in either direction and you either
 break the app (server var referenced from client code, `undefined` at runtime) or leak a
 secret (server-only var accidentally read via `import.meta.env` in `src/`).
@@ -79,7 +79,7 @@ Rules:
    Node-only entry point that Vite does not bundle for the browser — never in `src/`.
 3. `npm run check:no-service-key-leak` (wired into CI, see Section 4) greps both
    `src/` and the built `dist/` client bundle for `SUPABASE_SERVICE_ROLE_KEY` /
-   `service_role` and fails the build if either is found outside `dist/server.cjs`.
+   `service_role` and fails the build if either is found outside `build/server.cjs`.
 4. `.env.example` documents the exact shape expected; copy it to `.env` locally
    and fill in real values from **Project Settings → API** in the Supabase dashboard.
 
@@ -87,37 +87,54 @@ Rules:
 
 ## 3. Containerization (Dockerfile)
 
-A production-optimized, multi-stage Docker build guarantees minimal container layer sizes, caching optimizations, and secure execution boundaries.
+The repository root contains a real multi-stage `Dockerfile` (verified by reading and by simulating its
+runtime stage; the CI `container` job builds and smoke-tests it on every push):
 
-```dockerfile
-# STAGE 1: Build & Packaging
-FROM node:22-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
+* **Build stage** installs all dependencies, runs `npm run build`, then the service-key and seed-PII
+  bundle checks. Only public values are passed as build args (`VITE_SUPABASE_URL`,
+  `VITE_SUPABASE_ANON_KEY`, `VITE_API_BASE_URL`, `VITE_MOMO_*`). Demo mode is forced off. Never pass
+  `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY` or Stripe secrets as build args (visible in image history).
+* **Runtime stage** installs production dependencies only, copies `dist/` (static SPA) and `build/`
+  (server bundle, *outside* the static root so it is never downloadable), runs as the non-root `node`
+  user, listens on `$PORT` (8080), has a `HEALTHCHECK` on `/api/ai/health`, and shuts down cleanly on
+  `SIGTERM`.
+* Server secrets are supplied at runtime (Cloud Run: Secret Manager via `--set-secrets`).
 
-# STAGE 2: Secure Execution Runtime
-FROM node:22-alpine AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-ENV PORT=3000
+Known limitation: production `node_modules` is ~220 MB because build tooling (Vite and friends) is listed
+under `dependencies`. Moving build-only packages to `devDependencies` would shrink the image and cold
+start; it was not done blind because the server imports Vite for development mode.
 
-COPY package*.json ./
-RUN npm ci --only=production
+### Cloud Run pipeline
 
-# Copy compiled static assets and server bundles from Stage 1
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package.json ./package.json
+`.github/workflows/deploy-cloudrun.yml` (calls `_cloudrun-deploy.yml`): CI must be green for the exact
+commit → **staging** deploys automatically → **production** deploys only after staging succeeds and a
+reviewer approves the `production` GitHub environment. Each deploy builds the image per environment,
+pushes it by immutable digest, deploys a **no-traffic candidate revision**, smoke-tests it (health, SPA,
+JSON 404, 401 on protected routes, server bundle not downloadable), shifts traffic, re-checks the live
+URL, and **rolls back to the previous revision automatically** if anything fails.
 
-EXPOSE 3000
+One-time setup (nothing here is stored in the repo):
 
-# Run container as a non-privileged system user for process containment
-USER node
+1. Create a GCP project, Artifact Registry repo, and a Cloud Run service per environment.
+2. Create a Workload Identity Federation provider for this repository and a deploy service account
+   (roles: Artifact Registry Writer, Cloud Run Admin, Service Account User, Secret Manager Accessor
+   for the runtime account). No JSON keys are used.
+3. Store `SUPABASE_SERVICE_ROLE_KEY` and `GEMINI_API_KEY` in Secret Manager.
+4. In GitHub create environments `staging` and `production` (add required reviewers to `production`)
+   with these **variables**: `GCP_PROJECT_ID`, `GCP_REGION`, `AR_REPO`, `CLOUD_RUN_SERVICE`,
+   `WIF_PROVIDER`, `WIF_SERVICE_ACCOUNT`, `SECRET_SERVICE_ROLE`, `SECRET_GEMINI`, `ALLOWED_ORIGINS`,
+   `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_BASE_URL`, `VITE_MOMO_*`.
+   `staging` must point at a separate Supabase project from `production`.
 
-CMD ["npm", "start"]
-```
+### Migration history
+
+Production-like databases for this project were at times changed by hand in the SQL editor, so the
+`supabase_migrations.schema_migrations` table does not match `supabase/migrations/`. Do not replay
+migrations on such a database. Instead: (1) run the pgTAP suites (`supabase/tests/local/run.sh`) against
+it; (2) fix anything that fails with a new migration; (3) mark the files that are demonstrably in place as
+applied with `supabase migration repair --status applied <version>`; (4) from then on, change the schema
+only through migration files. A fresh staging project built from the migrations alone is the cleanest
+proof that the files are complete.
 
 ---
 

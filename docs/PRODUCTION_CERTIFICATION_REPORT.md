@@ -4,7 +4,16 @@
 **Date**: September 7, 2026  
 **Auditor**: Lead Security & Systems Architect  
 **Project**: LibRise  
-**Status**: 🛡️ **PRODUCTION READY**
+**Status**: ⚠️ **SUPERSEDED — NOT CERTIFIED** (see the independent audit banner below)
+
+> **SUPERSEDED — November 17, 2026 (independent audit).** This report's "PRODUCTION READY" status was
+> written before the independent production audit and is **not** supported by evidence: at audit time there
+> was no Dockerfile or backend deployment workflow, the built server bundle and its source map were publicly
+> downloadable from the Express static root, a demo-mode flag could weaken server authentication, and several
+> database security objects had been applied by hand outside the migration history. Those items have been
+> fixed (see `LIBRISE_INTERIM_AUDIT.md`, section 10). The database security suites (pgTAP), role-by-role
+> functional tests, live Stripe/Gemini behaviour and low-bandwidth performance have **not** been verified, so
+> this project must be treated as **NOT CERTIFIED** until the final go/no-go report says otherwise.
 
 > **Update — September 8, 2026 (Phase 2, Auth)**: Section 2 ("Authentication Status") below has been rewritten to reflect this phase's work migrating authentication to Supabase Auth as the sole source of identity/session truth. The original Section 2 text (SHA-256/local session store) is superseded and no longer accurate; it described the pre-Phase-2 local-auth implementation. The rest of this report reflects the state as of the original September 7 audit and has not been re-verified as part of this phase.
 
@@ -28,16 +37,16 @@
 
 LibRise is a high-integrity, multi-tenant digital marketplace, recruitment pipeline, and business-for-sale exchange specifically designed for the Liberian economic context. This certification report compiles the findings of our comprehensive security, architectural, and quality-assurance audits conducted during the **Phase 11 Production Readiness Certification**.
 
-Following extensive test suite execution, deep code pattern checks, and input sanitization audits, we certify that **LibRise is officially PRODUCTION READY**. There are no remaining security, authorization, or stability blockers preventing live environment deployments.
+Following extensive test suite execution, deep code pattern checks, and input sanitization audits, this report originally certified LibRise as production ready. **That conclusion is withdrawn** — see the superseded notice at the top of this document.
 
 ---
 
 ### 1. Architecture Status
 
-* **Status**: 🟢 **100% Fully Implemented & Certified**
+* **Status**: ⚠️ Implemented; independent verification incomplete
 * **Review Details**: 
   * Topology is structured around a mobile-first Progressive Web App (PWA) client communicating securely with a Node.js/Express server (binding exclusively to Port 3000 behind container ingress proxying).
-  * Server-side routing is optimized, with asset-building cleanly bundle-compiled using Vite & esbuild (`dist/server.cjs` for production).
+  * Server-side routing is optimized, with asset-building cleanly bundle-compiled using Vite & esbuild (`build/server.cjs` for production, kept outside the public static root).
   * AI operations are fully decoupled from browser logic, utilizing a robust, secure backend model (`@google/genai` on `/api/ai/*`) proxying with server-secret API key resolution.
 
 * **Phase 3 update (September 9-11, 2026, ALL 9 SERVICES COMPLETE)**: `src/services/organizationService.ts`, `src/services/opportunityService.ts`, `src/services/applicationService.ts`, `src/services/candidateService.ts`, `src/services/businessService.ts`, `src/services/messagingService.ts`, `src/services/verificationService.ts`, `src/services/trustSafetyService.ts`, `src/services/subscriptionService.ts`, `src/services/notificationService.ts`, and `src/services/analyticsService.ts` now all exist as Supabase-backed domain services reading/writing through the anon/user-session client, with Postgres RLS (not client code) as the authorization boundary. All but organizationService are live in the running app; organizationService exists and is proven but its callers (`authService.ts`, `permissionEngine.ts`, three components) are not yet rewired — its synchronous session/authorization API is used pervasively enough that converting it to async would be its own separate, larger piece of work, not something to fold into this migration silently. All nine are independently verified (`docs/PHASE3_SERVICE1_VERIFICATION.md` through `docs/PHASE3_SERVICE9_VERIFICATION.md`). analyticsService's platform-wide dashboard uses a `SECURITY DEFINER` RPC rather than direct RLS-scoped queries specifically to avoid silently under-counting platform-wide metrics for a real platform admin (RLS would otherwise restrict results to the admin's own org memberships) — a data-integrity consideration distinct from every other service's authorization-boundary concerns. The architecture has therefore completed its *service migration*: every domain now has a real Supabase-backed service, proven against live RLS. What remains from the original Phase 3/4 acceptance criteria is not writing more services but (1) rewiring organizationService's callers, (2) removing `dbClient.ts`'s role as the runtime data source when Supabase is configured (it can remain as the local-demo-mode backing store), and (3) verifying the production bundle ships no seed PII. Do not read this bullet as "Architecture Status: 100% Fully Implemented" being re-certified — that status line above describes the September 7 audit and has not been re-verified against the current, migrated-but-not-fully-cut-over state.
