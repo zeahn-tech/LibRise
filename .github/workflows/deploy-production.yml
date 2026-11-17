@@ -1,0 +1,75 @@
+# Approval-gated production deploy to Render.
+#   - Run manually from the main branch (Actions -> Deploy production -> Run workflow).
+#   - Requires: a green CI run for the exact commit, and staging serving a healthy build.
+#   - The "production" GitHub environment must have required reviewers (Settings -> Environments).
+#   - The Render deploy hook URL is a secret of that environment: RENDER_PRODUCTION_DEPLOY_HOOK.
+# Render itself keeps the previous version serving if the new one fails its health check
+# (zero-downtime deploys); this workflow adds the approval, the CI gate, and a post-deploy smoke test.
+name: Deploy production (Render)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only main may be deployed to production
+        run: |
+          [ "${{ github.ref }}" = "refs/heads/main" ] || { echo "Run this workflow from main."; exit 1; }
+      - name: Require a green CI run for this exact commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          OK=$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&status=success" --jq '.total_count')
+          [ "$OK" -ge 1 ] || { echo "No successful CI run for ${{ github.sha }}."; exit 1; }
+
+  staging-check:
+    needs: gate
+    runs-on: ubuntu-latest
+    environment: staging          # holds vars.STAGING_URL (e.g. https://librise-staging.onrender.com)
+    steps:
+      - name: Staging must be healthy before production is touched
+        run: |
+          set -e
+          U="${{ vars.STAGING_URL }}"
+          [ -n "$U" ] || { echo "Set the STAGING_URL variable on the staging environment."; exit 1; }
+          curl -fsS --retry 5 --retry-delay 5 "$U/api/ai/health"
+          [ "$(curl -s -o /dev/null -w '%{http_code}' "$U/")" = "200" ]
+
+  production:
+    needs: staging-check
+    runs-on: ubuntu-latest
+    environment: production        # required reviewers = the manual approval step
+    steps:
+      - name: Trigger the Render deploy for this commit
+        env:
+          HOOK: ${{ secrets.RENDER_PRODUCTION_DEPLOY_HOOK }}
+        run: |
+          [ -n "$HOOK" ] || { echo "RENDER_PRODUCTION_DEPLOY_HOOK secret is missing."; exit 1; }
+          curl -fsS -X POST "${HOOK}&ref=${{ github.sha }}"
+          echo
+      - name: Wait for the new version, then smoke-test production
+        run: |
+          set -e
+          U="${{ vars.PRODUCTION_URL }}"
+          [ -n "$U" ] || { echo "Set the PRODUCTION_URL variable on the production environment."; exit 1; }
+          sleep 60
+          for i in $(seq 1 30); do curl -fsS "$U/api/ai/health" >/dev/null && ok=1 && break || sleep 10; done
+          [ "${ok:-0}" = 1 ] || { echo "::error::Production health check failed. In Render: service -> Events -> Rollback to the previous deploy."; exit 1; }
+          [ "$(curl -s -o /dev/null -w '%{http_code}' "$U/")" = "200" ]
+          [ "$(curl -s -o /dev/null -w '%{http_code}' "$U/api/does-not-exist")" = "404" ]
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$U/api/ai/parse-cv")" = "401" ]
+          for p in /server.cjs /server.cjs.map /build/server.cjs; do
+            if curl -fsS "$U$p" | head -c 300 | grep -qE 'sourcesContent|"version":3|require\("'; then
+              echo "::error::Server bundle exposed at $p"; exit 1; fi
+          done
+          curl -sI "$U/" | grep -qi '^content-security-policy:'
+          echo "Production smoke test passed."
