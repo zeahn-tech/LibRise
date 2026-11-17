@@ -30,6 +30,14 @@ services:
       - { key: VITE_MOMO_MTN_NUMBER, sync: false }
       - { key: VITE_MOMO_ORANGE_NUMBER, sync: false }
       - { key: VITE_MOMO_ACCOUNT_NAME, sync: false }
+      - { key: VITE_MOMO_MTN_NUMBER_USD, sync: false }
+      - { key: VITE_MOMO_MTN_NUMBER_LRD, sync: false }
+      - { key: VITE_MOMO_ORANGE_NUMBER_USD, sync: false }
+      - { key: VITE_MOMO_ORANGE_NUMBER_LRD, sync: false }
+      - { key: VITE_MOMO_ACCOUNT_NAME_USD, sync: false }
+      - { key: VITE_MOMO_ACCOUNT_NAME_LRD, sync: false }
+      - { key: VITE_MOMO_LEGACY_NUMBERS_ACCEPT_LRD, sync: false }
+      - { key: VITE_DEFAULT_CURRENCY, value: LRD }
 
   - type: web
     name: librise-production
@@ -54,3 +62,11 @@ services:
       - { key: VITE_MOMO_MTN_NUMBER, sync: false }
       - { key: VITE_MOMO_ORANGE_NUMBER, sync: false }
       - { key: VITE_MOMO_ACCOUNT_NAME, sync: false }
+      - { key: VITE_MOMO_MTN_NUMBER_USD, sync: false }
+      - { key: VITE_MOMO_MTN_NUMBER_LRD, sync: false }
+      - { key: VITE_MOMO_ORANGE_NUMBER_USD, sync: false }
+      - { key: VITE_MOMO_ORANGE_NUMBER_LRD, sync: false }
+      - { key: VITE_MOMO_ACCOUNT_NAME_USD, sync: false }
+      - { key: VITE_MOMO_ACCOUNT_NAME_LRD, sync: false }
+      - { key: VITE_MOMO_LEGACY_NUMBERS_ACCEPT_LRD, sync: false }
+      - { key: VITE_DEFAULT_CURRENCY, value: LRD }

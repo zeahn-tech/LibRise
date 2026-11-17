@@ -10,6 +10,7 @@ import { useConfig } from '../context/ConfigContext';
 import { plansForDisplay } from '../lib/paymentPlans';
 import { useToast } from '../context/ToastContext';
 import { evaluatePermission, canPostOpportunities } from '../core/auth/permissionEngine';
+import { PaymentReceipts } from './payments/PaymentReceipts';
 import { OrganizationWizardModal } from './organization/OrganizationWizardModal';
 
 const PaymentCheckoutFlow = lazy(() => import('./payments/PaymentCheckoutFlow').then((m) => ({ default: m.PaymentCheckoutFlow })));
@@ -459,6 +460,8 @@ export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPost
           </tbody>
         </table>
       </div>
+
+      {orgId && <PaymentReceipts organizationId={orgId} />}
 
       {/* Free post + optional promotions */}
       {vacancyPlans.length > 0 && audience !== 'seller' && (
