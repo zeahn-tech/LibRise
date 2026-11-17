@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, XCircle, Loader2, RefreshCw, ShieldCheck } from 'lucide-react';
+import { CurrencyBadge } from './CurrencyBadge';
 import { paymentService, formatMinorAmount, PaymentWithContext } from '../../services/paymentService';
 import { useToast } from '../../context/ToastContext';
 
@@ -67,7 +68,7 @@ export const PaymentReviewQueue: React.FC = () => {
 
   const approve = async (item: PaymentWithContext) => {
     const ok = window.confirm(
-      `Approve ${formatMinorAmount(item.amountMinor, item.currency)} and ${item.opportunityId ? 'publish this vacancy' : 'activate this subscription'}?\n\n` +
+      `Approve ${formatMinorAmount(item.amountMinor, item.currency)} (${item.currency}) and ${item.opportunityId ? 'publish this vacancy' : 'activate this subscription'}?\n\n` +
         `Only approve if you have confirmed in the mobile money records that this exact amount, ` +
         `transaction ID (${item.providerTransactionId}) and sender arrived.`
     );
@@ -144,7 +145,7 @@ export const PaymentReviewQueue: React.FC = () => {
                   </p>
                   <p className="text-xs text-stone-500 break-words">{item.organizationName || item.organizationId}</p>
                 </div>
-                <p className="font-bold text-lg text-[#132A13] shrink-0">{formatMinorAmount(item.amountMinor, item.currency)}</p>
+                <p className="font-bold text-lg text-[#132A13] shrink-0 text-right">{formatMinorAmount(item.amountMinor, item.currency)} <CurrencyBadge currency={item.currency} /></p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="payment-kind">
@@ -181,7 +182,7 @@ export const PaymentReviewQueue: React.FC = () => {
                   <fieldset className="space-y-1.5 text-xs text-stone-700">
                     <legend className="font-bold text-stone-500 uppercase tracking-wider mb-1">I confirmed in the MoMo statement that</legend>
                     {([
-                      ['amount', `the amount received is exactly ${formatMinorAmount(item.amountMinor, item.currency)}`],
+                      ['amount', `the amount received is exactly ${formatMinorAmount(item.amountMinor, item.currency)} (${item.currency}, not another currency)`],
                       ['txn', 'this transaction ID exists, on the right network account, and is not used elsewhere'],
                       ['sender', `it came from the sender number above (${item.senderPhoneNumber || 'not provided'})`]
                     ] as const).map(([key, label]) => (

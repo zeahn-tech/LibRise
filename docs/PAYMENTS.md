@@ -195,3 +195,105 @@ transaction reference) is re-quoted: `refresh_open_payment()` moves it to the pl
 price, and a trigger on `payment_plans` re-quotes unpaid payments whenever a plan price changes. Once a reference is
 submitted (`payment_pending` and later) the quoted amount is frozen so what the customer was told to send never changes.
 
+
+
+## Dual-currency payments (LRD + USD)
+
+Customers choose **Liberian Dollar (LRD)** or **US Dollar (USD)** when they pay for subscriptions, vacancy
+promotions and business-listing promotions, with MTN Mobile Money or Orange Money. The flow, review process and
+security model above are unchanged; the currency is simply a property of the plan being paid for.
+
+### Display currency vs payment currency
+
+| | Display currency | Payment currency |
+|---|---|---|
+| What it is | How prices are *shown* around the app (header switcher / Settings) | The currency a payment is actually made in |
+| Stored | Browser preference; default `VITE_DEFAULT_CURRENCY` (LRD in production) | `payments.currency`, copied from the plan |
+| Price source | Converted at the admin-set exchange rate (`platform_settings.usd_to_lrd`, built-in benchmark 1 USD = 195 LRD) | A real `payment_plans` row in that currency, priced by an administrator |
+| Can differ? | Yes. Viewing in LRD and paying in USD (or the reverse) is fully supported. | |
+
+Checkout starts on the display currency, shows a **Pay in** choice (🇱🇷 LRD / 🇺🇸 USD), lists only the plans of
+the selected currency, and never converts an amount after the user has chosen. Switching currency on an unpaid
+checkout re-quotes it to the same package's plan in the other currency (`refresh_open_payment`). Once a transaction
+ID has been submitted the payment is frozen (plan, amount, currency).
+
+### How it is stored
+
+Migration `20261118100000_dual_currency_payment_plans.sql`:
+
+- Every package has **two `payment_plans` rows**: the original USD row (id unchanged, e.g. `plan-sub-pro-annual`) and
+  an LRD row (`<usd id>-lrd`, e.g. `plan-sub-pro-annual-lrd`). `price_group` (= the USD id) pairs them; one plan per
+  `(price_group, currency)` is enforced. Currencies are limited to `USD`/`LRD`.
+- LRD rows are seeded **once** from the `usd_to_lrd` setting (fallback 195), rounded to the nearest LRD 50, and are never
+  overwritten by re-running the migration. They are ordinary prices that an administrator owns from then on.
+- `payments_enforce_server_pricing` (unchanged) still overwrites `amount_minor` and `currency` from the plan row, so a
+  client cannot choose a price **or a currency**. `admin_review_payment` (unchanged) activates only the target of the
+  approved payment; subscription periods come from the plan's `duration_days` (30 / 365) and renewing the same tier
+  extends the current period regardless of currency.
+- A plan's currency cannot be changed once any payment references it. Price changes are recorded in
+  `payment_plan_price_history` (admin-readable only).
+
+### Managing prices (administrators)
+
+The exchange rate (Admin Center -> Platform Settings) only affects how prices are *displayed*. It never changes a plan
+price, a payment, or a submitted transaction, and nothing updates it automatically (there is no live-rate feed).
+
+To change the price a customer pays, set the plan's own price (amounts are in **minor units**: LRD 2,500.00 = `250000`).
+Run in the Supabase SQL editor as a signed-in platform admin session, or as the project owner:
+
+```sql
+-- as a platform admin session (audited with your user id):
+select public.admin_set_payment_plan_price('plan-sub-pro-monthly-lrd', 480000);   -- LRD 4,800.00
+
+-- or directly (project owner / SQL editor; still audited, changed_by is null):
+update public.payment_plans set amount_minor = 480000, updated_at = now() where id = 'plan-sub-pro-monthly-lrd';
+```
+
+Effects: unpaid (`created`) checkouts for that plan are re-quoted automatically; payments that already have a submitted
+transaction ID keep the amount they were quoted. List current prices:
+`select id, currency, amount_minor, active from public.payment_plans order by price_group, currency;`
+
+### Receiving accounts (MTN / Orange, per currency)
+
+A number that receives USD may not be able to receive LRD. Configure each network + currency separately (Render ->
+Environment; these are public, display-only values -- never a secret):
+
+| Variable | Used for |
+|---|---|
+| `VITE_MOMO_MTN_NUMBER_USD`, `VITE_MOMO_MTN_NUMBER_LRD` | MTN Mobile Money, per currency |
+| `VITE_MOMO_ORANGE_NUMBER_USD`, `VITE_MOMO_ORANGE_NUMBER_LRD` | Orange Money, per currency |
+| `VITE_MOMO_ACCOUNT_NAME` (+ optional `_USD` / `_LRD`) | Account name shown to payers |
+| `VITE_MOMO_MTN_NUMBER`, `VITE_MOMO_ORANGE_NUMBER` | Legacy numbers: keep working for **USD**; used for **LRD** only if `VITE_MOMO_LEGACY_NUMBERS_ACCEPT_LRD=true` |
+
+Anything not configured shows "payment details are not set up yet" at checkout; no placeholder number is ever shown.
+`VITE_` variables are baked in at build time: change them, then redeploy (rebuild) on Render.
+
+### Verifying a payment (either currency)
+
+Admin Center -> Revenue Payments. Every row shows the amount with a **currency badge**, package, organization,
+network, sender number, submitted transaction ID, our reference and date. Approve only after confirming in the real MTN
+/ Orange records that this exact amount **in that currency**, this transaction ID and this sender arrived on the right
+network account. A submitted transaction ID never means success by itself. Revenue totals are kept per currency.
+
+### Applying the migration
+
+```bash
+supabase link --project-ref <your-project-ref>
+supabase db push            # applies 20261118100000_dual_currency_payment_plans.sql (idempotent)
+```
+
+or paste the file into the Supabase SQL editor and run it. Deploy order: apply the migration first, then deploy the app
+(the app tolerates a database without LRD plans: it just offers USD). Local verification:
+`PGHOST=... PGUSER=postgres supabase/tests/local/run.sh` (runs `dual_currency_payments_tests.sql` and every other suite).
+
+### Deploying (GitHub -> Render)
+
+Merge to `main`; Render rebuilds `https://librise-wmmb.onrender.com` from GitHub. Required env for production:
+`VITE_APP_ENV=production`, `VITE_API_BASE_URL=/api`, `VITE_DEFAULT_CURRENCY=LRD`, `VITE_ENABLE_DEMO_MODE=false`, the
+Supabase variables already set, and the receiving-account variables above.
+
+### Limitations
+
+- Still manual verification; no MTN/Orange API, no automatic exchange-rate updates.
+- No in-app editor for plan prices yet: use `admin_set_payment_plan_price` / SQL as above.
+- Payment receipts are the existing in-app notifications (they include the amount and currency); there is no PDF receipt.

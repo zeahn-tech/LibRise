@@ -110,6 +110,8 @@ interface PaymentPlanRow {
   subscription_tier: string | null;
   billing_cycle: string | null;
   promotion_level?: string | null;
+  /** Absent on a database that predates dual-currency plans; the plan id is the group then. */
+  price_group?: string | null;
 }
 
 function rowToPlan(row: PaymentPlanRow): PaymentPlan {
@@ -125,7 +127,8 @@ function rowToPlan(row: PaymentPlanRow): PaymentPlan {
     planType: row.plan_type,
     subscriptionTier: row.subscription_tier,
     billingCycle: row.billing_cycle as 'monthly' | 'annual' | null,
-    promotionLevel: (row.promotion_level ?? null) as PaymentPlan['promotionLevel']
+    promotionLevel: (row.promotion_level ?? null) as PaymentPlan['promotionLevel'],
+    priceGroup: row.price_group || row.id
   };
 }
 
@@ -266,17 +269,28 @@ async function dropIfExpired(row: PaymentRow): Promise<PaymentRow | null> {
  *  send a recruiter's real money nowhere recoverable. */
 export interface MomoInstructions {
   provider: PaymentProviderId;
+  /** The payment currency these instructions are for. */
+  currency: string;
   configured: boolean;
   phoneNumber: string | null;
   accountName: string | null;
 }
 
-export function getMomoInstructions(provider: PaymentProviderId): MomoInstructions {
-  const phoneNumber =
-    provider === 'manual_momo_mtn' ? envConfig.momoMtnNumber : envConfig.momoOrangeNumber;
-  const accountName = envConfig.momoAccountName;
+export function getMomoInstructions(provider: PaymentProviderId, currency: string = 'USD'): MomoInstructions {
+  const isLrd = currency === 'LRD';
+  const isMtn = provider === 'manual_momo_mtn';
+  // Per-currency account first. The legacy single number was only ever used for USD plans, so it keeps working
+  // for USD; it is used for LRD only when the business explicitly says it can receive LRD.
+  const perCurrency = isMtn
+    ? (isLrd ? envConfig.momoMtnNumberLrd : envConfig.momoMtnNumberUsd)
+    : (isLrd ? envConfig.momoOrangeNumberLrd : envConfig.momoOrangeNumberUsd);
+  const legacy = isMtn ? envConfig.momoMtnNumber : envConfig.momoOrangeNumber;
+  const phoneNumber = perCurrency || (!isLrd || envConfig.momoLegacyNumbersAcceptLrd ? legacy : '');
+  const accountName =
+    (isLrd ? envConfig.momoAccountNameLrd : envConfig.momoAccountNameUsd) || envConfig.momoAccountName;
   return {
     provider,
+    currency,
     configured: Boolean(phoneNumber && accountName),
     phoneNumber: phoneNumber || null,
     accountName: accountName || null

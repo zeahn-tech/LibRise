@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
+import { CurrencyBadge } from './CurrencyBadge';
 import { paymentService, formatMinorAmount, PaymentWithContext } from '../../services/paymentService';
 import { paymentKindLabel } from './PaymentReviewQueue';
 
@@ -67,7 +68,7 @@ export const PaymentReviewHistory: React.FC = () => {
                 </div>
               </div>
               <div className="text-right">
-                <div className="font-bold text-sm text-[#132A13]">{formatMinorAmount(p.amountMinor, p.currency)}</div>
+                <div className="font-bold text-sm text-[#132A13]">{formatMinorAmount(p.amountMinor, p.currency)} <CurrencyBadge currency={p.currency} /></div>
                 <span className={`inline-block mt-0.5 px-2 py-0.5 rounded-md font-bold uppercase text-[10px] ${p.status === 'payment_success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                   {p.status === 'payment_success' ? 'Approved' : 'Rejected'}
                 </span>

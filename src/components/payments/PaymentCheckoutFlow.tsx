@@ -3,6 +3,15 @@ import { X, CheckCircle2, Clock, AlertTriangle, Copy, Loader2, Smartphone } from
 import { Payment, PaymentPlan, PaymentProviderId } from '../../types';
 import { paymentService, formatMinorAmount, getMomoInstructions } from '../../services/paymentService';
 import { useToast } from '../../context/ToastContext';
+import { useConfig } from '../../context/ConfigContext';
+import {
+  PAYMENT_CURRENCIES,
+  PaymentCurrency,
+  availableCurrencies,
+  isPaymentCurrency,
+  planForGroup,
+  plansInCurrency
+} from '../../lib/paymentPlans';
 import { validateSenderPhone, validateTransactionId } from '../../services/paymentValidation';
 
 /**
@@ -66,7 +75,10 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
   const effectivePlanType = planType ?? (isListing ? 'listing' : isSubscription ? 'subscription' : 'vacancy');
   const { showToast } = useToast();
   const [step, setStep] = useState<Step>('loading');
+  const { currency: displayCurrency } = useConfig();
   const [plans, setPlans] = useState<PaymentPlan[]>([]);
+  // The currency the user PAYS in. Independent of the display currency: it only starts from it.
+  const [payCurrency, setPayCurrency] = useState<PaymentCurrency>(displayCurrency);
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
   const [provider, setProvider] = useState<PaymentProviderId>('manual_momo_mtn');
   const [payment, setPayment] = useState<Payment | null>(null);
@@ -114,7 +126,16 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
       }
       const loaded = plansRes.data || [];
       setPlans(loaded);
-      const preferred = preferredPlanId && loaded.some((p) => p.id === preferredPlanId) ? preferredPlanId : loaded[0]?.id;
+      // Pay currency: an open payment keeps its own currency; otherwise start from the display currency when
+      // something can be paid in it.
+      const offered = availableCurrencies(loaded);
+      const openCurrency = openRes.data && isPaymentCurrency(openRes.data.currency) ? openRes.data.currency : null;
+      const startCurrency: PaymentCurrency =
+        openCurrency ?? (offered.includes(displayCurrency) ? displayCurrency : offered[0] ?? displayCurrency);
+      setPayCurrency(startCurrency);
+      const inCurrency = plansInCurrency(loaded, startCurrency);
+      const preferred =
+        (preferredPlanId && planForGroup(loaded, preferredPlanId, startCurrency)?.id) || inCurrency[0]?.id;
       if (preferred) setSelectedPlanId(preferred);
       if (openRes.data) {
         setProvider(openRes.data.paymentProvider);
@@ -126,7 +147,7 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
-  }, [opportunityId, businessListingId, organizationId, effectivePlanType, preferredPlanId, applyPaymentState, showToast]);
+  }, [opportunityId, businessListingId, organizationId, effectivePlanType, preferredPlanId, applyPaymentState, showToast]); // displayCurrency only seeds the initial choice
 
   const refreshStatus = useCallback(async () => {
     if (!payment) return;
@@ -141,8 +162,20 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
     return () => clearInterval(timer);
   }, [step, refreshStatus]);
 
-  const selectedPlan = plans.find((p) => p.id === selectedPlanId) || null;
-  const instructions = getMomoInstructions(provider);
+  const offeredCurrencies = availableCurrencies(plans);
+  const visiblePlans = plansInCurrency(plans, payCurrency);
+  const selectedPlan = visiblePlans.find((p) => p.id === selectedPlanId) || null;
+  // Switching the payment currency swaps to the SAME package's plan in the other currency (a real plan row with
+  // its own administrator-set price); nothing is converted.
+  const chooseCurrency = (next: PaymentCurrency) => {
+    if (next === payCurrency) return;
+    const same = planForGroup(plans, selectedPlanId, next);
+    setPayCurrency(next);
+    setSelectedPlanId(same?.id ?? plansInCurrency(plans, next)[0]?.id ?? '');
+  };
+  // Instructions always follow the currency recorded on the payment once one exists.
+  const instructionCurrency = payment ? payment.currency : payCurrency;
+  const instructions = getMomoInstructions(provider, instructionCurrency);
 
   const handleStartPayment = async () => {
     if (!selectedPlan) return;
@@ -230,13 +263,35 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
                     ? 'Your vacancy is already live. Pick a promotion for more visibility; it switches on once payment is confirmed.'
                     : "Your plan's free vacancy is already in use, so this vacancy needs one of the options below to go live."}
               </p>
-              {plans.length === 0 ? (
+              {offeredCurrencies.length > 1 && (
+                <div>
+                  <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Pay in</p>
+                  <div role="radiogroup" aria-label="Payment currency" className="grid grid-cols-2 gap-2">
+                    {PAYMENT_CURRENCIES.filter((c) => offeredCurrencies.includes(c.code)).map((c) => (
+                      <button
+                        key={c.code}
+                        type="button"
+                        role="radio"
+                        aria-checked={payCurrency === c.code}
+                        onClick={() => chooseCurrency(c.code)}
+                        className={`min-h-11 px-2 rounded-xl border text-sm font-semibold cursor-pointer ${payCurrency === c.code ? 'border-[#4F772D] bg-[#F4F8EF] text-[#283618]' : 'border-[#E8E4D9] text-stone-600'}`}
+                      >
+                        <span aria-hidden="true">{c.flag}</span> {c.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-stone-500 mt-1.5">
+                    You pay exactly the amount shown in the currency you choose. Prices are set per currency and are not converted at payment time.
+                  </p>
+                </div>
+              )}
+              {visiblePlans.length === 0 ? (
                 <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
                   No payment packages are available right now. Please try again later.
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {plans.map((plan) => (
+                  {visiblePlans.map((plan) => (
                     <label key={plan.id} className={`block border rounded-2xl p-4 cursor-pointer ${selectedPlanId === plan.id ? 'border-[#4F772D] bg-[#F4F8EF]' : 'border-[#E8E4D9]'}`}>
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
@@ -275,8 +330,8 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
                 <div className="flex gap-3 text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-xl p-4">
                   <AlertTriangle className="w-5 h-5 shrink-0" />
                   <p>
-                    {PROVIDER_LABEL[provider]} payment details are not set up yet, so we can't show where to send
-                    your payment. Please contact support, or choose the other network.
+                    {PROVIDER_LABEL[provider]} payment details for {instructionCurrency} are not set up yet, so we can't show
+                    where to send your payment. Please contact support, or choose the other network or currency.
                   </p>
                 </div>
               ) : (
@@ -284,7 +339,7 @@ export const PaymentCheckoutFlow: React.FC<Props> = ({
                   <div className="flex gap-3 items-start">
                     <Smartphone className="w-5 h-5 text-[#4F772D] shrink-0 mt-0.5" />
                     <p className="text-sm text-stone-700">
-                      Send exactly <strong>{formatMinorAmount(payment.amountMinor, payment.currency)}</strong> from your
+                      Send exactly <strong>{formatMinorAmount(payment.amountMinor, payment.currency)}</strong> ({payment.currency}) from your
                       {' '}{PROVIDER_LABEL[provider]} account to the number below. Do this in your own mobile money
                       app or via USSD -- never share your PIN with us or anyone.
                     </p>

@@ -38,6 +38,13 @@ server, clearly separated), applying Supabase migrations, seeding a fresh enviro
 configuring Stripe webhooks and the Gemini API key, and CI/CD. Start there before
 deploying anywhere.
 
+## Payments (LRD + USD)
+
+Subscriptions, vacancy promotions and listing promotions can be paid in **LRD or USD** via MTN Mobile Money or Orange
+Money (manual, admin-verified). Display currency and payment currency are independent. See
+[docs/PAYMENTS.md](docs/PAYMENTS.md#dual-currency-payments-lrd--usd) for pricing, receiving-account variables and the
+migration (`20261118100000_dual_currency_payment_plans.sql`).
+
 ## Getting started locally
 
 ```bash

@@ -749,6 +749,8 @@ export interface PaymentPlan {
   billingCycle?: 'monthly' | 'annual' | null;
   /** Optional vacancy promotion: boost | featured | premium (vacancy plans only). */
   promotionLevel?: 'boost' | 'featured' | 'premium' | null;
+  /** Currency-independent package key shared by a package's USD and LRD plans (falls back to the plan id). */
+  priceGroup: string;
 }
 
 export interface Payment {
