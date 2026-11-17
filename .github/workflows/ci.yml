@@ -177,3 +177,34 @@ jobs:
       - name: Stop local Supabase
         if: always()
         run: supabase stop --no-backup
+
+  container:
+    # Builds the production image and smoke-tests it: starts as non-root, serves the SPA, answers the
+    # health check, returns JSON 404s for unknown API paths, never serves the server bundle, and rejects
+    # unauthenticated AI calls.
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: |
+          docker build \
+            --build-arg VITE_SUPABASE_URL=https://placeholder.supabase.co \
+            --build-arg VITE_SUPABASE_ANON_KEY=placeholder-anon-key \
+            -t librise:ci .
+      - name: Image runs as a non-root user
+        run: |
+          [ "$(docker run --rm --entrypoint id librise:ci -u)" != "0" ]
+      - name: Smoke test
+        run: |
+          docker run -d --name librise -p 8080:8080 librise:ci
+          for i in $(seq 1 20); do curl -fsS localhost:8080/api/ai/health >/dev/null && break || sleep 2; done
+          curl -fsS localhost:8080/api/ai/health
+          [ "$(curl -s -o /dev/null -w '%{http_code}' localhost:8080/)" = 200 ]
+          [ "$(curl -s -o /dev/null -w '%{http_code}' localhost:8080/api/does-not-exist)" = 404 ]
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' localhost:8080/api/ai/parse-cv)" = 401 ]
+          for p in /server.cjs /server.cjs.map /build/server.cjs; do
+            ! curl -fsS "localhost:8080$p" | head -c 300 | grep -qE 'sourcesContent|"version":3|require\("'
+          done
+          curl -sI localhost:8080/ | grep -qi '^content-security-policy:'
+          docker stop librise
