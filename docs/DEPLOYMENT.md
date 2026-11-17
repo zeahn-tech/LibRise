@@ -6,10 +6,10 @@ This document details the configuration, continuous integration, containerizatio
 
 ## 1. System Architecture
 
-The application is engineered as a fully consolidated full-stack web application hosted on **Google Cloud Run** or **Docker-capable container runtimes**:
+The application is engineered as a fully consolidated full-stack web application hosted on **Render** (Docker web service built from this repository on GitHub), or any other Docker-capable container runtime:
 - **Frontend Layer**: React 19 SPA served through Vite static asset compilation.
 - **Backend Service**: Express Node.js process serving secure API routes (`/api/*`), handling Gemini server-side AI requests, and webhook processing.
-- **Reverse Proxy / Server Ingress**: Handled via Nginx or Cloud Run native proxy routing external traffic to port `3000`.
+- **Reverse Proxy / Server Ingress**: Render's built-in load balancer terminates HTTPS and forwards traffic to the container's `PORT` (10000 in `render.yaml`; `3000` locally).
 
 ---
 
@@ -69,7 +69,7 @@ how the three Supabase variables are used:
 |---|---|---|---|
 | `VITE_SUPABASE_URL` | `.env` / deployment secret, read via `import.meta.env` (see `src/config/env.ts`) | **Yes** — safe, it's just the project's public API endpoint | n/a |
 | `VITE_SUPABASE_ANON_KEY` | Same as above | **Yes** — safe by design; every request made with it is subject to the RLS policies in `supabase/migrations/` | **Yes**, always |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server-only deployment secret (e.g. Cloud Run env var / Secret Manager) — **never** given a `VITE_` prefix | **No — must never appear under `src/` or in the built `dist/` client bundle** | **No — bypasses RLS entirely** |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only deployment secret (a Render environment variable marked secret) — **never** given a `VITE_` prefix | **No — must never appear under `src/` or in the built `dist/` client bundle** | **No — bypasses RLS entirely** |
 
 Rules:
 1. Only variables prefixed `VITE_` are exposed to the browser by Vite. `SUPABASE_SERVICE_ROLE_KEY`
@@ -98,33 +98,44 @@ runtime stage; the CI `container` job builds and smoke-tests it on every push):
   (server bundle, *outside* the static root so it is never downloadable), runs as the non-root `node`
   user, listens on `$PORT` (8080), has a `HEALTHCHECK` on `/api/ai/health`, and shuts down cleanly on
   `SIGTERM`.
-* Server secrets are supplied at runtime (Cloud Run: Secret Manager via `--set-secrets`).
+* Server secrets are supplied at runtime as Render environment variables (never baked into the image).
 
 Known limitation: production `node_modules` is ~220 MB because build tooling (Vite and friends) is listed
 under `dependencies`. Moving build-only packages to `devDependencies` would shrink the image and cold
 start; it was not done blind because the server imports Vite for development mode.
 
-### Cloud Run pipeline
+### Render + GitHub pipeline
 
-`.github/workflows/deploy-cloudrun.yml` (calls `_cloudrun-deploy.yml`): CI must be green for the exact
-commit → **staging** deploys automatically → **production** deploys only after staging succeeds and a
-reviewer approves the `production` GitHub environment. Each deploy builds the image per environment,
-pushes it by immutable digest, deploys a **no-traffic candidate revision**, smoke-tests it (health, SPA,
-JSON 404, 401 on protected routes, server bundle not downloadable), shifts traffic, re-checks the live
-URL, and **rolls back to the previous revision automatically** if anything fails.
+LibRise is hosted on **Render** (the Express server, built from the `Dockerfile`) with the code, CI and,
+optionally, the static frontend on **GitHub**. `render.yaml` at the repository root is the Render Blueprint:
 
-One-time setup (nothing here is stored in the repo):
+* **`librise-staging`** builds from `main` and deploys automatically only when the commit's CI checks pass
+  (`autoDeployTrigger: checksPass`).
+* **`librise-production`** has auto-deploy **off**. It deploys only through
+  `.github/workflows/deploy-production.yml`: run from `main` → requires a green CI run for that exact
+  commit → staging must be healthy → a reviewer must approve the `production` GitHub environment → the
+  workflow calls the Render deploy hook for that commit → smoke test (health, SPA, JSON 404, 401 on
+  protected routes, server bundle not downloadable, CSP header present).
+* Render runs zero-downtime deploys: if the new version fails its health check (`/api/ai/health`),
+  the previous version keeps serving. If something goes wrong *after* a successful deploy, roll back in
+  the Render dashboard (service → Events → Rollback). There is **no automatic rollback** in the workflow.
 
-1. Create a GCP project, Artifact Registry repo, and a Cloud Run service per environment.
-2. Create a Workload Identity Federation provider for this repository and a deploy service account
-   (roles: Artifact Registry Writer, Cloud Run Admin, Service Account User, Secret Manager Accessor
-   for the runtime account). No JSON keys are used.
-3. Store `SUPABASE_SERVICE_ROLE_KEY` and `GEMINI_API_KEY` in Secret Manager.
-4. In GitHub create environments `staging` and `production` (add required reviewers to `production`)
-   with these **variables**: `GCP_PROJECT_ID`, `GCP_REGION`, `AR_REPO`, `CLOUD_RUN_SERVICE`,
-   `WIF_PROVIDER`, `WIF_SERVICE_ACCOUNT`, `SECRET_SERVICE_ROLE`, `SECRET_GEMINI`, `ALLOWED_ORIGINS`,
-   `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_BASE_URL`, `VITE_MOMO_*`.
-   `staging` must point at a separate Supabase project from `production`.
+One-time setup (nothing below is stored in Git):
+
+1. In Render: New → Blueprint → pick this repository. Fill the `sync: false` variables for each service
+   (staging uses the **staging** Supabase project; production uses the **production** project).
+2. In Render, open `librise-production` → Settings → Deploy Hook and copy the URL.
+3. In GitHub → Settings → Environments create `staging` (variable `STAGING_URL`) and `production`
+   (variable `PRODUCTION_URL`, secret `RENDER_PRODUCTION_DEPLOY_HOOK`, **required reviewers**).
+4. In GitHub → Settings → Branches, protect `main` and require the CI checks, so `checksPass` means something.
+5. Public build values (`VITE_*`) are baked into the bundle at build time; Render passes the service's
+   variables to the Docker build as build args. Only the public `VITE_*` ones are declared as `ARG` in the
+   Dockerfile, so `SUPABASE_SERVICE_ROLE_KEY` and `GEMINI_API_KEY` never enter the image.
+
+If the frontend is served from **GitHub Pages** and only the API runs on Render: set `ALLOWED_ORIGINS` on the
+Render service to the exact Pages origin (for example `https://<user>.github.io`), and set
+`VITE_API_BASE_URL` for the Pages build to the Render service URL (`https://<service>.onrender.com/api`).
+The Content-Security-Policy header only protects pages served by Render, not by GitHub Pages.
 
 ### Migration history
 
@@ -187,72 +198,19 @@ Deployment itself is a separate step; create a workflow file in your repository 
 `.github/workflows/deploy.yml` to orchestrate containerization and deployment on top
 of `validate`/`rls-security-tests` passing.
 
-```yaml
-name: Production Deployment Pipeline
-
-on:
-  push:
-    branches: [ main ]
-
-jobs:
-  validate-and-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'npm'
-      - name: Install Dependencies
-        run: npm ci
-      - name: Quality Linter Check
-        run: npm run lint
-      - name: Run Test Suite
-        run: npm test -- --run
-
-  deploy-container:
-    needs: validate-and-test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Configure Docker authentication
-        run: gcloud auth configure-docker
-
-      - name: Build and Push Docker Image
-        run: |
-          docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/opphub-app:latest .
-          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/opphub-app:latest
-
-      - name: Deploy to Cloud Run
-        run: |
-          gcloud run deploy opphub-service \
-            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/opphub-app:latest \
-            --platform managed \
-            --region us-central1 \
-            --allow-unauthenticated \
-            --port 3000 \
-            --set-env-vars NODE_ENV=production
-```
+**Deployment** is not part of `ci.yml`: Render deploys staging when CI passes and production through
+`.github/workflows/deploy-production.yml` (see section 3, *Render + GitHub pipeline*). The old Google Cloud
+example that used to be here was never part of this project's hosting and has been removed.
 
 ---
 
 ## 5. Domain Configuration & HTTPS Routing
 
 To deploy the application under a custom domain:
-1. **DNS Mapping**: Map your domain (e.g. `opportunityhubliberia.com`) to Google Cloud Run or your hosting load balancer using a `CNAME` or `A` record.
+1. **DNS Mapping**: Add your domain in Render (service → Settings → Custom Domains) and create the `CNAME`/`A` record Render shows you.
 2. **Strict HTTPS Enforcements**:
-   - Cloud Run automatically provisions and rotates **Let's Encrypt SSL Certificates** on custom domains.
-   - All HTTP traffic is redirected automatically to secure HTTPS by the load balancer.
+   - Render automatically provisions and renews TLS certificates on custom domains.
+   - All HTTP traffic is redirected automatically to secure HTTPS by Render.
 3. **PWA Compliance**: A valid HTTPS setup is **mandatory** for service workers to initialize and support the in-app PWA install prompts.
 
 ---
