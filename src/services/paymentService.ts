@@ -298,12 +298,14 @@ export function getMomoInstructions(provider: PaymentProviderId, currency: strin
 }
 
 /** Payments in the given statuses with plan, vacancy/organization and people context (admin screens). */
-async function loadPaymentsWithContext(statuses: string[], ascending: boolean, limit: number): Promise<PaymentWithContext[]> {
+async function loadPaymentsWithContext(statuses: string[], ascending: boolean, limit: number, organizationId?: string): Promise<PaymentWithContext[]> {
   const orderColumn = ascending ? 'created_at' : 'reviewed_at';
-  const { data, error } = await client()
+  let query = client()
     .from('payments')
     .select('*, opportunities(title, status), organizations(name), payment_plans(name, plan_type, subscription_tier, billing_cycle, promotion_level)')
-    .in('status', statuses)
+    .in('status', statuses);
+  if (organizationId) query = query.eq('organization_id', organizationId);
+  const { data, error } = await query
     .order(orderColumn, { ascending, nullsFirst: false })
     .limit(limit);
   if (error) translateError(error);
@@ -597,6 +599,12 @@ export const paymentService = {
       if (error) translateError(error);
       return (data as PaymentRow[]).map(rowToPayment);
     });
+  },
+
+  /** Approved payments of one organization, with the context a receipt needs. Row-level security still
+   *  limits this to organizations the caller belongs to (or platform admins). */
+  async listOrganizationReceipts(organizationId: string, limit = 100): Promise<ApiResponse<PaymentWithContext[]>> {
+    return apiClient.execute(() => loadPaymentsWithContext(['payment_success'], false, limit, organizationId));
   },
 
   async getPaymentEvents(paymentId: string): Promise<ApiResponse<PaymentEvent[]>> {

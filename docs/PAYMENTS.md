@@ -292,8 +292,17 @@ Merge to `main`; Render rebuilds `https://librise-wmmb.onrender.com` from GitHub
 `VITE_APP_ENV=production`, `VITE_API_BASE_URL=/api`, `VITE_DEFAULT_CURRENCY=LRD`, `VITE_ENABLE_DEMO_MODE=false`, the
 Supabase variables already set, and the receiving-account variables above.
 
+### PDF receipts
+
+Billing page -> **Payment receipts** lists the organization's *approved* payments, each with a **PDF** button. The
+receipt shows the receipt number, date paid, organization, package, currency and amount, network, masked sender number
+(last 4 digits), transaction ID, LibRise reference and "Verified and approved by LibRise". Receipts exist only for
+`payment_success`; pending, rejected and expired payments cannot produce one. It is generated client-side with jsPDF
+(loaded on demand) from rows the user can already read under row-level security. It is a payment receipt, not a tax
+invoice, and says so. The existing notifications are not changed.
+
 ### Limitations
 
 - Still manual verification; no MTN/Orange API, no automatic exchange-rate updates.
 - No in-app editor for plan prices yet: use `admin_set_payment_plan_price` / SQL as above.
-- Payment receipts are the existing in-app notifications (they include the amount and currency); there is no PDF receipt.
+- Receipts: the existing in-app payment notifications are unchanged. PDF receipts are generated in the browser (see below); they are not stored or emailed.
