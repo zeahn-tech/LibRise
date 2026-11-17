@@ -506,7 +506,7 @@ insert into test_log(line) select * from extensions.ok(
 -- =============================================================================
 reset role;
 insert into test_log(line) select * from extensions.is(
-  (select array_agg(amount_minor order by id) from public.payment_plans where plan_type = 'vacancy')::text,
+  (select array_agg(amount_minor order by id) from public.payment_plans where plan_type = 'vacancy' and currency = 'USD')::text,
   '{300,500,1000}'::text,
   '[pricing] vacancy promotions: Boost $3, Featured $5, Premium $10 (plan-vacancy-basic/featured/premium)'
 );
@@ -664,7 +664,7 @@ reset role;
 -- =============================================================================
 reset role;
 insert into test_log(line) select * from extensions.is(
-  (select string_agg(promotion_level, ',' order by amount_minor) from public.payment_plans where plan_type = 'vacancy'),
+  (select string_agg(promotion_level, ',' order by amount_minor) from public.payment_plans where plan_type = 'vacancy' and currency = 'USD'),
   'boost,featured,premium'::text,
   '[promotions] the $3 / $5 / $10 vacancy plans are Boost / Featured / Premium'
 );
@@ -843,7 +843,7 @@ values
   ('biz-paytest-new', '11111111-aaaa-4aaa-8aaa-000000000001', 'Paytest newer listing', 'paytest-biz-new', 'business', 'PaytestIndustry', 'Montserrado', 'Sinkor', 'Newer', 'Newer listing', 'published', false, 1000, now() - interval '1 day');
 
 insert into test_log(line) select * from extensions.is(
-  (select string_agg(promotion_level || ':' || amount_minor::text, ',' order by amount_minor) from public.payment_plans where plan_type = 'listing'),
+  (select string_agg(promotion_level || ':' || amount_minor::text, ',' order by amount_minor) from public.payment_plans where plan_type = 'listing' and currency = 'USD'),
   'boost:300,featured:500,premium:1000'::text,
   '[listing-promo] listing plans: Boost $3, Featured $5, Premium $10'
 );

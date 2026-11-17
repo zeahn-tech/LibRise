@@ -9,8 +9,8 @@ interface CurrencySwitcherProps {
 }
 
 const OPTIONS = [
-  { code: 'USD', short: '$', label: 'US Dollar' },
-  { code: 'LRD', short: 'L$', label: 'Liberian Dollar' },
+  { code: 'LRD', short: 'L$', flag: '🇱🇷', label: 'Liberian Dollar' },
+  { code: 'USD', short: '$', flag: '🇺🇸', label: 'US Dollar' },
 ] as const;
 
 /**
@@ -28,7 +28,7 @@ export const CurrencySwitcher: React.FC<CurrencySwitcherProps> = ({ variant = 'c
           <div className="min-w-0">
             <p className="text-xs font-bold text-stone-800 dark:text-stone-200">Display currency</p>
             <p className="text-[10px] text-stone-500 dark:text-stone-400 mt-0.5">
-              Prices are converted at {rateNote()}.
+              Display only, converted at {rateNote()}. You choose LRD or USD separately when you pay.
             </p>
           </div>
           <div role="group" aria-label="Display currency" className="flex shrink-0 items-center bg-[#F2F2EC] dark:bg-stone-900 rounded-xl p-1 border border-[#E8E4D9] dark:border-stone-800">
@@ -44,7 +44,7 @@ export const CurrencySwitcher: React.FC<CurrencySwitcherProps> = ({ variant = 'c
                     : 'text-[#606C38] dark:text-stone-400'
                 }`}
               >
-                {o.code}
+                <span aria-hidden="true">{o.flag}</span> {o.code}
               </button>
             ))}
           </div>

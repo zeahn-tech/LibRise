@@ -6,6 +6,8 @@ import { APP_METADATA } from '../config/constants';
 import { subscriptionService } from '../services/subscriptionService';
 import { paymentService, formatMinorAmount } from '../services/paymentService';
 import { useAuth } from '../context/AuthContext';
+import { useConfig } from '../context/ConfigContext';
+import { plansForDisplay } from '../lib/paymentPlans';
 import { useToast } from '../context/ToastContext';
 import { evaluatePermission, canPostOpportunities } from '../core/auth/permissionEngine';
 import { OrganizationWizardModal } from './organization/OrganizationWizardModal';
@@ -32,8 +34,13 @@ export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPost
   // Authoritative prices (payment_plans). Falls back to the plan metadata's
   // display prices only if this can't be loaded; the checkout always uses the
   // database amount regardless.
-  const [subPlans, setSubPlans] = useState<PaymentPlan[]>([]);
-  const [vacancyPlans, setVacancyPlans] = useState<PaymentPlan[]>([]);
+  const { currency: displayCurrency } = useConfig();
+  // Both currencies' plan rows are loaded; the cards below show the DISPLAY currency's own plan (an
+  // administrator-set price, not a conversion). The payment currency is chosen separately in checkout.
+  const [allSubPlans, setAllSubPlans] = useState<PaymentPlan[]>([]);
+  const [allVacancyPlans, setAllVacancyPlans] = useState<PaymentPlan[]>([]);
+  const subPlans = plansForDisplay(allSubPlans, displayCurrency);
+  const vacancyPlans = plansForDisplay(allVacancyPlans, displayCurrency);
 
   const { activeOrganization, authContext } = useAuth();
   const orgId = activeOrganization?.id;
@@ -58,8 +65,8 @@ export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPost
     let cancelled = false;
     void Promise.all([paymentService.getPlans('subscription'), paymentService.getPlans('vacancy')]).then(([subs, vacs]) => {
       if (cancelled) return;
-      if (subs.data) setSubPlans(subs.data);
-      if (vacs.data) setVacancyPlans(vacs.data);
+      if (subs.data) setAllSubPlans(subs.data);
+      if (vacs.data) setAllVacancyPlans(vacs.data);
     });
     return () => { cancelled = true; };
   }, []);
@@ -70,6 +77,9 @@ export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPost
     if (row) return row.amountMinor / 100;
     return cycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
   };
+  /** Currency the subscription prices are shown in (the display currency's plan, or USD if it has none). */
+  const priceCurrency = subPlans[0]?.currency ?? 'USD';
+  const money = (units: number): string => formatMinorAmount(Math.round(units * 100), priceCurrency);
   const annualSavings = (plan: SubscriptionPlan): number =>
     Math.max(0, Math.round((priceFor(plan, 'monthly') * 12 - priceFor(plan, 'annual')) * 100) / 100);
 
@@ -316,7 +326,7 @@ export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPost
             >
               Annual Billing
               <span className="px-2 py-0.5 bg-[#FEFAE0] text-[#BC6C25] rounded-full text-[10px] uppercase tracking-wider border border-[#E8E4D9]">
-                Save up to ${Math.max(0, ...SUBSCRIPTION_PLANS.map(annualSavings))}
+                Save up to {money(Math.max(0, ...SUBSCRIPTION_PLANS.map(annualSavings)))}
               </span>
             </button>
           </div>
@@ -361,7 +371,7 @@ export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPost
                 <div className="mb-8">
                   <div className="flex items-end gap-1">
                     <span className={`text-4xl font-black ${plan.tier === 'pro' ? 'text-white' : 'text-[#283618]'}`}>
-                      ${price}
+                      {plan.tier === 'free' ? `$${price}` : money(price)}
                     </span>
                     <span className={`text-sm pb-1 font-medium ${plan.tier === 'pro' ? 'text-stone-400' : 'text-stone-400'}`}>
                       {plan.tier === 'free' ? 'forever' : billingCycle === 'annual' ? '/ year' : '/ month'}
@@ -369,7 +379,7 @@ export const SubscriptionManager: React.FC<SubscriptionManagerProps> = ({ onPost
                   </div>
                   {billingCycle === 'annual' && savings > 0 && (
                     <p className={`text-xs font-semibold mt-1 ${plan.tier === 'pro' ? 'text-[#A3B18A]' : 'text-[#4F772D]'}`} data-testid={`savings-${plan.tier}`}>
-                      Save ${savings} annually
+                      Save {money(savings)} annually
                     </p>
                   )}
                 </div>

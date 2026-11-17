@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { organizationService } from '../services/organizationService';
 import { paymentService, formatMinorAmount } from '../services/paymentService';
+import { plansForDisplay } from '../lib/paymentPlans';
 import { useEntitlements } from '../hooks/useEntitlements';
 import type { PaymentPlan } from '../types';
 
@@ -96,17 +97,20 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
   // database; the client never decides the amount.
   const { entitlements } = useEntitlements();
   const hasPaidSubscription = entitlements.jobPromotion;
-  const [vacancyPlans, setVacancyPlans] = useState<PaymentPlan[]>([]);
+  const [allVacancyPlans, setAllVacancyPlans] = useState<PaymentPlan[]>([]);
+  // Show each package in the display currency's own plan; the payment currency is chosen in checkout.
+  const vacancyPlans = plansForDisplay(allVacancyPlans, currency);
   const [postingPlanId, setPostingPlanId] = useState<string>(initialPostingPlanId || ''); // '' = included free post
   useEffect(() => {
     let cancelled = false;
     void paymentService.getPlans('vacancy').then((res) => {
-      if (!cancelled && res.data) setVacancyPlans(res.data);
+      if (!cancelled && res.data) setAllVacancyPlans(res.data);
     });
     return () => { cancelled = true; };
   }, []);
   const showPostingOptions = !opportunityToEdit && !hasPaidSubscription && vacancyPlans.length > 0;
-  const chosenPlan = vacancyPlans.find((p) => p.id === postingPlanId) || null;
+  const chosenPlan = allVacancyPlans.find((p) => p.id === postingPlanId) || null;
+  const isChosen = (vp: PaymentPlan) => !!chosenPlan && chosenPlan.priceGroup === vp.priceGroup;
   const freeLimit = typeof entitlements.maxActiveJobs === 'number' ? entitlements.maxActiveJobs : Infinity;
   const freePostAvailable = activeJobCount < freeLimit;
   // The free post is already live: the free option is unavailable, so start on the first paid option.
@@ -270,8 +274,8 @@ const PostOpportunityModalInner: React.FC<PostOpportunityModalProps> = ({
             <div className="text-xs font-bold text-[#283618] uppercase tracking-wider pt-1">Get more visibility <span className="font-normal normal-case text-stone-500">(optional)</span></div>
             <div className="grid sm:grid-cols-3 gap-2">
               {vacancyPlans.map((vp) => (
-                <label key={vp.id} className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer ${postingPlanId === vp.id ? 'border-[#4F772D] bg-[#F4F8EF]' : 'border-[#E8E4D9] bg-white'}`}>
-                  <input type="radio" name="posting-plan" className="mt-1" checked={postingPlanId === vp.id} onChange={() => setPostingPlanId(vp.id)} />
+                <label key={vp.id} className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer ${isChosen(vp) ? 'border-[#4F772D] bg-[#F4F8EF]' : 'border-[#E8E4D9] bg-white'}`}>
+                  <input type="radio" name="posting-plan" className="mt-1" checked={isChosen(vp)} onChange={() => setPostingPlanId(vp.id)} />
                   <span className="flex-1">
                     <span className="flex justify-between gap-2 font-bold text-[#132A13]"><span>{vp.name}</span><span>{formatMinorAmount(vp.amountMinor, vp.currency)}</span></span>
                     <span className="block text-[11px] text-stone-500">{vp.description}</span>
